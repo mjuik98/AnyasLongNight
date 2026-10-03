@@ -1,0 +1,19 @@
+{
+  "name": "hero-survivor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node build/build.mjs --check",
+    "test": "node build/check.mjs",
+    "build": "node build/build.mjs",
+    "build:release": "node build/build.mjs --release --compact",
+    "check:release": "node build/build.mjs --check --release --compact",
+    "build:development": "node build/build.mjs --profile development --compact",
+    "check:development": "node build/build.mjs --check --profile development --compact"
+  },
+  "devDependencies": {
+    "fengari": "0.1.5",
+    "luaparse": "0.3.1"
+  },
+  "engines": { "node": ">=22" }
+}

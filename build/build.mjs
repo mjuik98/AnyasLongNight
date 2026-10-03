@@ -1,0 +1,734 @@
+// Ordinary builds synchronize game/editor Lua; --refresh-base imports edited geography.
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
+import luaparse from 'luaparse';
+import {openMap} from './mpq.mjs';
+
+export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const firstMarker = '-- HeroSurvivor Lua prototype. Import at map script scope before main().';
+const lastMarker = '-- ===== END src/00_bootstrap/HeroSurvivor.lua =====';
+export function collectSources({profile = 'playtest'} = {}) {
+    assert(['development', 'playtest', 'release'].includes(profile), 'Invalid build profile');
+    const orderPath = path.join(root, 'build/source-order.json');
+    const orderBytes = fs.readFileSync(orderPath);
+    const order = JSON.parse(orderBytes);
+    assert.equal(new Set(order).size, order.length, 'Duplicate source');
+    assert.equal(order.at(-1), 'src/00_bootstrap/HeroSurvivor.lua');
+    const snapshots = new Map([[orderPath, orderBytes]]);
+    const chunks = [firstMarker, `HERO_SURVIVOR_PROFILE = "${profile}"`,
+        '-- Native objects/constants: assets/war3map.w3a, assets/war3map.w3t, assets/war3map.w3u, assets/war3mapMisc.txt.'];
+    for (const name of order) {
+        assert(/^src\/[\w/]+\.lua$/.test(name), 'Invalid source path: ' + name);
+        const absolute = path.join(root, name), bytes = fs.readFileSync(absolute);
+        snapshots.set(absolute, bytes);
+        const text = bytes.toString('utf8').replaceAll('\r\n', '\n').trimEnd();
+        luaparse.parse(text, {luaVersion: '5.3'});
+        chunks.push('-- ===== BEGIN ' + name + ' =====', text, '-- ===== END ' + name + ' =====', '');
+    }
+    const bundle = chunks.join('\n');
+    luaparse.parse(bundle, {luaVersion: '5.3'});
+    return {bundle, snapshots, count: order.length, profile};
+}
+export function replaceBundle(script, bundle) {
+    const first = script.indexOf(firstMarker), last = script.indexOf(lastMarker);
+    assert(first >= 0 && last > first, 'Input must contain a marked HeroSurvivor test bundle');
+    assert.equal(script.indexOf(firstMarker, first + firstMarker.length), -1, 'Duplicate bundle');
+    assert.equal(script.indexOf(lastMarker, last + lastMarker.length), -1, 'Duplicate bundle end');
+    const result = script.slice(0, first) + bundle.trimEnd() + script.slice(last + lastMarker.length);
+    luaparse.parse(result, {luaVersion: '5.3'});
+    return result;
+}
+export function verifyPreserved(before, after, changed = ['war3map.lua']) {
+    const a = openMap(before), b = openMap(after);
+    const list = a.read('(listfile)');
+    assert(list, 'Map needs a listfile for preservation checks');
+    const names = new Set(['(listfile)', ...list.toString('utf8').split(/\r?\n/).filter(Boolean)]);
+    let count = 0;
+    const allowed = new Set(['(attributes)', ...changed].map(name => name.toLowerCase()));
+    for (const name of names) {
+        if (allowed.has(name.toLowerCase())) continue;
+        assert.deepEqual(b.read(name), a.read(name), 'Unrelated map entry changed: ' + name);
+        count++;
+    }
+    return count;
+}
+// Surgical object reader: untouched records and fields retain their exact raw bytes.
+export function parseObjectData(bytes, kind = 'unit') {
+    assert(['unit', 'item', 'ability'].includes(kind), 'Unsupported object kind: ' + kind);
+    const hasLevels = kind === 'ability';
+    assert(Buffer.isBuffer(bytes), 'Missing object data');
+    let p = 0;
+    const take = n => { assert(n >= 0 && p + n <= bytes.length, 'Truncated unit object data');
+        const value = bytes.subarray(p, p + n); p += n; return value; };
+    const integer = () => take(4).readInt32LE(0), id = () => take(4).toString('latin1');
+    const count = minimum => { const value = integer();
+        assert(value >= 0 && value <= Math.floor((bytes.length - p) / minimum), 'Invalid unit object count'); return value; };
+    const version = integer(); assert([1, 2, 3].includes(version), 'Unsupported unit object version');
+    const tables = [[], []], known = new Set();
+    for (let table = 0; table < 2; table++) {
+        const length = count(12);
+        for (let index = 0; index < length; index++) {
+            const start = p, oldId = id(), newId = id(), extra = [];
+            assert(table === 0 ? newId === '\0\0\0\0' : newId !== '\0\0\0\0', 'Invalid unit object ID layout');
+            const objectId = table === 0 ? oldId : newId;
+            assert(!known.has(objectId), 'Duplicate unit object ID: ' + objectId); known.add(objectId);
+            if (version === 3) { const length = count(4); for (let i = 0; i < length; i++) extra.push(integer()); }
+            const fields = [], n = count(hasLevels ? 21 : 13);
+            for (let i = 0; i < n; i++) {
+                const fieldStart = p, fieldId = id(), type = integer();
+                assert(type >= 0 && type <= 3, 'Invalid unit field type');
+                const level = hasLevels ? integer() : 0, column = hasLevels ? integer() : 0;
+                let value;
+                if (type === 3) { const end = bytes.indexOf(0, p); assert(end >= p, 'Unterminated unit string');
+                    value = take(end - p + 1).subarray(0, -1).toString('utf8'); }
+                else value = type === 0 ? integer() : take(4).readFloatLE(0);
+                const endId = id(); fields.push({id: fieldId, type, level, column, value, endId, raw: bytes.subarray(fieldStart, p)});
+            }
+            tables[table].push({oldId, newId, extra, fields, raw: bytes.subarray(start, p)});
+        }
+    }
+    assert.equal(p, bytes.length, 'Trailing unit object data');
+    return {version, kind, tables};
+}
+export function serializeObjectData(data) {
+    const hasLevels = data.kind === 'ability';
+    const integer = value => { const bytes = Buffer.alloc(4); bytes.writeInt32LE(value); return bytes; };
+    const field = value => {
+        if (value.raw) return value.raw;
+        const bytes = value.type === 3 ? Buffer.from(value.value + '\0') : Buffer.alloc(4);
+        if (value.type === 0) bytes.writeInt32LE(value.value);
+        else if (value.type !== 3) bytes.writeFloatLE(value.value);
+        return Buffer.concat([Buffer.from(value.id, 'latin1'), integer(value.type),
+            ...(hasLevels ? [integer(value.level), integer(value.column)] : []), bytes, Buffer.from(value.endId, 'latin1')]);
+    };
+    return Buffer.concat([integer(data.version), ...data.tables.flatMap(table => [integer(table.length),
+        ...table.map(row => row.raw ?? Buffer.concat([Buffer.from(row.oldId, 'latin1'), Buffer.from(row.newId, 'latin1'),
+            ...(data.version === 3 ? [integer(row.extra.length), ...row.extra.map(integer)] : []),
+            integer(row.fields.length), ...row.fields.map(field)]))])]);
+}
+export const parseUnits = bytes => parseObjectData(bytes, 'unit');
+export const serializeUnits = data => serializeObjectData({...data, kind: 'unit'});
+export const portraitUnits = [
+    {id: 'hsPA', name: '안야', model: 'Units\\Forsaken\\HeroAnya\\HeroAnya.mdl',
+        legacyModel: 'Units\\Creeps\\BansheeRanger\\BansheeRanger.mdl',
+        armorType: 'hero',
+        icon: 'ReplaceableTextures\\CommandButtons\\BTNBansheeRanger.blp'},
+    {id: 'hsPP', name: '퓨트리스', model: 'Units\\Forsaken\\Hero_Putress\\Hero_Putress.mdl',
+        armorType: 'hero',
+        icon: 'ReplaceableTextures\\CommandButtons\\BTNNecromancer.blp'},
+];
+export function installPortraitUnits(bytes, skin = false, {migrateLegacyAnya = false, migrateLegacyArmor = false} = {}) {
+    const data = parseUnits(bytes); assert.deepEqual(serializeUnits(data), bytes, 'Unit reader must round-trip losslessly');
+    const migratedFields = new Map();
+    const recordMigration = (row, index, id, type, value) => {
+        if (!migratedFields.has(row.newId)) migratedFields.set(row.newId, new Map());
+        migratedFields.get(row.newId).set(index, {id, type, value});
+    };
+    for (const unit of portraitUnits) {
+        // Native animated portraits follow umdl. upat is not a portrait override.
+        const values = skin ? [['umdl', 3, unit.model], ['unam', 3, unit.name], ['uico', 3, unit.icon],
+            ['usnd', 3, ''], ['ushu', 3, '']] : [['uabi', 3, ''], ['uaen', 0, 0], ['ucol', 2, 0],
+            ['umvs', 0, 0], ['ufoo', 0, 0], ['uhom', 0, 1], ['udty', 3, unit.armorType]];
+        const existing = data.tables.flat().find(row => (row.newId === '\0\0\0\0' ? row.oldId : row.newId) === unit.id);
+        if (existing) {
+            assert.equal(existing.newId, unit.id, 'Portrait ID collides with a stock object');
+            assert.equal(existing.oldId, 'hfoo', 'Portrait ID has an unexpected base: ' + unit.id);
+            // Base data owns the armor override. Existing skin overrides must agree, but
+            // absent skin fields inherit the base and need no extra gameplay metadata.
+            if (skin && existing.fields.some(field => field.id === 'udty')) values.push(['udty', 3, unit.armorType]);
+            for (const [id, type, value] of values) {
+                const matches = existing.fields.filter(field => field.id === id);
+                if (id === 'udty' && !matches.length) {
+                    assert(migrateLegacyArmor, 'Story portrait armor is not explicit Hero; run build with --portrait-objects before publishing');
+                    const index = existing.fields.length;
+                    delete existing.raw;
+                    existing.fields.push({id, type, value, endId: unit.id});
+                    recordMigration(existing, index, id, type, value);
+                    continue;
+                }
+                assert.equal(matches.length, 1, 'Portrait field missing or duplicated: ' + unit.id + ' ' + id);
+                if (skin && unit.id === 'hsPA' && id === 'umdl' && matches[0].type === 3 && matches[0].value === unit.legacyModel) {
+                    assert(migrateLegacyAnya, 'Story Anya portrait uses the old model; run build with --portrait-objects before publishing');
+                    const field = matches[0];
+                    recordMigration(existing, existing.fields.indexOf(field), id, type, value);
+                    // Clear both serialization caches, keeping every other raw field and row untouched.
+                    delete existing.raw; delete field.raw; field.value = value;
+                }
+                if (id === 'udty' && matches[0].type === 3 && matches[0].value === 'normal') {
+                    assert(migrateLegacyArmor, 'Story portrait still uses Normal armor; run build with --portrait-objects before publishing');
+                    const field = matches[0];
+                    recordMigration(existing, existing.fields.indexOf(field), id, type, value);
+                    delete existing.raw; delete field.raw; field.value = value;
+                }
+                assert(matches[0].type === type && matches[0].value === value, 'Portrait ID contains conflicting fields: ' + unit.id + ' ' + id);
+            }
+        } else data.tables[1].push({oldId: 'hfoo', newId: unit.id, extra: data.version === 3 ? [0] : [],
+            fields: values.map(([id, type, value]) => ({id, type, value, endId: unit.id}))});
+    }
+    const output = serializeUnits(data), verified = parseUnits(output);
+    const previous = parseUnits(bytes);
+    for (const [table, rows] of previous.tables.entries()) for (const row of rows) {
+        const after = verified.tables[table].find(next => next.oldId === row.oldId && next.newId === row.newId);
+        if (!migratedFields.has(row.newId)) assert.deepEqual(after.raw, row.raw, 'Unrelated unit record changed');
+        else {
+            const migrations = migratedFields.get(row.newId);
+            const added = [...migrations.keys()].filter(index => index >= row.fields.length).length;
+            assert.equal(after.fields.length, row.fields.length + added, 'Portrait migration changed unexpected field count');
+            const prefix = value => value.raw.subarray(0, value.raw.length - value.fields.reduce((sum, field) => sum + field.raw.length, 0) - 4);
+            assert.deepEqual(prefix(after), prefix(row), 'Portrait migration changed its record header');
+            for (const [i, field] of row.fields.entries()) {
+                if (!migrations.has(i)) assert.deepEqual(after.fields[i].raw, field.raw, 'Portrait migration changed an unrelated field');
+                else {
+                    assert.equal(after.fields[i].id, field.id); assert.equal(after.fields[i].type, field.type);
+                    assert.equal(after.fields[i].endId, field.endId);
+                    assert.equal(after.fields[i].value, migrations.get(i).value);
+                }
+            }
+            for (let i = row.fields.length; i < after.fields.length; i++) {
+                const expected = migrations.get(i), field = after.fields[i];
+                assert(expected?.id === 'udty', 'Portrait migration added an unrelated field');
+                assert.equal(field.id, expected.id); assert.equal(field.type, expected.type);
+                assert.equal(field.value, expected.value); assert.equal(field.endId, row.newId);
+            }
+        }
+    }
+    return output;
+}
+export function validatePortraitObjects(map, bundle) {
+    if (!portraitUnits.some(unit => new RegExp('FourCC\\s*\\(\\s*["\\\']' + unit.id + '["\\\']\\s*\\)').test(bundle))) return;
+    for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
+        const bytes = map.read(name);
+        assert(installPortraitUnits(bytes, skin).equals(bytes),
+            'Story portrait units are missing from ' + name + '; run build with --portrait-objects before publishing');
+    }
+}
+function preparePortraitObjects(map, snapshots) {
+    const entries = new Map(), assets = new Map();
+    for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
+        const bytes = map.read(name), assetPath = path.join(root, 'assets', name), source = fs.readFileSync(assetPath);
+        // Both sources must agree on every pre-existing record before synchronization.
+        const withoutOwned = value => { const data = parseUnits(value);
+            data.tables = data.tables.map(table => table.filter(row => !portraitUnits.some(unit => row.newId === unit.id)));
+            return serializeUnits(data); };
+        assert.deepEqual(withoutOwned(source), withoutOwned(bytes), 'Asset and test map unit data diverge: ' + name);
+        const output = installPortraitUnits(bytes, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true});
+        assert.deepEqual(installPortraitUnits(source, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true}), output, 'Portrait asset output must match the map');
+        snapshots.set(assetPath, source); entries.set(name, output); assets.set(assetPath, output);
+    }
+    return {entries, assets};
+}
+// These are gold/pawning fields only; mana, lumber, combat stats and item behaviour
+// unrelated to trading are deliberately outside this migration.
+export const goldObjectSpecs = {
+    unit: ['ugol', 'ugor', 'ubba', 'ubdi', 'ubsi'],
+    item: ['igol', 'ipaw', 'isel'],
+    ability: ['Ndt1', 'Ntm1'], // Charge Gold and Lumber / Transmute, when present.
+};
+export function stripGoldTooltipText(text) {
+    return text.replace(/판매가 \d+ 골드 · 일괄 정리는 판매 없이 삭제/g, '가방 정리 시 장비가 삭제됩니다.')
+        .replace(/버리기\s*\/\s*판매\s*불가/g, '버리기 불가');
+}
+export function removeGoldObjectData(bytes, kind, {skin = false} = {}) {
+    const before = parseObjectData(bytes, kind), data = parseObjectData(bytes, kind);
+    assert.deepEqual(serializeObjectData(data), bytes, 'Object reader must round-trip losslessly');
+    const fieldKey = field => `${field.id}:${field.level}:${field.column}`;
+    for (const rows of data.tables) for (const row of rows) {
+        const seen = new Set();
+        for (const field of row.fields) {
+            assert(!seen.has(fieldKey(field)), 'Duplicate object field: ' + row.newId + ' ' + fieldKey(field));
+            seen.add(fieldKey(field));
+            if (field.type === 3) {
+                const value = stripGoldTooltipText(field.value);
+                if (value !== field.value) { delete row.raw; delete field.raw; field.value = value; }
+            }
+            if (goldObjectSpecs[kind].includes(field.id)) {
+                assert(kind === 'ability' ? field.type >= 0 && field.type <= 2 : field.type === 0,
+                    'Unexpected gold field type: ' + field.id);
+                if (field.value !== 0) { delete row.raw; delete field.raw; field.value = 0; }
+            }
+        }
+        // Base overrides suppress inherited native costs and bounty. Skin files only need
+        // to neutralize existing overrides; adding gameplay fields to skins is unnecessary.
+        if (!skin && kind !== 'ability') for (const id of goldObjectSpecs[kind]) {
+            if (row.fields.some(field => field.id === id)) continue;
+            delete row.raw;
+            row.fields.push({id, type: 0, level: 0, column: 0, value: 0, endId: row.newId});
+        }
+        if (!skin && kind === 'ability' && ['ANdt', 'ANtm'].includes(row.oldId)) {
+            const id = row.oldId === 'ANdt' ? 'Ndt1' : 'Ntm1';
+            const levels = row.fields.find(field => field.id === 'alev')?.value ?? 1;
+            assert(Number.isInteger(levels) && levels >= 1 && levels <= 100, 'Invalid gold ability levels');
+            for (let level = 1; level <= levels; level++) {
+                if (row.fields.some(field => field.id === id && field.level === level && field.column === 1)) continue;
+                delete row.raw;
+                row.fields.push({id, type: id === 'Ndt1' ? 0 : 1, level, column: 1, value: 0, endId: row.newId});
+            }
+        }
+    }
+    const output = serializeObjectData(data), after = parseObjectData(output, kind);
+    assert.equal(after.version, before.version, 'Gold migration changed object version');
+    for (const [table, rows] of before.tables.entries()) {
+        assert.equal(after.tables[table].length, rows.length, 'Gold migration changed object count');
+        for (const [index, row] of rows.entries()) {
+            const next = after.tables[table][index];
+            assert.equal(next.oldId, row.oldId); assert.equal(next.newId, row.newId);
+            assert.deepEqual(next.extra, row.extra, 'Gold migration changed v3 record metadata');
+            // A changed field count is allowed only for new zero-cost/bounty overrides.
+            const header = value => value.raw.subarray(0, value.raw.length - value.fields.reduce((sum, field) => sum + field.raw.length, 0) - 4);
+            assert.deepEqual(header(next), header(row), 'Gold migration changed object header');
+            for (const [i, field] of row.fields.entries()) {
+                const actual = next.fields[i];
+                assert.equal(fieldKey(actual), fieldKey(field), 'Gold migration reordered existing fields');
+                assert.equal(actual.type, field.type); assert.equal(actual.endId, field.endId);
+                const expected = goldObjectSpecs[kind].includes(field.id) ? 0
+                    : field.type === 3 ? stripGoldTooltipText(field.value) : field.value;
+                if (Object.is(expected, field.value)) assert.deepEqual(actual.raw, field.raw, 'Unrelated object field changed');
+                else assert.equal(actual.value, expected, 'Owned gold field readback differs');
+            }
+            for (const field of next.fields.slice(row.fields.length)) {
+                assert(goldObjectSpecs[kind].includes(field.id) && field.value === 0, 'Unexpected added gold migration field');
+            }
+        }
+    }
+    return output.equals(bytes) ? bytes : output;
+}
+export function removeGoldStrings(bytes) {
+    const before = stringTable(bytes), text = bytes.toString('utf8'), output = Buffer.from(stripGoldTooltipText(text));
+    const after = stringTable(output);
+    assert.equal(after.size, before.size, 'Gold migration changed map string count');
+    for (const [id, value] of before) {
+        assert.equal(after.get(id), stripGoldTooltipText(value), 'Unrelated map string changed: ' + id);
+    }
+    return output.equals(bytes) ? bytes : output;
+}
+export function removeGoldMisc(bytes) {
+    assert(Buffer.isBuffer(bytes), 'Missing map game constants');
+    let section = '', count = 0, hasMisc = false;
+    const text = bytes.toString('utf8'), newline = text.includes('\r\n') ? '\r\n' : '\n';
+    const lines = text.split(/(?<=\n)/).map(line => {
+        const header = line.match(/^\s*\[([^\]]+)\]/);
+        if (header) { section = header[1].toLowerCase(); if (section === 'misc') hasMisc = true; }
+        if (section !== 'misc' || !/^\s*PawnItemRate\s*=/i.test(line)) return line;
+        count++;
+        const rate = line.match(/^(\s*PawnItemRate\s*=\s*)([^;\r\n]*)/i);
+        assert(rate && Number.isFinite(Number(rate[2].trim())), 'Invalid PawnItemRate');
+        return Number(rate[2].trim()) === 0 ? line : line.replace(rate[1] + rate[2], rate[1] + '0.0');
+    });
+    assert(hasMisc && count <= 1, 'Missing Misc section or duplicate PawnItemRate');
+    const output = Buffer.from(count ? lines.join('') : text.replace(/^(\s*\[Misc\][^\r\n]*)(\r?\n|$)/mi,
+        (_, header, end) => header + (end || newline) + 'PawnItemRate=0.0' + newline));
+    return output.equals(bytes) ? bytes : output;
+}
+const goldEntries = [
+    ['war3map.w3u', 'unit', false], ['war3mapSkin.w3u', 'unit', true],
+    ['war3map.w3t', 'item', false], ['war3mapSkin.w3t', 'item', true],
+    ['war3map.w3a', 'ability', false], ['war3mapSkin.w3a', 'ability', true],
+];
+export function prepareGoldRemoval(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const entries = new Map(), assets = new Map();
+    for (const [name, kind, skin] of [...goldEntries, ['war3map.wts'], ['war3mapMisc.txt']]) {
+        const bytes = map.read(name), assetPath = path.join(root, 'assets', name), source = fs.readFileSync(assetPath);
+        const transform = value => kind ? removeGoldObjectData(value, kind, {skin})
+            : name.endsWith('.wts') ? removeGoldStrings(value) : removeGoldMisc(value);
+        const output = transform(bytes), assetOutput = transform(preparedAssets.get(assetPath) ?? source);
+        // WTS snapshots can have different editor strings. Preserve each independently;
+        // binary object/game-constant sources must agree outside this owned migration.
+        if (!name.endsWith('.wts')) assert.deepEqual(assetOutput, output, 'Asset and test map gold migration diverge: ' + name);
+        if (snapshots.has(assetPath)) assert.deepEqual(source, snapshots.get(assetPath), 'Asset changed during preparation');
+        else snapshots.set(assetPath, source);
+        entries.set(name, output); assets.set(assetPath, assetOutput);
+    }
+    return {entries, assets};
+}
+export function validateGoldRemoval(map) {
+    for (const [name, kind, skin] of [...goldEntries, ['war3map.wts'], ['war3mapMisc.txt']]) {
+        const bytes = map.read(name), output = kind ? removeGoldObjectData(bytes, kind, {skin})
+            : name.endsWith('.wts') ? removeGoldStrings(bytes) : removeGoldMisc(bytes);
+        assert(output.equals(bytes), 'Gold costs, bounty or sale text remain in ' + name + '; run build with --remove-gold');
+    }
+}
+export function terrainInfo(bytes) {
+    assert(bytes && bytes.toString('ascii', 0, 4) === 'W3E!', 'Invalid terrain entry');
+    const version = bytes.readInt32LE(4);
+    assert([11, 12].includes(version), 'Unsupported terrain version');
+    let p = 13;
+    const palette = () => {
+        const n = bytes.readInt32LE(p); p += 4;
+        assert(n >= 1 && n <= 16, 'Invalid terrain palette');
+        const entries = [];
+        for (let i = 0; i < n; i++, p += 4) entries.push(bytes.toString('ascii', p, p + 4));
+        return entries;
+    };
+    const ground = palette(), cliff = palette();
+    const width = bytes.readInt32LE(p), height = bytes.readInt32LE(p + 4);
+    const x = bytes.readFloatLE(p + 8), y = bytes.readFloatLE(p + 12);
+    assert(width > 1 && height > 1 && Number.isFinite(x) && Number.isFinite(y), 'Invalid terrain dimensions');
+    assert.equal(bytes.length, p + 16 + width * height * (version === 12 ? 8 : 7), 'Unexpected terrain matrix size');
+    return {version, ground, cliff, width, height, x, y};
+}
+// Read only the offsets needed for merging, leaving every other metadata byte intact.
+// W3I layouts: War3Net.Build.Core/Serialization/Binary/Info/{MapInfo,PlayerData}.cs.
+export function mapInfo(bytes) {
+    assert(bytes, 'Missing map information');
+    const version = bytes.readInt32LE(0);
+    assert([31, 32, 33, 39].includes(version), 'Unsupported map information version: ' + version);
+    let p = 28;
+    const skip = n => { assert(p + n <= bytes.length, 'Truncated map information'); p += n; };
+    const string = () => {
+        const end = bytes.indexOf(0, p); assert(end >= p, 'Unterminated map information string');
+        const value = bytes.toString('utf8', p, end); p = end + 1; return value;
+    };
+    const name = string(), author = string(), description = string(), recommendedPlayers = string();
+    const cameraOffset = p; skip(48);
+    const width = bytes.readInt32LE(p), height = bytes.readInt32LE(p + 4); skip(8);
+    const flagsOffset = p, flags = bytes.readUInt32LE(p); skip(9); // flags, tileset, loading-screen background
+    if (version === 39) skip(4); // race HUD
+    for (let i = 0; i < 4; i++) string(); // loading path/text/title/subtitle
+    skip(4); // game data set
+    for (let i = 0; i < 4; i++) string(); // prologue path/text/title/subtitle
+    skip(20); // fog style/heights/density/color
+    if (version === 39) skip(24); // Reforged fog parameters
+    skip(4); string(); skip(5); // weather, sound, light tileset, water tint
+    const scriptOffset = p; skip(12); // Lua flag, graphics modes, game data version
+    if (version >= 32) skip(8);
+    if (version >= 33) skip(4);
+    if (version === 39) skip(40); // HD water and alpha-tile parameters
+    const n = bytes.readInt32LE(p); skip(4);
+    assert(n > 0 && n <= 24, 'Invalid player count');
+    const players = [];
+    for (let i = 0; i < n; i++) {
+        const offset = p;
+        skip(12);
+        const id = bytes.readInt32LE(offset), controller = bytes.readInt32LE(offset + 4);
+        const raceOffset = offset + 8, race = bytes.readInt32LE(raceOffset);
+        const raceHudOffset = version === 39 ? p : null;
+        if (raceHudOffset !== null) skip(4);
+        const raceHud = raceHudOffset === null ? null : bytes.readInt32LE(raceHudOffset);
+        const flagsOffset = p; skip(4);
+        const playerFlags = bytes.readInt32LE(flagsOffset);
+        const playerName = string(), startOffset = p; skip(24);
+        players.push({offset, id, controller, race, raceOffset, raceHud, raceHudOffset,
+            flags: playerFlags, flagsOffset, name: playerName, startOffset,
+            x: bytes.readFloatLE(startOffset), y: bytes.readFloatLE(startOffset + 4)});
+    }
+    return {version, name, author, description, recommendedPlayers, cameraOffset, width, height,
+        flagsOffset, flags, scriptOffset, players};
+}
+function stripBundle(script) {
+    const first = script.indexOf(firstMarker);
+    if (first < 0) return script;
+    const last = script.indexOf(lastMarker);
+    assert(last > first && script.indexOf(firstMarker, first + 1) < 0
+        && script.indexOf(lastMarker, last + 1) < 0, 'Invalid base bundle markers');
+    return script.slice(0, first) + script.slice(last + lastMarker.length);
+}
+function refreshScript(script, bundle) {
+    let native = stripBundle(script);
+    for (const [name, value] of [['SetPlayerRacePreference', 'RACE_PREF_UNDEAD'],
+        ['SetPlayerRaceSkin', 'RACE_PREF_UNDEAD'], ['SetPlayerRaceSelectable', 'false']]) {
+        const expression = new RegExp(name + '\\s*\\(\\s*Player\\(\\s*0\\s*\\)\\s*,\\s*(?:RACE_PREF_[A-Z_]+|true|false)\\s*\\)', 'g');
+        const matches = [...native.matchAll(expression)];
+        assert.equal(matches.length, 1, 'Expected one base player setting: ' + name);
+        native = native.replace(expression, name + '(Player(0), ' + value + ')');
+    }
+    const result = bundle.trimEnd() + '\n\n' + native;
+    luaparse.parse(result, {luaVersion: '5.3'});
+    assert(/function\s+main\s*\(/.test(native) && /function\s+config\s*\(/.test(native), 'Base needs native main/config');
+    return result;
+}
+export function editorBundle(bytes, bundle) {
+    assert(bytes && bytes.readUInt32LE(0) === 0x80000004 && bytes.readUInt32LE(4) === 1,
+        'Unsupported editor custom-script layout');
+    const end = bytes.indexOf(0, 8); assert(end >= 8, 'Unterminated editor comment');
+    const start = end + 5, length = bytes.readUInt32LE(end + 1);
+    assert(length >= 1 && start + length <= bytes.length && bytes[start + length - 1] === 0, 'Invalid editor script length');
+    const original = bytes.toString('utf8', start, start + length - 1);
+    const updated = original.includes(firstMarker) ? replaceBundle(original, bundle)
+        : bundle.trimEnd() + '\n\n' + original;
+    const script = Buffer.from(updated + '\0');
+    luaparse.parse(script.toString('utf8', 0, script.length - 1), {luaVersion: '5.3'});
+    const prefix = Buffer.from(bytes.subarray(0, start)); prefix.writeUInt32LE(script.length, end + 1);
+    return Buffer.concat([prefix, script, bytes.subarray(start + length)]);
+}
+function stringTable(bytes) {
+    assert(bytes, 'Missing map string table');
+    const entries = new Map(), text = bytes.toString('utf8').replace(/^\uFEFF/, '').replaceAll('\r\n', '\n');
+    for (const match of text.matchAll(/^STRING[ \t]+(\d+)[ \t]*\n(?:\/\/[^\n]*\n|[ \t]*\n)*\{[ \t]*\n([\s\S]*?)\n\}/gm)) {
+        const id = Number(match[1]); assert(!entries.has(id), 'Duplicate map string: ' + id);
+        entries.set(id, match[2]);
+    }
+    assert(entries.size > 0, 'Invalid map string table');
+    return entries;
+}
+export function refreshBase(before, base, bundle) {
+    const test = openMap(before), source = openMap(base), changes = new Map();
+    assert(test.read('war3map.lua')?.toString('utf8').includes(firstMarker), 'Input must be a HeroSurvivor test map');
+    const terrain = terrainInfo(source.read('war3map.w3e')), oldTerrain = terrainInfo(test.read('war3map.w3e'));
+    for (const kind of ['ground', 'cliff']) for (const tile of oldTerrain[kind]) {
+        assert(terrain[kind].includes(tile), 'Base terrain palette lost ' + tile + '; refusing a destructive refresh');
+    }
+    const baseInfo = source.read('war3map.w3i'), info = mapInfo(baseInfo), oldInfo = mapInfo(test.read('war3map.w3i'));
+    assert.equal(info.players.length, 1, 'HeroSurvivor requires one base player');
+    assert.equal(info.players[0].id, 0); assert.equal(info.players[0].controller, 1, 'Base player must be human-controlled');
+    assert.equal(oldInfo.players.length, 1); assert.equal(oldInfo.players[0].race, 3, 'Input test player must be undead');
+    assert.equal(baseInfo.readInt32LE(info.scriptOffset), 1, 'Base map must use Lua');
+    assert(info.width > 0 && info.width <= terrain.width - 1 && info.height > 0 && info.height <= terrain.height - 1,
+        'Playable size is inconsistent with terrain');
+    const mergedInfo = Buffer.from(baseInfo);
+    // Preserve fixed player/custom-force/object rules. Geometry, atmosphere and camera flags follow the base.
+    const gameplayFlags = 0x20 | 0x40 | 0x80 | 0x100 | 0x200 | 0x4000 | 0x8000 | 0x40000;
+    mergedInfo.writeUInt32LE(((info.flags & ~gameplayFlags) | (oldInfo.flags & gameplayFlags)) >>> 0, info.flagsOffset);
+    mergedInfo.writeInt32LE(3, info.players[0].raceOffset);
+    // The selectable-race bit is a gameplay property; keep every other base player flag.
+    mergedInfo.writeInt32LE((info.players[0].flags & ~2) | (oldInfo.players[0].flags & 2), info.players[0].flagsOffset);
+    changes.set('war3map.w3i', mergedInfo);
+    for (const name of ['war3map.w3e', 'war3map.wpm', 'war3map.shd', 'war3map.mmp', 'war3map.doo',
+        'war3mapUnits.doo', 'war3mapMap.blp', 'war3mapPreview.tga', 'war3map.w3c', 'war3map.w3r',
+        'war3map.w3grp', 'war3map.w3l', 'war3map.wts', 'war3map.wtg']) {
+        const entry = source.read(name);
+        assert(entry || !test.read(name), 'Base is missing an existing geography/editor entry: ' + name);
+        if (entry) changes.set(name, entry);
+    }
+    const baseStrings = stringTable(source.read('war3map.wts')), testStrings = stringTable(test.read('war3map.wts'));
+    for (const name of ['war3map.w3a', 'war3map.w3t', 'war3map.w3u', 'war3mapSkin.w3a',
+        'war3mapSkin.w3t', 'war3mapSkin.w3u']) {
+        for (const match of (test.read(name)?.toString('utf8') ?? '').matchAll(/TRIGSTR_(\d+)/g)) {
+            const id = Number(match[1]);
+            // A removed sale sentence is an owned gameplay change. Geography refresh
+            // still copies the original WTS; --remove-gold reapplies it before publication.
+            assert(testStrings.has(id) && baseStrings.has(id)
+                && stripGoldTooltipText(baseStrings.get(id)) === stripGoldTooltipText(testStrings.get(id)),
+                'Base map string conflicts with preserved gameplay data: ' + name + ' TRIGSTR_' + id);
+        }
+    }
+    const pathing = changes.get('war3map.wpm');
+    assert(pathing && pathing.toString('ascii', 0, 4) === 'MP3W', 'Missing or invalid base pathing');
+    const pathWidth = (terrain.width - 1) * 4, pathHeight = (terrain.height - 1) * 4;
+    assert.equal(pathing.readInt32LE(8), pathWidth); assert.equal(pathing.readInt32LE(12), pathHeight);
+    assert.equal(pathing.length, 16 + pathWidth * pathHeight, 'Unexpected base pathing length');
+    assert.equal(changes.get('war3map.shd')?.length, pathWidth * pathHeight, 'Unexpected base shadow length');
+    const nativeScript = source.read('war3map.lua'); assert(nativeScript, 'Base has no Lua script');
+    changes.set('war3map.lua', Buffer.from(refreshScript(nativeScript.toString('utf8'), bundle)));
+    changes.set('war3map.wct', editorBundle(source.read('war3map.wct'), bundle));
+    const patched = test.replace(changes), preserved = verifyPreserved(before, patched, [...changes.keys()]);
+    const result = openMap(patched);
+    for (const [name, value] of changes) assert.deepEqual(result.read(name), value, 'Refresh readback mismatch: ' + name);
+    return {patched, preserved, entries: [...changes.keys()], terrain,
+        playable: {width: info.width, height: info.height}, script: changes.get('war3map.lua').toString('utf8')};
+}
+// Prepare every payload before touching its destination. On a caught publication
+// failure, restore only files that still contain our bytes, preserving concurrent edits.
+// The injectable filesystem lets failure paths run in memory in build/check.mjs.
+export function publishTransaction(entries, {io = fs, stamp = new Date().toISOString().replaceAll(':', '-'),
+    guard = () => {}, finalize = () => []} = {}) {
+    const prepared = [], committed = [], destinations = new Set(), paths = new Map();
+    const current = file => io.existsSync(file) ? io.readFileSync(file) : null;
+    const matches = (a, b) => a === null ? b === null : Buffer.isBuffer(b) && a.equals(b);
+    function prepare(entry) {
+        assert(Buffer.isBuffer(entry.bytes), 'Publication payload must be a Buffer');
+        const key = path.resolve(entry.path).toLowerCase();
+        assert(!destinations.has(key), 'Duplicate publication destination: ' + entry.path);
+        destinations.add(key);
+        const record = {...entry, before: entry.before ?? null, actual: entry.path,
+            temporary: entry.path + '.' + stamp + '.tmp', ownsTemporary: false};
+        assert(matches(record.before, current(record.path)), 'Destination changed before preparation: ' + record.path);
+        io.mkdirSync(path.dirname(record.path), {recursive: true});
+        assert(!io.existsSync(record.temporary), 'Publication temporary file already exists: ' + record.temporary);
+        prepared.push(record);
+        record.ownsTemporary = true;
+        try { io.writeFileSync(record.temporary, record.bytes, {flag: 'wx'}); }
+        catch (error) { if (error.code === 'EEXIST') record.ownsTemporary = false; throw error; }
+        assert.deepEqual(io.readFileSync(record.temporary), record.bytes, 'Prepared payload readback differs');
+        return record;
+    }
+    function publish(record) {
+        assert(matches(record.before, current(record.path)), 'Destination changed during publication: ' + record.path);
+        try { io.renameSync(record.temporary, record.actual); }
+        catch (error) {
+            if (!record.alternate || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+            assert(!io.existsSync(record.alternate), 'Alternate output already exists: ' + record.alternate);
+            io.renameSync(record.temporary, record.alternate);
+            record.actual = record.alternate;
+            record.before = null;
+        }
+        record.ownsTemporary = false;
+        committed.push(record);
+        paths.set(record.path, record.actual);
+        assert.deepEqual(io.readFileSync(record.actual), record.bytes, 'Published payload readback differs');
+    }
+    const failures = [];
+    try {
+        const files = entries.map(prepare);
+        guard();
+        for (const record of files) publish(record);
+        // A manifest can include the actual alternate map path chosen for a locked output.
+        const finalFiles = finalize(paths).map(prepare);
+        for (const record of finalFiles) publish(record);
+    } catch (failure) {
+        failures.push(failure);
+        for (const record of committed.reverse()) {
+            const temporary = record.actual + '.' + stamp + '.rollback';
+            let ownsRollback = false;
+            try {
+                assert(matches(record.bytes, current(record.actual)),
+                    'Concurrent edit preserved; cannot roll back: ' + record.actual);
+                if (record.before === null) io.unlinkSync(record.actual);
+                else {
+                    assert(!io.existsSync(temporary), 'Rollback temporary file already exists');
+                    ownsRollback = true;
+                    try { io.writeFileSync(temporary, record.before, {flag: 'wx'}); }
+                    catch (error) { if (error.code === 'EEXIST') ownsRollback = false; throw error; }
+                    assert.deepEqual(io.readFileSync(temporary), record.before, 'Rollback payload readback differs');
+                    assert(matches(record.bytes, current(record.actual)),
+                        'Concurrent edit preserved; cannot roll back: ' + record.actual);
+                    io.renameSync(temporary, record.actual);
+                    ownsRollback = false;
+                    assert.deepEqual(io.readFileSync(record.actual), record.before, 'Rollback readback differs');
+                }
+            } catch (error) { failures.push(error); }
+            finally {
+                try { if (ownsRollback && io.existsSync(temporary)) io.unlinkSync(temporary); }
+                catch (error) { failures.push(error); }
+            }
+        }
+    } finally {
+        for (const record of prepared) {
+            try { if (record.ownsTemporary && io.existsSync(record.temporary)) io.unlinkSync(record.temporary); }
+            catch (error) { failures.push(error); }
+        }
+    }
+    if (failures.length > 1) throw new AggregateError(failures,
+        'Publication failed; some files need recovery from the backup or temporary cleanup: ' + failures.map(error => error.message).join('; '));
+    if (failures.length === 1) throw failures[0];
+    return paths;
+}
+
+function main() {
+    const args = process.argv.slice(2);
+    let check = false, refresh = false, portraits = false, compact = false, removeGold = false, basePath = path.join(root, 'HeroSurvivor.w3x');
+    let input = path.join(root, 'dist/HeroSurvivor-playtest.w3x'), output = input;
+    let profile = 'playtest', outputExplicit = false, inputExplicit = false;
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--check') check = true;
+        else if (args[i] === '--refresh-base') refresh = true;
+        else if (args[i] === '--portrait-objects') portraits = true;
+        else if (args[i] === '--compact') compact = true;
+        else if (args[i] === '--remove-gold') removeGold = true;
+        else if (args[i] === '--release') profile = 'release';
+        else if (args[i] === '--profile') {
+            profile = args[++i];
+            assert(['development', 'playtest', 'release'].includes(profile), 'Invalid build profile');
+        }
+        else if (args[i] === '--input' || args[i] === '--output' || args[i] === '--base') {
+            const option = args[i], value = args[++i];
+            assert(value && !value.startsWith('--'), 'Missing path for ' + option);
+            if (option === '--input') { input = path.resolve(value); inputExplicit = true; }
+            else if (option === '--base') basePath = path.resolve(value);
+            else { output = path.resolve(value); outputExplicit = true; }
+        } else throw new Error('Unknown option: ' + args[i]);
+    }
+    if (!outputExplicit && profile !== 'playtest') output = path.join(root, 'dist', 'HeroSurvivor-' + profile + '.w3x');
+    if (check && !inputExplicit) input = output;
+    const bundlePath = path.join(root, 'dist', profile === 'playtest' ? 'HeroSurvivor.lua' : 'HeroSurvivor-' + profile + '.lua');
+    const relative = path.relative(path.join(root, 'dist'), output);
+    assert(relative && !relative.startsWith('..') && !path.isAbsolute(relative) && output.endsWith('.w3x'), 'Output must be a .w3x inside dist');
+    if (refresh) assert.notEqual(output.toLowerCase(), basePath.toLowerCase(), 'Output must never overwrite the base map');
+    const {bundle, snapshots, count} = collectSources({profile});
+    const original = fs.readFileSync(input), map = openMap(original);
+    const outputBefore = !check && fs.existsSync(output) ? fs.readFileSync(output) : null;
+    const oldScript = map.read('war3map.lua');
+    assert(oldScript, 'Input has no Lua map script');
+    const base = refresh ? fs.readFileSync(basePath) : null;
+    const refreshed = refresh ? refreshBase(original, base, bundle) : null;
+    const script = refreshed?.script ?? replaceBundle(oldScript.toString('utf8'), bundle);
+    let patched = refreshed?.patched ?? map.replace(new Map([
+        ['war3map.lua', Buffer.from(script)], ['war3map.wct', editorBundle(map.read('war3map.wct'), bundle)],
+    ]));
+    const portraitObjects = portraits ? preparePortraitObjects(openMap(patched), snapshots) : null;
+    if (portraitObjects) patched = openMap(patched).replace(portraitObjects.entries);
+    const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots, portraitObjects?.assets) : null;
+    if (goldRemoval) patched = openMap(patched).replace(goldRemoval.entries);
+    const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? [])]);
+    const compactStats = compact ? {beforeBytes: patched.length} : null;
+    if (compact) {
+        patched = openMap(patched).compact();
+        compactStats.afterBytes = patched.length;
+        compactStats.removedBytes = compactStats.beforeBytes - patched.length;
+    }
+    const preparedMap = openMap(patched);
+    validatePortraitObjects(preparedMap, bundle);
+    validateGoldRemoval(preparedMap);
+    const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
+        ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? [])])];
+    const preserved = verifyPreserved(original, patched, changedEntries);
+    assert.equal(preparedMap.read('war3map.lua').toString('utf8'), script);
+    console.log(`Validated ${count} Lua sources; preserved ${preserved} unrelated map entries.`);
+    if (compactStats) console.log('Archive compaction:', JSON.stringify(compactStats));
+    if (refreshed) console.log('Refreshed base geography:', JSON.stringify({
+        cells: [refreshed.terrain.width - 1, refreshed.terrain.height - 1],
+        playable: refreshed.playable, origin: [refreshed.terrain.x, refreshed.terrain.y],
+        entries: refreshed.entries}));
+    const guardInputs = () => {
+        for (const [name, bytes] of snapshots) assert.deepEqual(fs.readFileSync(name), bytes, 'Source changed during build: ' + name);
+        assert.deepEqual(fs.readFileSync(input), original, 'Input map changed during build');
+        if (base) assert.deepEqual(fs.readFileSync(basePath), base, 'Base map changed during build');
+    };
+    if (check) {
+        guardInputs();
+        const matches = changedEntries.every(name => map.read(name)?.equals(preparedMap.read(name)))
+            && [...companionAssets].every(([name, bytes]) => fs.readFileSync(name).equals(bytes))
+            && (!compact || original.equals(patched));
+        console.log('Current test map matches source:', matches);
+        if (!matches) process.exitCode = 1;
+        return;
+    }
+    const guardPublication = () => {
+        guardInputs();
+        assert.deepEqual(fs.existsSync(output) ? fs.readFileSync(output) : null, outputBefore, 'Output map changed during build');
+    };
+    if (outputBefore?.equals(patched)
+        && [...companionAssets].every(([name, bytes]) => fs.readFileSync(name).equals(bytes))) {
+        const before = fs.existsSync(bundlePath) ? fs.readFileSync(bundlePath) : null;
+        const bytes = Buffer.from(bundle);
+        if (!before?.equals(bytes)) publishTransaction([{path: bundlePath, bytes, before}], {guard: guardPublication});
+        else guardPublication();
+        console.log('Test map already current; archive left unchanged:', output);
+        return;
+    }
+    const stamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
+    const backup = path.join(root, 'dist/backups', stamp + '-build');
+    fs.mkdirSync(backup, {recursive: true});
+    fs.writeFileSync(path.join(backup, 'input.w3x'), original, {flag: 'wx'});
+    if (base) fs.writeFileSync(path.join(backup, 'base.w3x'), base, {flag: 'wx'});
+    if (outputBefore && output !== input) fs.writeFileSync(path.join(backup, 'output-before.w3x'), outputBefore, {flag: 'wx'});
+    if (fs.existsSync(bundlePath)) fs.copyFileSync(bundlePath, path.join(backup, path.basename(bundlePath)));
+    for (const [assetPath] of companionAssets) fs.copyFileSync(assetPath, path.join(backup, path.basename(assetPath)));
+    const files = [...companionAssets].map(([assetPath, bytes]) =>
+        ({path: assetPath, bytes, before: snapshots.get(assetPath)}));
+    files.push({path: bundlePath, bytes: Buffer.from(bundle), before: fs.existsSync(bundlePath) ? fs.readFileSync(bundlePath) : null});
+    // Publish the map last, after all companion files have been prepared and verified.
+    files.push({path: output, bytes: patched, before: outputBefore,
+        alternate: output.replace(/\.w3x$/, '-' + stamp + '.w3x')});
+    const published = publishTransaction(files.filter(file => !file.before?.equals(file.bytes)), {stamp,
+        guard: guardPublication,
+        finalize(paths) {
+            const actual = paths.get(output) ?? output;
+            return [{path: path.join(backup, 'manifest.json'), before: null,
+                bytes: Buffer.from(JSON.stringify({input, output: actual, profile,
+                    inputSha256: digest(original), outputSha256: digest(patched), bundleSha256: digest(bundle),
+                    ...(base ? {base: basePath, baseSha256: digest(base), refreshedEntries: refreshed.entries} : {}),
+                    ...(portraitObjects ? {portraitObjects: [...portraitObjects.entries.keys()]} : {}),
+                    ...(goldRemoval ? {goldRemoval: [...goldRemoval.entries.keys()]} : {}),
+                    ...(compactStats ? {compaction: compactStats} : {}),
+                    sources: Object.fromEntries([...snapshots].map(([p, b]) => [path.relative(root, p), digest(b)]))}, null, 2) + '\n')}];
+        }});
+    const actual = published.get(output) ?? output;
+    if (actual !== output) console.log('Requested output is locked; saved alternate test map.');
+    console.log('Test map:', actual);
+    console.log('Backup:', backup);
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

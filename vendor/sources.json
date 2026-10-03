@@ -1,0 +1,48 @@
+[
+  {
+    "file": "src/05_vendor/ALICE.lua",
+    "source": "https://www.hiveworkshop.com/threads/alice-2-13-missiles-physics-more.353126/",
+    "version": "2.13",
+    "sha256": "271792dda075f0e7ae3041ebccd8e8c66d0913b1928256e4918a921f1a9b00c7",
+    "localSha256": "21b0fc789efd63080f3576a86eb15d4a989164f725e76995258dd11bb37b8250",
+    "localChanges": "Project modifications: optional performance observer; bounded halted destruction; safe removal of unscheduled paused pairs; generation guards for delayed callbacks."
+  },
+  {
+    "file": "vendor/ALICE-API.lua",
+    "source": "https://www.hiveworkshop.com/threads/alice-2-13-missiles-physics-more.353126/",
+    "version": "2.13",
+    "sha256": "3ac76f86547503469279adcd1fc1e993ffd01b994c590733644f0c4f29378eaa"
+  },
+  {
+    "file": "assets/war3mapImported/CustomTooltip.fdf",
+    "source": "https://www.hiveworkshop.com/threads/alice-2-13-missiles-physics-more.353126/",
+    "version": "2.13 bundle",
+    "sha256": "d95031ad34eabd85ae4cd2ce11c65abaae3cabe43f64fb6ee06222dcd1e5ae2c"
+  },
+  {
+    "file": "assets/war3mapImported/CustomTooltip.toc",
+    "source": "https://www.hiveworkshop.com/threads/alice-2-13-missiles-physics-more.353126/",
+    "version": "2.13 bundle",
+    "sha256": "7ae5858da90cd7f01c90e8f430a8fbcdc20b2c8c98a01ab9ed4476ee8e68bf8d"
+  },
+  {
+    "file": "src/05_vendor/TotalInitialization.lua",
+    "source": "https://www.hiveworkshop.com/threads/total-initialization.317099/",
+    "version": "5.3.1",
+    "sha256": "7b9f667e8c75d0c03c9f9949ee9b06485676aff7116afdbe221a01b64b176e90"
+  },
+  {
+    "file": "src/05_vendor/HandleType.lua",
+    "source": "https://www.hiveworkshop.com/threads/get-handle-type.354436/",
+    "version": null,
+    "sha256": "4735be482e19207f0772a6449a4cdf9337ff0b4bc8d2b77805e19c484ed6106d"
+  },
+  {
+    "file": "src/05_vendor/DebugUtils.lua",
+    "source": "https://www.hiveworkshop.com/threads/lua-debug-utils-incl-ingame-console.353720/",
+    "version": null,
+    "sha256": "cdc6a14b02453a841419554ccdce7825a705c3208242b2461384693ddceccca5",
+    "localSha256": "ba57479cd4af259725b046c2d93e8b4594ad8e59e5d568032db6bab98dc3650d",
+    "localChanges": "Project modifications: development/playtest/release settings; skip global name-cache metatables outside development; release disables automatic diagnostic wrappers."
+  }
+]
