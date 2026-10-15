@@ -256,7 +256,8 @@ export function openMap(input) {
             if (changedIndices.has(i)) continue;
             assert.deepEqual(blocks.subarray(i * 16, i * 16 + 16), blockTable.subarray(i * 16, i * 16 + 16));
         }
-        return result;
+        // Appending orphans the replaced payloads; compact so repeated patches never accumulate them.
+        return openMap(result).compact();
     }
 
     function compact() {
@@ -374,5 +375,8 @@ export function openMap(input) {
         }
         return result.equals(bytes) ? bytes : result;
     }
-    return { read, replace, compact };
+
+    // Bytes that no live block or table references (orphaned payloads left by older appends).
+    const unusedBytes = () => bytes.length - compact().length;
+    return { read, replace, compact, unusedBytes };
 }

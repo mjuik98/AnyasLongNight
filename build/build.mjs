@@ -1181,14 +1181,14 @@ export function publishTransaction(entries, {io = fs, stamp = new Date().toISOSt
 
 function main() {
     const args = process.argv.slice(2);
-    let check = false, refresh = false, portraits = false, compact = false, removeGold = false, experience = false, basePath = baseMapPath;
+    let check = false, refresh = false, portraits = false, removeGold = false, experience = false, basePath = baseMapPath;
     let input = path.join(root, 'dist/AnyasLongNight-playtest.w3x'), output = input;
     let profile = 'playtest', outputExplicit = false, inputExplicit = false;
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--check') check = true;
         else if (args[i] === '--refresh-base') refresh = true;
         else if (args[i] === '--portrait-objects') portraits = true;
-        else if (args[i] === '--compact') compact = true;
+        else if (args[i] === '--compact') {} // Accepted for older commands; output is always compacted.
         else if (args[i] === '--remove-gold') removeGold = true;
         else if (args[i] === '--experience-curve') experience = true;
         else if (args[i] === '--release') profile = 'release';
@@ -1251,12 +1251,11 @@ function main() {
     patched = openMap(patched).replace(weaponTooltips.entries);
     const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []),
         ...itemTooltips.assets, ...interfaceTooltip.assets, ...statDetails.assets, ...regeneration.assets, ...talents.assets, ...weaponTooltips.assets]);
-    const compactStats = compact ? {beforeBytes: patched.length} : null;
-    if (compact) {
-        patched = openMap(patched).compact();
-        compactStats.afterBytes = patched.length;
-        compactStats.removedBytes = compactStats.beforeBytes - patched.length;
-    }
+    // replace() already compacts its own output; this also drops orphaned data an unchanged input carried in.
+    const compactStats = {beforeBytes: patched.length};
+    patched = openMap(patched).compact();
+    compactStats.afterBytes = patched.length;
+    compactStats.removedBytes = compactStats.beforeBytes - patched.length;
     const preparedMap = openMap(patched);
     validatePortraitObjects(preparedMap, bundle);
     validateGoldRemoval(preparedMap);
@@ -1268,7 +1267,7 @@ function main() {
     const preserved = verifyPreserved(original, patched, changedEntries);
     assert.equal(preparedMap.read('war3map.lua').toString('utf8'), script);
     console.log(`Validated ${count} Lua sources; preserved ${preserved} unrelated map entries.`);
-    if (compactStats) console.log('Archive compaction:', JSON.stringify(compactStats));
+    if (compactStats.removedBytes) console.log('Archive compaction:', JSON.stringify(compactStats));
     if (refreshed) console.log('Refreshed base geography:', JSON.stringify({
         cells: [refreshed.terrain.width - 1, refreshed.terrain.height - 1],
         playable: refreshed.playable, origin: [refreshed.terrain.x, refreshed.terrain.y],
@@ -1282,7 +1281,9 @@ function main() {
         guardInputs();
         const matches = changedEntries.every(name => map.read(name)?.equals(preparedMap.read(name)))
             && [...companionAssets].every(([name, bytes]) => fs.readFileSync(name).equals(bytes))
-            && (!compact || original.equals(patched));
+            && original.equals(patched);
+        const unused = map.unusedBytes();
+        if (unused) console.log('Unused archive bytes (rebuild to compact):', unused);
         console.log('Current test map matches source:', matches);
         if (!matches) process.exitCode = 1;
         return;
@@ -1325,7 +1326,7 @@ function main() {
                     ...(portraitObjects ? {portraitObjects: [...portraitObjects.entries.keys()]} : {}),
                     ...(goldRemoval ? {goldRemoval: [...goldRemoval.entries.keys()]} : {}),
                     ...(experience ? {experienceCurve: 'war3mapMisc.txt'} : {}),
-                    ...(compactStats ? {compaction: compactStats} : {}),
+                    ...(compactStats.removedBytes ? {compaction: compactStats} : {}),
                     sources: Object.fromEntries([...snapshots].map(([p, b]) => [path.relative(root, p), digest(b)]))}, null, 2) + '\n')}];
         }});
     const actual = published.get(output) ?? output;
