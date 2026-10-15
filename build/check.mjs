@@ -1282,7 +1282,7 @@ for index,cap in ipairs({180,203,225,225,225})do
 end
 `);
 
-suite('enemies rotate across allied Neutral Hostile look-alike owners and skip redundant move orders', mocks + String.raw`
+suite('enemies rotate across allied Neutral Hostile look-alike owners and stagger redundant move orders', mocks + String.raw`
 PATHING_TYPE_WALKABILITY,PLAYER_NEUTRAL_AGGRESSIVE='walk',12
 function GetRandomInt(a,b)return a end
 function GetRandomReal(a,b)return a end
@@ -1329,12 +1329,17 @@ assert(moveOrders==issued,'An unchanged chase target must not repath')
 hero.y=hero.y+40
 SurvivorCombat.UpdateEnemies(2)
 assert(moveOrders==issued,'A small hero step within slack must not repath a distant chaser')
-hero.y=hero.y+2000
-SurvivorCombat.UpdateEnemies(2.5)
-assert(moveOrders==issued+1 and ranged.target[2]==hero.y,'A large hero shift re-aims the chaser')
+local groups=SurvivorConfig.enemyOrderGroups
+assert(groups>1,'Re-aim orders must be spread over several updates')
+for tick=1,groups do
+    hero.y=hero.y+2000
+    SurvivorCombat.UpdateEnemies(2+tick*.5)
+end
+assert(moveOrders==issued+1,'A chaser re-aims once per staggered cycle even when the hero keeps moving')
+issued=moveOrders
 ranged.order=0
-SurvivorCombat.UpdateEnemies(3)
-assert(moveOrders==issued+2,'A unit that lost its move order is ordered again')
+SurvivorCombat.UpdateEnemies(10)
+assert(moveOrders==issued+1 and ranged.target[2]==hero.y,'A unit that lost its move order is ordered at once, off its group tick')
 SurvivorCombat.Cleanup()
 `);
 

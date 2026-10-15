@@ -17,6 +17,8 @@ SurvivorConfig = {
     enemyLife = 100, enemyDamage = 8, enemyMoveSpeed = 220,
     -- Spare slots that own enemies in rotation; see SurvivorCombat NextEnemyOwner.
     enemyPlayerIds = {18, 19, 20, 21, 22, 23},
+    -- Chasers re-aim in this many staggered groups, one group per enemy update.
+    enemyOrderGroups = 4,
     maxEnemies = 225, stageEnemyCaps = {180, 203, 225, 225, 225}, spawnInterval = 1.0, spawnDistance = 750,
     spawnRateMultiplier = 1.5,
     battlefieldCleanupBudget = 24, battlefieldCleanupInterval = 0.02,
