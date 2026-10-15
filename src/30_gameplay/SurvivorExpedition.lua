@@ -3,35 +3,39 @@ SurvivorExpedition = {}
 do
     local chapters = {
         {name = "묘비 뒤의 발자국", action = "발자국 세 곳을 차례로 통과", mode = "trail", count = 3,
-            beats = {"여기선 걸음이 느려졌어.", "이쪽이네. 여기서 무리와 떨어졌어.", "묘비를 돌아갔네. 나머지는 다 밟고 지나갔는데."},
+            beats = {"여기선 걸음이 느려졌어.", "이쪽이네. 여기서 무리와 떨어졌어.", "묘비를 돌아갔네. 다른 놈들은 그냥 밟고 지나갔는데."},
             advantage = "시체 수집자의 첫 폭발 예고 +1초", insight = "터지겠어. 뒤로 빠져!",
             finding = "발자국은 쓰러진 묘비를 돌아갔지만, 무리는 그 위를 밟고 지나갔다.",
-            reply = "피해 갈 줄은 알았네. 조금 더 따라가 보자.",
-            relic = "이름 없는 묘의 봉인", temptation = "묘비 아래에서 쇠붙이가 울린다. 봉인을 건드리면 묘지가 깨어날 것이다."},
+            reply = "피해 갈 줄은 알았네. 아무렇게나 걷는 건 아니야.",
+            sceneReply = "그럼 피할 줄은 안다는 거네.",
+            relic = "이름 없는 묘의 봉인", riskLine = "묘지가 깨어난다. 챙기고 버티자.", temptation = "묘비 아래에서 쇠붙이가 울린다. 봉인을 건드리면 묘지가 깨어날 것이다."},
         {name = "재 속의 우회로", action = "불길 바깥의 표식 네 곳을 통과", mode = "route", count = 4,
-            beats = {"이쪽은 식었어.", "가까운 길엔 아직 불이 남았네.", "좀 돌아가도 발자국은 이어져.", "여길 기억해 둬야겠어."},
+            beats = {"이쪽은 식었어.", "가까운 길엔 아직 불이 남았네.", "좀 돌아가도 발자국은 이어져.", "불길 없는 길은 여기뿐이네."},
             advantage = "도살자의 첫 돌진 잔불 제거", insight = "불길 밖으로! 아까 본 길로 빠지자.",
             finding = "재가 얇게 쌓인 담장 가장자리로 발자국이 이어졌다. 불길 쪽으로 되돌아간 흔적은 없었다.",
             reply = "무작정 헤맨 것 같진 않아. 계속 한쪽으로 가고 있어.",
-            relic = "잿불 속의 봉인함", temptation = "불길 속에 남은 봉인함이 열기를 뿜는다. 여는 동안 추격자들이 냄새를 맡을 것이다."},
+            sceneReply = "불길을 피해 돌아가면서도 방향은 잃지 않았어.",
+            relic = "잿불 속의 봉인함", riskLine = "열기가 번진다. 빨리 챙기고 빠지자.", temptation = "불길 속에 남은 봉인함이 열기를 뿜는다. 여는 동안 추격자들이 냄새를 맡을 것이다."},
         {name = "얼어붙은 빗장", action = "주변에서 누적 8초 조사 · 근처 적 처치 시 가속", mode = "study", count = 1, seconds = 8,
             beats = {"문 안쪽으로 피할 수 있겠어. 기억해 둬야겠네."},
             advantage = "파수꾼의 첫 냉기 파동 안전 각도 2배", insight = "냉기가 온다. 아까 그 문 쪽으로!",
             finding = "빗장을 덮은 서리에 손가락 자국이 남아 있었다. 문을 부순 흔적은 없었다.",
             reply = "빗장을 잡을 줄은 알았네. 어디로 나가는지도 알았을까?",
-            relic = "서리에 잠긴 성물", temptation = "얼음 아래 성물이 희미하게 떨린다. 얼음을 깨면 수색대가 몰려올 것이다."},
+            sceneReply = "빗장을 직접 풀었네. 나갈 곳이 정해져 있었던 걸까?",
+            relic = "서리에 잠긴 성물", riskLine = "얼음이 깨졌어. 몰려오기 전에 버텨야 해.", temptation = "얼음 아래 성물이 희미하게 떨린다. 얼음을 깨면 납골당의 망령들이 몰려올 것이다."},
         {name = "수색대의 전령", action = "이동하는 전령을 추격해 처치", mode = "courier", count = 3,
             beats = {"지원 요청이었네. 이젠 전해질 일 없겠어."},
             advantage = "추적대장의 첫 지원병 호출 차단", insight = "헛수고야. 그 전령은 돌아오지 않아.",
             finding = "전령의 명령서에 ‘이탈자’와 ‘회수’라는 말이 남아 있었다. 이름은 없었다. 지원 요청은 전달되지 않았다.",
             reply = "저놈들 손에 넘어가게 둘 순 없지. 서둘러야겠어.",
-            relic = "수색대의 압수품", temptation = "봉인된 압수품에 감시의 마력이 남아 있다. 손을 대면 경보가 울릴 것이다."},
+            sceneReply = "이름도 모르면서 쫓는 거네. 저놈들보다 먼저 찾아야 해.",
+            relic = "수색대의 압수품", riskLine = "경보가 울렸어. 챙기고 바로 빠지자.", temptation = "봉인된 압수품에 감시의 마력이 남아 있다. 손을 대면 경보가 울릴 것이다."},
         {name = "끊어진 사슬", action = "봉인 세 곳에서 각각 누적 2초 해제", mode = "seals", count = 3, seconds = 2,
             beats = {"하나 풀렸어. 아직 사슬이 팽팽하네.", "이것도 같은 사슬이네.", "가운데가 느슨해졌어. 저쪽으로 빠질 수 있겠네."},
             advantage = "감시자의 첫 사슬 봉쇄에서 중앙 줄 제거", insight = "가운데로! 풀어 둔 사슬 쪽이야.",
             finding = "풀린 사슬의 끝이 하수구 바닥에 놓여 있었다. 그 너머 물길을 따라 한 사람의 발자국만 이어졌다.",
             reply = "이쪽이야. 이제 얼마 안 남았어.",
-            relic = "감시자의 예비 봉인", temptation = "마지막 봉인이 길목을 감시한다. 부수면 힘을 얻겠지만, 감시자들을 자극할 것이다."},
+            relic = "감시자의 예비 봉인", riskLine = "감시자들이 눈치챘어. 조금만 버티자.", temptation = "마지막 봉인이 길목을 감시한다. 부수면 힘을 얻겠지만, 감시자들을 자극할 것이다."},
     }
     local hero, stage, started, rewardCallback
     local objective, risk, records = nil, nil, {}
@@ -90,7 +94,7 @@ do
         risk.state, risk.untilTime = "active", RunSession.GetElapsed() + 30
         records[stage].risk = "도전 중"
         RemoveMarker(risk)
-        SurvivorUI.Say("안야", "빨리 챙기고 빠져나오자.")
+        SurvivorUI.Say("안야", chapters[stage].riskLine)
         return true
     end
     function SurvivorExpedition.SearchRemaining()
@@ -99,6 +103,10 @@ do
     end
     function SurvivorExpedition.GetFinding(index) return records[index] and records[index].finding end
     function SurvivorExpedition.GetReply(index) return records[index] and records[index].reply end
+    -- The interlude answers the finding again; it must not repeat the combat subtitle word for word.
+    function SurvivorExpedition.GetSceneReply(index)
+        return records[index] and records[index].reply and chapters[index].sceneReply or nil
+    end
     function SurvivorExpedition.HasAdvantage(index) return records[index] ~= nil and records[index].finding ~= nil end
     function SurvivorExpedition.UseAdvantage(index)
         if not SurvivorExpedition.HasAdvantage(index) or records[index].used then return false end
@@ -164,6 +172,7 @@ do
         local chapter = chapters[stage]
         if chapter.mode == "courier" and dead == objective.courier then
             objective.courier = nil
+            SurvivorUI.Say("안야", chapter.beats[1])
             CompleteSearch()
         elseif chapter.mode == "study" and Near(hero, objective, 320) and Near(dead, objective, 450) then
             objective.progress = objective.progress + 0.6
@@ -219,6 +228,7 @@ do
         elseif risk and risk.state == "active" and elapsed >= risk.untilTime then
             risk.state = "complete" -- Consume before a modal callback; no duplicate rewards.
             records[stage].risk = "생존 성공 · 장비 회수"
+            SurvivorUI.Say("안야", "챙겼어. 이제 빠지자.")
             rewardCallback("risk")
         end
         if pulse >= 15 then
