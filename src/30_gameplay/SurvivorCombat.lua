@@ -24,6 +24,8 @@ do
     local queryGroup, candidatePool = nil, {}
     local clearTimer, clearGeneration, clearing = nil, 0, false
     local friendlyAlpha = 140
+    local enemyOwners, enemyOwnerSerial = nil, 0
+    local orderSerial, orderPhase = 0, 0
 
     local function CleanupCall(errors, label, action)
         local ok, message = pcall(action)
@@ -1108,6 +1110,37 @@ do
         BlzSetSpecialEffectPosition(missile.visual, missile.x, missile.y, missile.z)
         return dt
     end
+    -- Warcraft queues pathing per player, so one owner with hundreds of units stutters.
+    -- Spread enemies over allied slots that borrow Neutral Hostile's color and name.
+    local function NextEnemyOwner()
+        if not enemyOwners then
+            local template, heroOwner = Player(PLAYER_NEUTRAL_AGGRESSIVE), Player(SurvivorConfig.playerId)
+            enemyOwners = {}
+            for _, id in ipairs(SurvivorConfig.enemyPlayerIds) do enemyOwners[#enemyOwners + 1] = Player(id) end
+            for _, owner in ipairs(enemyOwners) do
+                SetPlayerColor(owner, GetPlayerColor(template))
+                SetPlayerName(owner, GetPlayerName(template))
+                SetPlayerAlliance(owner, heroOwner, ALLIANCE_PASSIVE, false)
+                SetPlayerAlliance(heroOwner, owner, ALLIANCE_PASSIVE, false)
+                SetPlayerAlliance(owner, template, ALLIANCE_PASSIVE, true)
+                SetPlayerAlliance(template, owner, ALLIANCE_PASSIVE, true)
+                for _, other in ipairs(enemyOwners) do
+                    if other ~= owner then SetPlayerAlliance(owner, other, ALLIANCE_PASSIVE, true) end
+                end
+            end
+        end
+        enemyOwnerSerial = enemyOwnerSerial % #enemyOwners + 1
+        return enemyOwners[enemyOwnerSerial]
+    end
+    -- Each move order repaths; skip it while the unit already heads near the same point.
+    -- A unit still moving re-aims only on its due tick; a lost order is replaced at once.
+    local function MoveEnemy(unit, record, x, y, slack, due)
+        local ox, oy = record.moveX, record.moveY
+        if ox and GetUnitCurrentOrder(unit) == OrderId("move")
+            and (not due or (ox - x)^2 + (oy - y)^2 <= slack * slack) then return end
+        record.moveX, record.moveY = x, y
+        IssuePointOrder(unit, "move", x, y)
+    end
     local function FireEnemyMissile(source, profile)
         local x, y, z = ImpactPoint(source)
         local tx, ty, tz = ImpactPoint(hero)
@@ -1416,7 +1449,7 @@ do
         if not found then return false end
         local theme = SurvivorStage.Get(stage)
         local id = theme.ids[isBoss and "boss" or kind == "courier" and "ranged" or kind]
-        local enemy = CreateUnit(Player(PLAYER_NEUTRAL_AGGRESSIVE), id, x, y, 0)
+        local enemy = CreateUnit(NextEnemyOwner(), id, x, y, 0)
         assert(enemy ~= nil and GetUnitTypeId(enemy) == id, "Enemy object ID is missing")
         units[enemy] = {enemy = true, alive = true, elite = elite == true, boss = isBoss,
             profile = profile, damageScale = scaling.damage * difficulty.damage,
@@ -1470,7 +1503,9 @@ do
             * scaling.moveSpeed * difficulty.moveSpeed))
         units[enemy].baseSpeed = GetUnitMoveSpeed(enemy)
         ALICE_AddIdentifier(enemy, "hsEnemy", "unit")
-        if profile then IssuePointOrder(enemy, "move", GetUnitX(hero), GetUnitY(hero))
+        orderSerial = orderSerial % SurvivorConfig.enemyOrderGroups + 1
+        units[enemy].orderGroup = orderSerial
+        if profile then MoveEnemy(enemy, units[enemy], GetUnitX(hero), GetUnitY(hero), 0, true)
         else IssueTargetOrder(enemy, "attack", hero) end
         return true, enemy
     end
@@ -1484,7 +1519,7 @@ do
         BlzSetUnitName(unit, "수색 명령을 지닌 전령")
         SetUnitVertexColor(unit, 235, 210, 100, 255)
         BlzUnitDisableAbility(unit, FourCC("Aatk"), true, true)
-        IssuePointOrder(unit, "move", points[2].x, points[2].y)
+        MoveEnemy(unit, record, points[2].x, points[2].y, 0, true)
         return unit
     end
     function SurvivorCombat.ReleaseCourier(unit)
@@ -1509,6 +1544,7 @@ do
     end
     function SurvivorCombat.UpdateEnemies(elapsed)
         if not Alive(hero) then return end
+        orderPhase = orderPhase % SurvivorConfig.enemyOrderGroups + 1
         local guardians = {}
         for u, record in pairs(units) do
             if record.trait == "guardian" and Enemy(u) then
@@ -1538,12 +1574,15 @@ do
                             record.waypoint = record.waypoint % #record.courier + 1
                             point = record.courier[record.waypoint]
                         end
-                        IssuePointOrder(u, "move", point.x, point.y)
+                        MoveEnemy(u, record, point.x, point.y, 0, true)
                     elseif record.profile then
                         local profile = record.profile
                         local dx, dy = GetUnitX(hero) - GetUnitX(u), GetUnitY(hero) - GetUnitY(u)
-                        if dx * dx + dy * dy > profile.range * profile.range or not SurvivorStage.LineClear(GetUnitX(u), GetUnitY(u), GetUnitX(hero), GetUnitY(hero)) then
-                            IssuePointOrder(u, "move", GetUnitX(hero), GetUnitY(hero))
+                        local distanceSq = dx * dx + dy * dy
+                        if distanceSq > profile.range * profile.range or not SurvivorStage.LineClear(GetUnitX(u), GetUnitY(u), GetUnitX(hero), GetUnitY(hero)) then
+                            -- Far chasers tolerate a staler target; close ones re-aim sooner.
+                            MoveEnemy(u, record, GetUnitX(hero), GetUnitY(hero), math.max(128, math.sqrt(distanceSq) * 0.25),
+                                record.orderGroup == orderPhase)
                         else
                             if GetUnitCurrentOrder(u) ~= 0 then IssueImmediateOrder(u, "stop") end
                             if elapsed >= record.nextShot then
