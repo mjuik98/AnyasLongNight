@@ -20,9 +20,16 @@ do
     local wardText, wardTextCache, essentialLayout
     local bossSnapshot
     local nativeHiddenFrames = {}
+    local cinematicFrames, cinematicSaved, cinematicAncestors = {}, {}, {}
+    local cinematicMode
     local damageBoardOriginalMinimized
     local retrySame, journalPrevious, journalNext, chapterPrevious, chapterNext, journalPosition
-    local conversation, conversationIndex, conversationAction, conversationTitle, sceneSkip
+    local conversation, conversationIndex, conversationAction, conversationTitle, sceneSkip, conversationClose
+    local conversationFinishLabel
+    local preparationRoot, preparationButton, preparationTitle, preparationMission, preparationRecord
+    local preparationHint, preparationLoadout, preparationFooter, preparationCountdown
+    local preparationReady, preparationCheck, preparationTimer
+    local preparationGeneration = 0
     local speechTimer, speechTimerPaused
     local frameCache = {}
     local damageCells, damageValues, damageRowCount, damageBuild, damageTitle = {}, {}, nil, nil, nil
@@ -153,9 +160,70 @@ do
             if ValidNativeFrame(frame) and BlzFrameIsVisible(frame) then BlzFrameSetVisible(frame, false) end
         end
     end
+    local function CacheCinematicFrame(name, context, introOnly, origin, index)
+        cinematicFrames[#cinematicFrames + 1] = {name = name, context = context or 0,
+            introOnly = introOnly == true, origin = origin, index = index or 0}
+    end
+    local function AcquireCinematicFrames()
+        -- Lookups can allocate handles: acquire on every client, before local visibility.
+        for _, entry in ipairs(cinematicFrames) do
+            if not ValidNativeFrame(entry.frame) then
+                local frame = entry.name and BlzGetFrameByName(entry.name, entry.context)
+                    or (entry.origin and BlzGetOriginFrame(entry.origin, entry.index))
+                entry.frame = ValidNativeFrame(frame) and not cinematicAncestors[frame] and frame or nil
+            end
+        end
+    end
+    local function RestoreCinematicFrames()
+        cinematicMode = nil
+        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        local pending, failures = cinematicSaved, {}
+        cinematicSaved = {}
+        for frame, state in pairs(pending) do
+            if state.changed and ValidNativeFrame(frame) then
+                local ok, message = pcall(BlzFrameSetVisible, frame, state.visible)
+                if not ok then
+                    cinematicSaved[frame] = state -- A later cleanup can retry a failed native.
+                    failures[#failures + 1] = tostring(message)
+                end
+            end
+        end
+        if #failures > 0 then error(table.concat(failures, "\n")) end
+    end
+    local function ApplyCinematicFrames(mode)
+        AcquireCinematicFrames()
+        cinematicMode = mode
+        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        local hidden = {}
+        for _, entry in ipairs(cinematicFrames) do
+            if ValidNativeFrame(entry.frame) and (mode == "intro" or not entry.introOnly) then
+                hidden[entry.frame] = true
+            end
+        end
+        -- Capture every flag before hiding any parent; do not snapshot inherited invisibility.
+        for frame in pairs(hidden) do
+            if cinematicSaved[frame] == nil then
+                cinematicSaved[frame] = {visible = BlzFrameIsVisible(frame), changed = false}
+            end
+        end
+        for frame, state in pairs(cinematicSaved) do
+            if not hidden[frame] then
+                if state.changed then BlzFrameSetVisible(frame, state.visible) end
+                cinematicSaved[frame] = nil
+            end
+        end
+        for frame in pairs(hidden) do
+            if BlzFrameIsVisible(frame) then
+                cinematicSaved[frame].changed = true
+                BlzFrameSetVisible(frame, false)
+            end
+        end
+        -- No native enable/anchor/size/parent writes: hotkeys and original positions survive.
+    end
     function SurvivorUI.UpdateExpedition()
         if not expeditionText then return end
-        local visible = RunSession.IsRunning() and not nativeInventoryVisible and not (SurvivorLootUI and SurvivorLootUI.IsExpanded())
+        local visible = RunSession.IsRunning() and not nativeInventoryVisible and not SurvivorUI.IsNarrativeVisible()
+            and not (SurvivorLootUI and SurvivorLootUI.IsExpanded())
             and (not speechVisible or SurvivorExpedition.HasRiskNotice())
         local text = visible and SurvivorExpedition.Status(speechVisible) or ""
         visible = visible and text ~= ""
@@ -176,15 +244,94 @@ do
                 and SurvivorExpedition.RiskOffer() ~= nil)
         end
     end
-    local introRoot, introTitle, introText, introContent, introSkip, introReady, caption
+    local introRoot, introTitle, introText, introContent, introSkip, introReady, caption, introFooter, storyPosition
+    local revealTimer, revealGeneration = nil, 0
+    local function DialogueAmbience(enabled)
+        if SurvivorStage and SurvivorStage.SetDialogueAmbience then
+            pcall(SurvivorStage.SetDialogueAmbience, enabled, "ui")
+        end
+    end
+    local function CancelReveal()
+        revealGeneration = revealGeneration + 1
+        local timer = revealTimer
+        revealTimer = nil
+        if timer then
+            local paused, pauseError = pcall(PauseTimer, timer)
+            local destroyed, destroyError = pcall(DestroyTimer, timer)
+            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
+        end
+    end
+    local function CancelPreparationCountdown()
+        preparationGeneration = preparationGeneration + 1
+        local timer = preparationTimer
+        preparationTimer = nil
+        if timer then
+            local paused, pauseError = pcall(PauseTimer, timer)
+            local destroyed, destroyError = pcall(DestroyTimer, timer)
+            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
+        end
+    end
+    local function RenderPreparationVisibility()
+        local waiting = preparationReady ~= nil and preparationTimer == nil
+        if preparationRoot then SetVisible(preparationRoot, waiting and not nativeInventoryVisible) end
+        if preparationButton then SetVisible(preparationButton, waiting and not nativeInventoryVisible) end
+        if preparationCountdown then
+            SetVisible(preparationCountdown, preparationTimer ~= nil and not nativeInventoryVisible)
+        end
+    end
+    local function StopPreparation()
+        preparationReady, preparationCheck = nil, nil
+        local ok, message = pcall(CancelPreparationCountdown)
+        RenderPreparationVisibility()
+        if not ok then error(message) end
+    end
     local function StopIntro()
-        if introRoot then BlzFrameSetVisible(introRoot, false) end
-        if introContent then BlzFrameSetVisible(introContent, false) end
-        if introSkip then BlzFrameSetVisible(introSkip, false) end
-        if caption then BlzFrameSetVisible(caption, false) end
-        if sceneSkip then BlzFrameSetVisible(sceneSkip, false) end
-        conversation, conversationIndex, conversationAction = nil, nil, nil
+        local close = conversationClose
+        conversationClose = nil -- Consume cleanup before native calls or reentrant close requests.
+        conversation, conversationIndex, conversationAction, conversationFinishLabel = nil, nil, nil, nil
         introReady = nil
+        local failures = {}
+        local function Attempt(action, ...)
+            local ok, message = pcall(action, ...)
+            if not ok then failures[#failures + 1] = tostring(message) end
+        end
+        Attempt(CancelReveal)
+        Attempt(StopPreparation)
+        -- Return selection to the gameplay hero while the native HUD is still hidden.
+        -- A portrait proxy must not be selected when the gameplay containers reopen.
+        if close then Attempt(close) end
+        for _, frame in pairs({introRoot, introContent, introSkip, caption, sceneSkip, introFooter, storyPosition}) do
+            Attempt(BlzFrameSetVisible, frame, false)
+        end
+        Attempt(RestoreCinematicFrames)
+        DialogueAmbience(false)
+        if #failures > 0 then error(table.concat(failures, "\n")) end
+    end
+    local function NarrativeFailure(message)
+        local ok, failure = pcall(StopIntro)
+        if not ok then message = tostring(message) .. "\nUI cleanup: " .. tostring(failure) end
+        error(message)
+    end
+    local function RevealScene()
+        CancelReveal()
+        BlzFrameSetAlpha(introRoot, 255)
+        BlzFrameSetVisible(introRoot, true)
+        local timer, generation, step = CreateTimer(), revealGeneration, 0
+        revealTimer = timer
+        TimerStart(timer, 0.03, true, function()
+            if revealTimer ~= timer or generation ~= revealGeneration or not conversation or not introReady then return end
+            local ok, message = pcall(function()
+                step = step + 1
+                BlzFrameSetAlpha(introRoot, math.max(0, math.floor(255 * (1 - step / 15))))
+                if step >= 15 then CancelReveal(); BlzFrameSetVisible(introRoot, false) end
+            end)
+            if not ok then
+                local cleaned, failure = pcall(StopIntro)
+                if not cleaned then message = tostring(message) .. "\nUI cleanup: " .. tostring(failure) end
+                RunSession.Fail(message)
+            end
+        end)
+        -- This synchronized 0.45-second timer only reveals the scene; it never advances a page.
     end
     local resultTabs, resultPages = {}, {}
     -- Leave room for the tall Reforged console decorations below the choice controls.
@@ -258,20 +405,66 @@ do
         if callback then callback() end
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
-    function SurvivorUI.IsNarrativeVisible() return introReady ~= nil end
+    function SurvivorUI.IsNarrativeVisible() return introReady ~= nil or preparationReady ~= nil end
+    function SurvivorUI.IsCombatPreparationVisible() return preparationReady ~= nil end
+    function SurvivorUI.InterruptCombatPreparation()
+        if not preparationReady or not preparationTimer then return false end
+        CancelPreparationCountdown()
+        SetText(preparationFooter, "|cffffcc00준비 중단 · 가방을 닫아 주세요.|r\n그다음 ‘수색 시작’을 다시 눌러 주세요.")
+        RenderPreparationVisibility()
+        return true
+    end
+    function SurvivorUI.BeginPreparedCombat()
+        if not preparationReady or preparationTimer then return false end
+        if preparationCheck and not preparationCheck() then
+            SetText(preparationFooter, "|cffffcc00가방을 먼저 닫아 주세요.|r\n수색 시작 전까지 시간은 멈춥니다.")
+            return false
+        end
+        local timer, generation, remaining = CreateTimer(), preparationGeneration, 3
+        preparationTimer = timer
+        SetText(preparationCountdown, "|cffffcc00수색 시작까지\n3|r")
+        RenderPreparationVisibility()
+        TimerStart(timer, 1, true, function()
+            if preparationTimer ~= timer or preparationGeneration ~= generation or not preparationReady then return end
+            local ok, message = pcall(function()
+                if preparationCheck and not preparationCheck() then
+                    SurvivorUI.InterruptCombatPreparation()
+                    return
+                end
+                remaining = remaining - 1
+                if remaining > 0 then
+                    SetText(preparationCountdown, "|cffffcc00수색 시작까지\n" .. remaining .. "|r")
+                else
+                    local callback = preparationReady
+                    StopPreparation() -- Consume the callback before gameplay or a replacement screen.
+                    DisplayDamageBoard(true)
+                    callback()
+                    if SurvivorLootUI then SurvivorLootUI.Refresh() end
+                end
+            end)
+            if not ok then RunSession.Fail(message) end
+        end)
+        return true
+    end
     local function RenderConversation()
         local page = conversation[conversationIndex]
-        BlzFrameSetText(introTitle, string.format("|cffffcc00%s|r  ·  %s  %d/%d", page.speaker, conversationTitle, conversationIndex, #conversation))
+        local accent = page.speaker == "안야" and "|cff9bdbc0" or page.speaker == "퓨트리스" and "|cffc4b2df" or "|cffffcc00"
+        BlzFrameSetText(introTitle, accent .. page.speaker .. "|r")
+        BlzFrameSetText(storyPosition, string.format("|cffb2b2b2%s · %d/%d|r", conversationTitle, conversationIndex, #conversation))
         BlzFrameSetText(introText, page.text)
-        BlzFrameSetText(introSkip, conversationIndex == #conversation and "계속" or "다음 대사")
+        BlzFrameSetText(introSkip, conversationIndex == #conversation and (conversationFinishLabel or "계속") or "다음 대사")
         if conversationAction then conversationAction(conversationIndex) end
+        ApplyCinematicFrames("conversation") -- Selection can make the command/inventory containers visible again.
     end
     function SurvivorUI.AdvanceNarrative()
         if not introReady then return end
-        if conversation and conversationIndex < #conversation then
-            conversationIndex = conversationIndex + 1
-            RenderConversation()
-        else CompleteIntro() end
+        local ok, message = pcall(function()
+            if conversation and conversationIndex < #conversation then
+                conversationIndex = conversationIndex + 1
+                RenderConversation()
+            else CompleteIntro() end
+        end)
+        if not ok then NarrativeFailure(message) end
     end
     function SurvivorUI.SkipConversation()
         if conversation and introReady then CompleteIntro() end
@@ -327,6 +520,8 @@ do
     end
     function SurvivorUI.UpdateSpeech()
         HideNativeHUD()
+        if cinematicMode then ApplyCinematicFrames(cinematicMode)
+        elseif next(cinematicSaved) ~= nil then RestoreCinematicFrames() end
         local elapsed = RunSession.GetElapsed()
         local dt = math.max(0, elapsed - speechClock)
         speechClock = elapsed
@@ -522,6 +717,36 @@ do
             parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0)
             parentName = "GameUI"
         end
+        -- Never hide any ancestor of the custom UI, including the fallback GameUI.
+        local ancestor = parent
+        for _ = 1, 64 do
+            if not ValidNativeFrame(ancestor) or cinematicAncestors[ancestor] then break end
+            cinematicAncestors[ancestor] = true
+            ancestor = BlzFrameGetParent and BlzFrameGetParent(ancestor) or nil
+        end
+        if ValidNativeFrame(gameUI) then cinematicAncestors[gameUI] = true end
+        -- Visibility natives require a Frame/SimpleFrame container. Native String/Texture
+        -- handles (InventoryText, SimpleNameValue, portrait HP/mana text) can crash the
+        -- engine even when GetHandleId is valid; Lua pcall cannot catch that fault.
+        -- Leave the inventory cover alone as well; hide the inventory's container.
+        -- Unit-detail, stat, level, progress and buff panels are selection-owned.
+        -- Restoring a hero's saved visibility while a non-hero portrait is selected
+        -- can enter an invalid native state. Leave those panels and individual
+        -- command/item buttons to the engine; only manage stable HUD containers.
+        for _, name in ipairs({"CommandBarFrame", "SimpleInventoryBar",
+            "ConsoleBottomBarOverlay", "ConsoleUIOverlay"}) do CacheCinematicFrame(name) end
+        for _, name in ipairs({"ConsoleUI", "ConsoleBottomBar"}) do
+            CacheCinematicFrame(name, 0, true)
+        end
+        -- Keep the speaker's portrait/name and Hero armor during dialogue, hiding combat clutter.
+        for _, entry in ipairs({{ORIGIN_FRAME_HERO_BAR},
+            {ORIGIN_FRAME_PORTRAIT, true},
+            {ORIGIN_FRAME_TOOLTIP, true}, {ORIGIN_FRAME_UBERTOOLTIP, true}}) do
+            if entry[1] then CacheCinematicFrame(nil, nil, entry[2], entry[1]) end
+        end
+        -- The opaque backdrop covers the world and its overlays. Leave renderer-owned
+        -- origin frames and undocumented child indices alone when opening a modal UI.
+        AcquireCinematicFrames()
         expeditionText = BlzCreateFrameByType("TEXT", "HeroSurvivorExpedition", parent, "", 0)
         BlzFrameSetAbsPoint(expeditionText, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
         BlzFrameSetSize(expeditionText, 0.255, 0.041)
@@ -730,8 +955,8 @@ do
         BlzFrameSetVisible(shade, false)
         introRoot = BlzCreateFrameByType("BACKDROP", "HeroSurvivorStageIntro", parent, "", 0)
         BlzFrameSetAbsPoint(introRoot, FRAMEPOINT_CENTER, 0.4, 0.3)
-        BlzFrameSetSize(introRoot, 1.6, 0.6)
-        BlzFrameSetTexture(introRoot, "UI\\Widgets\\ToolTips\\Human\\human-tooltip-background.blp", 0, true)
+        BlzFrameSetSize(introRoot, 2.4, 0.6)
+        BlzFrameSetTexture(introRoot, "HeroSurvivorUI\\Black.tga", 0, true)
         BlzFrameSetLevel(introRoot, 20)
         BlzFrameSetEnable(introRoot, false)
         -- Text/buttons are siblings: fading the backdrop must not fade the dialogue.
@@ -739,12 +964,14 @@ do
         BlzFrameSetAbsPoint(introContent, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(introContent, 0.8, 0.6)
         BlzFrameSetLevel(introContent, 22)
-        caption = FramedPanel(parent, "HeroSurvivorCaption", 712, 0.54, 0.146)
+        caption = FramedPanel(parent, "HeroSurvivorCaption", 712, 0.54, 0.166)
         BlzFrameSetAbsPoint(caption, FRAMEPOINT_CENTER, 0.4, 0.30)
         BlzFrameSetLevel(caption, 21)
         BlzFrameSetEnable(caption, false)
         introTitle = Text(introContent, "HeroSurvivorStageTitle", 0.7, 0.05, 0, -0.11)
         introText = Text(introContent, "HeroSurvivorStageText", 0.7, 0.13, 0, -0.18)
+        introFooter = Text(introContent, "HSStoryFooter", 0.70, 0.040, 0, -0.49)
+        storyPosition = Text(introContent, "HSStoryPosition", 0.230, 0.019, 0, -0.11)
         introSkip = BlzCreateFrame("ScriptDialogButton", parent, 0, 700)
         BlzFrameSetAbsPoint(introSkip, FRAMEPOINT_CENTER, 0.4, 0.22)
         BlzFrameSetSize(introSkip, 0.15, 0.03)
@@ -764,12 +991,42 @@ do
             ReleaseFocus(sceneSkip)
             SurvivorUI.SkipConversation()
         end)
+        -- A distinct action frame prevents a queued narrative click from starting combat.
+        -- Keep the live hero and the arena visible to the left of this preparation panel.
+        preparationRoot = FramedPanel(parent, "HSCombatPreparation", 714, 0.35, 0.40)
+        BlzFrameSetAbsPoint(preparationRoot, FRAMEPOINT_TOPRIGHT, 0.78, 0.585)
+        BlzFrameSetLevel(preparationRoot, 24)
+        preparationTitle = Text(preparationRoot, "HSCombatPreparationTitle", 0.31, 0.033, 0, -0.016)
+        preparationMission = Text(preparationRoot, "HSCombatPreparationMission", 0.31, 0.046, 0, -0.056)
+        preparationRecord = Text(preparationRoot, "HSCombatPreparationRecord", 0.31, 0.049, 0, -0.106)
+        preparationHint = Text(preparationRoot, "HSCombatPreparationHint", 0.31, 0.072, 0, -0.160)
+        preparationLoadout = Text(preparationRoot, "HSCombatPreparationLoadout", 0.31, 0.049, 0, -0.237)
+        preparationFooter = Text(preparationRoot, "HSCombatPreparationFooter", 0.31, 0.049, 0, -0.291)
+        for _, frame in ipairs({preparationTitle, preparationMission, preparationRecord,
+            preparationHint, preparationLoadout, preparationFooter}) do
+            BlzFrameSetLevel(frame, 3)
+            BlzFrameSetTextAlignment(frame, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
+        end
+        preparationButton = BlzCreateFrameByType("GLUETEXTBUTTON", "HSCombatPreparationStart", parent, "ScriptDialogButton", 0)
+        BlzFrameSetPoint(preparationButton, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -0.353)
+        BlzFrameSetSize(preparationButton, 0.24, 0.034)
+        BlzFrameSetLevel(preparationButton, 26)
+        BlzFrameSetText(preparationButton, "수색 시작")
+        Bind(preparationButton, FRAMEEVENT_CONTROL_CLICK, function()
+            ReleaseFocus(preparationButton)
+            SurvivorUI.BeginPreparedCombat()
+        end)
+        preparationCountdown = Text(parent, "HSCombatCountdown", 0.30, 0.076, 0, 0)
+        BlzFrameClearAllPoints(preparationCountdown)
+        BlzFrameSetAbsPoint(preparationCountdown, FRAMEPOINT_CENTER, 0.4, 0.49)
+        BlzFrameSetScale(preparationCountdown, 1.5)
+        BlzFrameSetLevel(preparationCountdown, 26)
         StopIntro()
         initialized = true
         -- One map-lifetime UI timer. Reading duration follows the paused run clock.
         SurvivorUI.BeginRun()
     end
-    function SurvivorUI.ShowNarrative(title, text, onReady)
+    local function PrepareNarrative(title, text, onReady, footer, buttonLabel)
         SurvivorUI.HidePanel()
         SurvivorUI.ClearSpeech()
         DisplayDamageBoard(false)
@@ -778,62 +1035,107 @@ do
         -- Native timed messages can render above the cinematic caption.
         if GetLocalPlayer() == Player(SurvivorConfig.playerId) then ClearTextMessages() end
         introReady = onReady
+        DialogueAmbience(true)
+        ApplyCinematicFrames("intro")
         BlzFrameSetText(introTitle, "|cffffcc00" .. title .. "|r")
         BlzFrameClearAllPoints(introTitle)
-        BlzFrameSetSize(introTitle, 0.70, 0.05)
-        BlzFrameSetPoint(introTitle, FRAMEPOINT_TOP, introContent, FRAMEPOINT_TOP, 0, -0.11)
+        BlzFrameSetSize(introTitle, 0.70, 0.054)
+        BlzFrameSetTextAlignment(introTitle, TEXT_JUSTIFY_MIDDLE, TEXT_JUSTIFY_CENTER)
+        BlzFrameSetPoint(introTitle, FRAMEPOINT_TOP, introContent, FRAMEPOINT_TOP, 0, -0.12)
         BlzFrameClearAllPoints(introSkip)
-        BlzFrameSetAbsPoint(introSkip, FRAMEPOINT_CENTER, 0.4, 0.22)
-        BlzFrameSetSize(introSkip, 0.15, 0.03)
+        BlzFrameSetAbsPoint(introSkip, FRAMEPOINT_CENTER, 0.4, 0.232)
+        BlzFrameSetSize(introSkip, 0.15, 0.032)
         BlzFrameSetText(introText, text)
         BlzFrameSetScale(introText, 1.0)
         BlzFrameSetTextAlignment(introText, TEXT_JUSTIFY_MIDDLE, TEXT_JUSTIFY_CENTER)
         BlzFrameClearAllPoints(introText)
-        BlzFrameSetSize(introText, 0.65, 0.13)
-        BlzFrameSetPoint(introText, FRAMEPOINT_TOP, introContent, FRAMEPOINT_TOP, 0, -0.18)
+        BlzFrameSetSize(introText, 0.64, 0.12)
+        BlzFrameSetPoint(introText, FRAMEPOINT_TOP, introContent, FRAMEPOINT_TOP, 0, -0.206)
+        BlzFrameClearAllPoints(introFooter)
+        BlzFrameSetSize(introFooter, 0.70, 0.040)
+        BlzFrameSetPoint(introFooter, FRAMEPOINT_TOP, introContent, FRAMEPOINT_TOP, 0, -0.487)
+        BlzFrameSetText(introFooter, "|cff969696" .. (footer or "") .. "|r")
+        BlzFrameSetVisible(introFooter, footer ~= nil and footer ~= "")
+        BlzFrameSetVisible(storyPosition, false)
         BlzFrameSetVisible(caption, false)
         BlzFrameSetAlpha(introRoot, 255)
         BlzFrameSetVisible(introRoot, true)
         BlzFrameSetVisible(introContent, true)
         BlzFrameSetVisible(introSkip, true)
-        BlzFrameSetText(introSkip, "계속")
+        BlzFrameSetText(introSkip, buttonLabel or "계속")
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
-    function SurvivorUI.ShowConversation(title, pages, onReady, onPage)
+    function SurvivorUI.ShowNarrative(title, text, onReady, footer, buttonLabel)
+        local ok, message = pcall(PrepareNarrative, title, text, onReady, footer, buttonLabel)
+        if not ok then NarrativeFailure(message) end
+    end
+    function SurvivorUI.ShowConversation(title, pages, onReady, onPage, onClose, finishLabel)
         assert(#pages > 0, "Conversation needs a page")
-        SurvivorUI.ShowNarrative(title, "", onReady)
-        conversation, conversationIndex, conversationAction, conversationTitle = pages, 1, onPage, title
-        BlzFrameSetAbsPoint(caption, FRAMEPOINT_CENTER, 0.4, 0.255)
-        BlzFrameSetSize(caption, 0.54, 0.146)
-        BlzFrameSetVisible(caption, true)
-        BlzFrameSetAlpha(introRoot, 65)
-        BlzFrameClearAllPoints(introTitle)
-        BlzFrameSetSize(introTitle, 0.492, 0.019)
-        BlzFrameSetPoint(introTitle, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0, -0.019)
-        BlzFrameClearAllPoints(introText)
-        -- Keep frame scale at 1: scaled offsets against the screen-sized root
-        -- displaced the body below its background in the reported game capture.
-        BlzFrameSetSize(introText, 0.492, 0.055)
-        BlzFrameSetTextAlignment(introText, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
-        BlzFrameSetPoint(introText, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0, -0.045)
-        BlzFrameClearAllPoints(introSkip)
-        BlzFrameSetSize(introSkip, 0.16, 0.030)
-        BlzFrameSetPoint(introSkip, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, -0.105, -0.108)
-        BlzFrameClearAllPoints(sceneSkip)
-        BlzFrameSetSize(sceneSkip, 0.18, 0.030)
-        BlzFrameSetPoint(sceneSkip, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0.105, -0.108)
-        BlzFrameSetVisible(sceneSkip, true)
-        RenderConversation()
+        local ok, message = pcall(function()
+            SurvivorUI.ShowNarrative(title, "", onReady)
+            conversationClose = onClose
+            conversationFinishLabel = finishLabel
+            conversation, conversationIndex, conversationAction, conversationTitle = pages, 1, onPage, title
+            BlzFrameSetAbsPoint(caption, FRAMEPOINT_CENTER, 0.4, 0.255)
+            BlzFrameSetSize(caption, 0.54, 0.166)
+            BlzFrameSetVisible(caption, true)
+            BlzFrameClearAllPoints(introTitle)
+            BlzFrameSetSize(introTitle, 0.230, 0.019)
+            BlzFrameSetTextAlignment(introTitle, TEXT_JUSTIFY_MIDDLE, TEXT_JUSTIFY_LEFT)
+            BlzFrameSetPoint(introTitle, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, -0.126, -0.019)
+            BlzFrameClearAllPoints(storyPosition)
+            BlzFrameSetSize(storyPosition, 0.230, 0.019)
+            BlzFrameSetPoint(storyPosition, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0.126, -0.019)
+            BlzFrameSetVisible(storyPosition, true)
+            BlzFrameClearAllPoints(introText)
+            -- Keep frame scale at 1: scaled offsets against the screen-sized root
+            -- displaced the body below its background in the reported game capture.
+            BlzFrameSetSize(introText, 0.492, 0.062)
+            BlzFrameSetTextAlignment(introText, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
+            BlzFrameSetPoint(introText, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0, -0.045)
+            BlzFrameClearAllPoints(introFooter)
+            BlzFrameSetSize(introFooter, 0.492, 0.014)
+            BlzFrameSetPoint(introFooter, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0, -0.108)
+            BlzFrameSetText(introFooter, "|cff969696대사는 직접 넘깁니다 · F10 메뉴|r")
+            BlzFrameSetVisible(introFooter, true)
+            BlzFrameClearAllPoints(introSkip)
+            BlzFrameSetSize(introSkip, 0.16, 0.030)
+            BlzFrameSetPoint(introSkip, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, -0.105, -0.128)
+            BlzFrameClearAllPoints(sceneSkip)
+            BlzFrameSetSize(sceneSkip, 0.18, 0.030)
+            BlzFrameSetPoint(sceneSkip, FRAMEPOINT_TOP, caption, FRAMEPOINT_TOP, 0.105, -0.128)
+            BlzFrameSetVisible(sceneSkip, true)
+            RenderConversation()
+            RevealScene()
+        end)
+        if not ok then NarrativeFailure(message) end
     end
     function SurvivorUI.ShowStageIntro(index, onReady, hero)
         SurvivorStory.SetStage(index)
         local theme = SurvivorStage.Get(index)
-        local text = theme.mission .. "\n\n" .. theme.hint
-        if index == 1 then text = SurvivorStory.premise .. "\n\n우클릭 이동 · 무기는 자동 공격 · F10 메뉴\n" .. SurvivorStory.notice end
+        local text = index == 1 and SurvivorStory.premise or theme.mission
+        local footer = index == 1 and ("우클릭 이동 · 무기는 자동 공격 · F10 메뉴\n" .. SurvivorStory.notice) or theme.hint
         SurvivorUI.ShowNarrative(string.format("%s\n%d / 5 · %s", SurvivorStory.title, index, theme.name),
             text, index == 1 and function()
                 SurvivorStory.ShowBriefing(hero, onReady)
-            end or onReady)
+            end or onReady, footer, index == 1 and "장면 보기" or "수색 준비")
+    end
+    function SurvivorUI.ShowCombatPreparation(index, details, onReady, canStart)
+        assert(type(onReady) == "function", "Combat preparation needs a start callback")
+        SurvivorUI.HidePanel()
+        SurvivorUI.ClearSpeech()
+        DisplayDamageBoard(false)
+        local theme = SurvivorStage.Get(index)
+        details = details or {}
+        preparationReady, preparationCheck = onReady, canStart
+        SetText(preparationTitle, string.format("|cffffcc00%d / %d · %s\n수색 준비|r", index, SurvivorConfig.stages, theme.name))
+        SetText(preparationMission, "|cff9bdbc0이번 목표|r\n" .. theme.mission)
+        SetText(preparationRecord, "|cffc4b2df수색 기록|r\n" .. (details.record or "흔적을 따라 다음 길목으로 향합니다."))
+        SetText(preparationHint, "|cffffcc00구역 안내|r\n" .. theme.hint)
+        SetText(preparationLoadout, details.loadout or "우클릭 이동 · 무기는 자동 공격")
+        SetText(preparationFooter, "‘수색 시작’을 누르기 전까지 전투와 시간이 멈춥니다.\n누른 뒤 3초 동안 주변을 살펴보세요.")
+        RenderPreparationVisibility()
+        if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
     function SurvivorUI.HidePanel()
         if SurvivorSetupUI then SurvivorSetupUI.Hide() end
@@ -863,7 +1165,7 @@ do
         SetRerollsVisible(false)
         BlzFrameSetVisible(heading, true)
         BlzFrameSetVisible(note, true)
-        BlzFrameSetText(heading, "|cffffcc00" .. (title or string.format("경로 확보 %d/5 · 회수한 장비 하나 선택", stage)) .. "|r")
+        BlzFrameSetText(heading, "|cffffcc00" .. (title or string.format("경로 확보 %d/5 · 회수한 장비 중 하나 선택", stage)) .. "|r")
         BlzFrameSetText(note, "보유 무기 연계·장비 교체 후보 우선 · 선택한 장비는 확장 인벤토리에서 장착")
         for i = 1, 3 do
             local card, entry = cards[i], SurvivorEquipment.Get(offers[i])
@@ -890,6 +1192,7 @@ do
     end
     function SurvivorUI.SetRestInventoryVisible(open)
         nativeInventoryVisible = open == true
+        if preparationReady then RenderPreparationVisibility() end
         -- Hide local HUD immediately even while the synchronized pause is still in flight.
         if nativeInventoryVisible and essentialRoot then SetVisible(essentialRoot, false) end
         if not restVisible then return end
@@ -906,9 +1209,9 @@ do
         BlzFrameSetText(heading, string.format("|cffffcc00레벨 %d · 무기 %d/%d · 장신구 %d/%d%s|r",
             rewardLevel, #build.weapons, SurvivorConfig.weaponSlots, #build.trinkets, SurvivorConfig.trinketSlots, full))
         local extra = remaining > 0 and (" · 이후 선택 " .. remaining .. "회") or ""
-        if not build.evolutionOffer then extra = extra .. " · 가능한 강화·신규 후보 각각 보장" end
+        if not build.evolutionOffer then extra = extra .. " · 강화·신규 후보 각 1장 보장" end
         if build.evolutionOffer then extra = extra .. " · 최고 레벨 무기 진화" end
-        BlzFrameSetText(note, "제외: 미보유 성장·진화 분기만 · 이번 판 재등장 안 함" .. extra)
+        BlzFrameSetText(note, "제외: 새 후보·진화만 · 이번 판 재등장 없음" .. extra)
         SetRerollsVisible(true)
         BlzFrameSetText(rerollCounter, string.format("|cffffcc00리롤 %d/%d · 제외 %d/%d|r", rerollsRemaining, SurvivorConfig.rerollCapacity, build.excludesRemaining, SurvivorConfig.excludesPerRun))
         for i, pip in ipairs(rerollPips) do
@@ -939,7 +1242,7 @@ do
                 BlzFrameSetTexture(card.icon, augment.icon, 0, true)
                 BlzFrameSetText(card.title, (weapon and "|cffffd77d" or "|cff8adbe8") .. (augment.element and ("[" .. augment.element .. "] ") or "") .. augment.name .. "|r")
                 BlzFrameSetText(card.description, SurvivorAugments.ChoiceLabel(id, build) .. "\n" .. augment.text)
-                BlzFrameSetText(card.preview, augment.kind == "evolution" and "추가 슬롯 없음 · 선택 후 변경 불가" or SurvivorAugments.Preview(id, build))
+                BlzFrameSetText(card.preview, augment.kind == "evolution" and "추가 슬롯 필요 없음 · 선택 후 변경 불가" or SurvivorAugments.Preview(id, build))
                 BlzFrameSetText(card.hint, "클릭하여 선택")
             end
         end
@@ -949,6 +1252,7 @@ do
         BlzFrameSetVisible(panel, true)
     end
     function SurvivorUI.ShowResult(reason, elapsed, kills, stage, bossTime, report, details)
+        StopIntro()
         SurvivorUI.ClearSpeech()
         journalPages, journalIndex, currentResultPage = {}, 1, 1
         journalChapters, journalChapter = {}, 1

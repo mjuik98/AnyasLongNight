@@ -96,12 +96,12 @@ do
         end
         local ready, remaining = SurvivorCombat.EscapeStatus()
         local ward, wardTime = SurvivorCombat.WardStatus()
-        local state = remaining > 0 and ("보호 중 · " .. math.ceil(remaining) .. "초") or ready and "사용 가능" or "소진 · 다음 스테이지 충전"
+        local state = remaining > 0 and ("보호 중 · " .. math.ceil(remaining) .. "초") or ready and "사용 가능" or "소진 · 다음 스테이지에서 재충전"
         local shield = ward > 0 and string.format("|n수색 보호막 %.0f · %d초 남음", ward, math.ceil(wardTime)) or ""
         if textCache.escape ~= state .. shield then
             textCache.escape = state .. shield
             BlzSetAbilityTooltip(passive, "그림자 탈출 · " .. state, 0)
-            BlzSetAbilityExtendedTooltip(passive, "안야의 자동 생존 능력 · 스테이지당 1회|n치명적인 피해를 무효화하고 생명력을 최소 30%로 확보합니다.|n2.5초간 받는 피해가 0이 됩니다. 이때 이동해 포위망을 벗어나세요.|n|n증강·인벤토리·스토리 중에는 보호 시간이 줄지 않습니다.|n다음 스테이지에서 재충전 · 직접 누를 필요 없음|n|n현재: " .. state .. shield, 0)
+            BlzSetAbilityExtendedTooltip(passive, "안야의 자동 생존 능력 · 스테이지당 1회|n치명적인 피해를 무효화하고 생명력을 최소 30%로 보장합니다.|n이후 2.5초 동안 피해를 받지 않습니다. 이 틈에 이동해 포위망을 벗어나세요.|n|n성장 선택·인벤토리·스토리 중에는 보호 시간이 줄지 않습니다.|n다음 스테이지에서 재충전 · 직접 누를 필요 없음|n|n현재: " .. state .. shield, 0)
         end
         for slot, id in ipairs(build.weapons) do
             local code = weapons[id]
@@ -135,7 +135,7 @@ do
                 local level = SurvivorAugments.Level(build, id)
                 local title = Title(id, level)
                 local description = Description(id)
-                    .. "|n|n레벨 업 장신구 · 버리기 불가 · 숫자는 강화 레벨"
+                    .. "|n|n레벨업 장신구 · 버리기 불가 · 숫자는 강화 레벨"
                 if textCache[id] ~= title .. description then
                     BlzSetItemName(item, title)
                     BlzSetItemTooltip(item, title)

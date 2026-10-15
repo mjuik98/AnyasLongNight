@@ -9,7 +9,7 @@ do
         firebolt = {kind = "weapon", name = "잿불 화살", icon = icons .. "BTNFireBolt.blp",
             text = "가까운 적을 추적합니다. 지상·공중 공격."},
         flamefield = {kind = "weapon", name = "잿불 발자취", icon = icons .. "BTNWallOfFire.blp",
-            text = "발밑에 잿불 발자취을 남깁니다. 지상 전용."},
+            text = "발밑에 잿불 발자취를 남깁니다. 지상 전용."},
         chainlightning = {kind = "weapon", name = "연쇄 번개", icon = icons .. "BTNChainLightning.blp",
             text = "적 사이로 번개가 튑니다. 지상·공중 공격."},
         orbitblade = {kind = "weapon", name = "순찰자의 칼날", icon = icons .. "BTNWhirlwind.blp",
@@ -20,29 +20,29 @@ do
             text = "바라보는 방향을 부채꼴로 벱니다. 지상 전용."},
         frostshard = {kind = "weapon", name = "서리 화살", icon = icons .. "BTNColdArrows.blp",
             text = "적을 관통하고 둔화시킵니다. 지상·공중 투사체."},
-        frostnova = {kind = "weapon", name = "서리 폭발", icon = icons .. "BTNGlacier.blp", text = "주변 무작위 적의 위치에서 냉기를 폭발시키고 둔화합니다. 지상·공중 공격."},
-        blizzard = {kind = "weapon", name = "묘역의 눈보라", icon = icons .. "BTNBlizzard.blp", text = "적 위치에 눈보라를 남겨 피해·둔화를 줍니다. 지상·공중 공격."},
+        frostnova = {kind = "weapon", name = "서리 폭발", icon = icons .. "BTNGlacier.blp", text = "주변의 무작위 적 위치에서 냉기를 터뜨려 적을 둔화시킵니다. 지상·공중 공격."},
+        blizzard = {kind = "weapon", name = "묘역의 눈보라", icon = icons .. "BTNBlizzard.blp", text = "적 위치에 눈보라를 남겨 피해를 주고 둔화시킵니다. 지상·공중 공격."},
         meteor = {kind = "weapon", name = "잿불 낙성", icon = icons .. "BTNInfernal.blp", text = "적 위치에 운석을 떨어뜨리고 불길을 남깁니다. 지상·공중 공격."},
-        thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "전진 후 머무는 구체가 주변 적을 반복 타격합니다. 지상·공중 공격."},
-        returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "지속시간 동안 왕복합니다. 이동 구간마다 1회 타격·지상 전용."},
+        thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "앞으로 나아가 머무는 구체가 주변 적을 반복 타격합니다. 지상·공중 공격."},
+        returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "지속시간 동안 왕복하며, 이동 구간마다 1회 타격합니다. 지상 전용."},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
             text = "모든 무기의 피해가 증가합니다.", statName = "피해 증가", amount = 0.10},
         haste = {kind = "trinket", name = "무기 쿨다운", icon = icons .. "BTNGlove.blp",
-            text = "모든 무기의 재발동 대기시간이 짧아집니다.", statName = "무기 쿨다운 감소", amount = 0.10},
+            text = "모든 무기의 쿨다운이 짧아집니다.", statName = "무기 쿨다운 감소", amount = 0.10},
         velocity = {kind = "trinket", name = "투사체 속도", icon = icons .. "BTNBootsOfSpeed.blp",
-            text = "날아가는 투사체의 이동 속도가 증가합니다. 쿨다운·타격 간격은 유지됩니다.", statName = "투사체 속도 증가", amount = 0.20},
+            text = "투사체가 더 빠르게 날아갑니다. 쿨다운과 타격 간격은 그대로입니다.", statName = "투사체 속도 증가", amount = 0.20},
         magnitude = {kind = "trinket", name = "확대의 인장", icon = icons .. "BTNOrbOfFire.blp",
-            text = "모든 무기의 타격 크기·공격 범위가 증가합니다.", statName = "무기 크기 증가", amount = 0.15},
+            text = "모든 무기의 타격 크기와 공격 범위가 커집니다.", statName = "무기 크기 증가", amount = 0.15},
         reach = {kind = "trinket", name = "추적의 인장", icon = icons .. "BTNCrystalBall.blp",
-            text = "모든 무기의 탐색 거리·공격 거리가 증가합니다.", statName = "무기 사정거리 증가", amount = 0.15},
+            text = "모든 무기의 탐색 거리와 공격 거리가 늘어납니다.", statName = "무기 사정거리 증가", amount = 0.15},
         longevity = {kind = "trinket", name = "지속의 인장", icon = icons .. "BTNAnkh.blp",
-            text = "모든 무기의 지속시간·연속 공격 성능이 증가합니다.", statName = "무기 지속 효과 증가", amount = 0.20},
+            text = "모든 무기의 지속시간과 연속 공격 성능이 증가합니다.", statName = "무기 지속 효과 증가", amount = 0.20},
         multicast = {kind = "trinket", name = "잔향의 인장", icon = icons .. "BTNWand.blp",
-            text = "모든 무기가 약화된 추가 공격을 생성합니다. 추가 공격은 다시 증식하지 않습니다."},
+            text = "모든 무기가 약한 추가 공격을 함께 발동합니다. 추가 공격은 다시 늘어나지 않습니다."},
         vitality = {kind = "trinket", name = "불굴의 인장", icon = icons .. "BTNPeriapt1.blp",
-            text = "최대 생명력이 증가합니다. 획득·강화 시 즉시 회복하지 않습니다.", statName = "최대 생명력", amount = 60, unit = ""},
+            text = "최대 생명력이 증가합니다. 획득·강화해도 바로 회복되지는 않습니다.", statName = "최대 생명력", amount = 60, unit = ""},
         renewal = {kind = "trinket", name = "회복의 인장", icon = icons .. "BTNRingSkull.blp",
-            text = "기본 회복에 초당 생명력 재생을 추가합니다. 일시정지 중에는 회복하지 않습니다.", statName = "추가 생명력 재생", amount = 1, unit = "/초"},
+            text = "기본 회복에 더해 초당 생명력이 재생됩니다. 일시정지 중에는 회복되지 않습니다.", statName = "추가 생명력 재생", amount = 1, unit = "/초"},
         stride = {kind = "trinket", name = "발걸음의 인장", icon = icons .. "BTNBoots.blp",
             text = "영웅의 이동 속도가 증가합니다. 최종 이동 속도는 500을 넘지 않습니다.", statName = "이동 속도", amount = 12, unit = ""},
         recovery = {kind = "recovery", name = "회복", icon = icons .. "BTNPotionGreenSmall.blp",
@@ -87,7 +87,7 @@ do
         {"flamefield", "지옥의 화로", "타격 간격 -35% · 반경 -15%", {zonePulse = 0.65, zoneRadius = 0.85}},
         {"chainlightning", "폭풍 그물", "연쇄 대상 +4 · 전이 거리 +35%", {chainJumpRange = 1.35}, {chainTargets = 4}},
         {"chainlightning", "뇌격", "피해 +100% · 연쇄 3명 고정 · 연쇄 증가 효과는 피해 배율로 전환", {chainDamage = 2}, {}, {chainTargets = 3}},
-        {"orbitblade", "칼날 성좌", "칼날 +2 · 3초 주기로 바깥으로 퍼졌다 귀환(최대 반경 165%)", {}, {bladeCount = 2}},
+        {"orbitblade", "칼날 성좌", "칼날 +2 · 3초마다 바깥으로 퍼졌다가 돌아옴(최대 반경 165%)", {}, {bladeCount = 2}},
         {"orbitblade", "그림자 호위", "전방에 칼날을 모아 왕복 베기 · 후방 노출 · 타격 간격 -40% · 반경 -20%", {bladeHitInterval = 0.6, bladeRadius = 0.8}},
         {"monsoon", "폭풍 전선", "낙뢰 +2회 · 타격 반경 +20%", {monsoonRadius = 1.2}, {monsoonCount = 2}},
         {"monsoon", "천벌", "피해 +300% · 낙뢰 1회 고정 · 횟수 증가 효과는 피해 배율로 전환", {monsoonDamage = 4}, {}, {monsoonCount = 1}},
@@ -157,7 +157,7 @@ do
             description = description .. string.format("\n첫 피해 %.1f · 최대 %d명 · 쿨다운 %.2f초\n탐색 %.0f / 연쇄 %.0f · 전이마다 피해 15%% 감소",
                 stats.chainDamage, stats.chainTargets, stats.chainInterval, stats.chainRange, stats.chainJumpRange)
         elseif id == "orbitblade" then
-            description = description .. string.format("\n피해 %.1f · 칼날 %d개 · 궤도 반경 %.0f\n한 바퀴 %.2f초 · 칼날별 동일 적 타격 간격 %.2f초",
+            description = description .. string.format("\n피해 %.1f · 칼날 %d개 · 궤도 반경 %.0f\n한 바퀴 %.2f초 · 칼날마다 같은 적 타격 간격 %.2f초",
                 stats.bladeDamage, stats.bladeCount, stats.bladeRadius, stats.bladePeriod, stats.bladeHitInterval)
                 .. string.format("\n새 칼날 쿨다운 %.2f초 · %.2f초 유지 · 중첩 가능", stats.bladeInterval, stats.bladeDuration)
         elseif id == "monsoon" then
@@ -174,7 +174,7 @@ do
             local w = stats.extraWeapons[id]
             description = description .. string.format("\n피해 %.1f · 쿨다운 %.2f초\n범위 %.0f · 사정거리 %.0f · 지속 %.2f초", w.damage, w.interval, w.radius, w.range, w.duration)
             if id == "meteor" then description = description .. "\n잔불은 충돌 피해의 20%씩 반복 타격"
-            elseif id == "returnblade" then description = description .. "\n귀환 후 남은 시간 동안 다시 발사 · 구간별 동일 적 1회" end
+            elseif id == "returnblade" then description = description .. "\n귀환 후 남은 시간 동안 다시 발사 · 구간마다 같은 적 1회 타격" end
         elseif id == "multicast" then
             description = description .. string.format("\n발동당 추가 공격 +%d · 추가 공격 피해 %.0f%%\n다발 무기도 추가 공격은 한 발·한 칼날·한 낙뢰씩 생성",
                 stats.multiCount, stats.multiDamage * 100)
@@ -205,7 +205,7 @@ do
             description = description .. string.format("\n다중: 추가 %d회 · 개별 피해 %.0f%%", stats.multiCount, stats.multiDamage * 100)
         end
         if entry.flavor then description = description .. "\n\n|cffaaaaaa" .. entry.flavor .. "|r" end
-        return description .. "\n\n자동 적용 · 레벨 업 선택으로 강화"
+        return description .. "\n\n자동 적용 · 레벨업 선택으로 강화"
     end
     local function EquipmentTotals(sources)
         local totals, ids = {}, {}

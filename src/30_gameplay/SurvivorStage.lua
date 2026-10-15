@@ -4,25 +4,25 @@ SurvivorStage = {}
 do
     local themes = {
         {name = "침묵의 묘역", mission = "무너진 묘실 입구에서 무리를 벗어난 발자국을 찾으세요.", landmark = "무너진 묘실 입구",
-            hint = "묘비 군집 사이의 넓은 길로 선회하세요. 발자국 세 곳을 따라가면 첫 보스 공격을 더 일찍 읽습니다.\n우클릭 이동 · 자동 공격 · 4분에 보스 등장", tiles = {"Ldro", "Ldrt", "Lgrd", "Lrok"}, blight = true, light = "Lordaeron", hour = 19,
+            hint = "묘비 군집 사이의 넓은 길로 돌아가세요. 발자국 세 곳을 따라가면 첫 보스 공격을 더 일찍 알아챌 수 있습니다.\n우클릭 이동 · 자동 공격 · 4분에 보스 등장", tiles = {"Ldro", "Ldrt", "Lgrd", "Lrok"}, blight = true, light = "Lordaeron", hour = 19,
             sound = [[Sound\Ambient\WindLoopStereo.wav]],
             color = {180, 220, 185}, warning = {255, 80, 40},
             melee = [[Units\Undead\Ghoul\Ghoul.mdl]], ranged = [[Units\Creeps\SkeletonArcher\SkeletonArcher.mdl]],
             boss = [[Units\Undead\Abomination\Abomination.mdl]]},
         {name = "불타는 보급로", mission = "불탄 보급로의 식은 가장자리에서 퓨트리스와 합류하세요.", landmark = "불탄 보급로의 잔해",
-            hint = "가까운 양옆 통로에서 주기적으로 불길이 솟습니다. 위쪽 우회로의 흔적을 이어 보세요.\n밝은 원은 공격 예고 · 장식용 불길은 피해 없음", tiles = {"Ddrt", "Ldrt", "Ddkr", "Dlvc"}, light = "Lordaeron", hour = 22,
+            hint = "가까운 양옆 통로에서 주기적으로 불길이 솟습니다. 위쪽 우회로의 흔적을 따라가 보세요.\n밝은 원은 공격 예고 · 장식용 불길은 피해 없음", tiles = {"Ddrt", "Ldrt", "Ddkr", "Dlvc"}, light = "Lordaeron", hour = 22,
             sound = [[Sound\Ambient\DoodadEffects\BlueFireBurstLoop.wav]],
             color = {255, 165, 100}, warning = {70, 230, 255},
             melee = [[Units\Undead\Ghoul\Ghoul.mdl]], ranged = [[Units\Undead\SkeletonMage\SkeletonMage.mdl]],
             boss = [[Units\Undead\Abomination\Abomination.mdl]], burningBoss = true},
-        {name = "서리 낀 납골당", mission = "납골당에서 새는 냉기 속에서 안쪽으로 열린 문을 살피세요.", landmark = "얼어붙은 납골당 문",
-            hint = "폐허 뒤에서 원거리 사선을 끊으세요. 빗장 조사는 자리를 떠나도 진행도가 유지됩니다.\n첫 파동의 피할 틈을 확보하세요 · 공중 적 주의", tiles = {"Nsnw", "Nice", "Nsnr"}, light = "Lordaeron", hour = 0, weather = "SNls",
+        {name = "서리 낀 납골당", mission = "납골당에서 새어 나오는 냉기를 헤치고, 안쪽에서 빗장이 풀린 문을 살피세요.", landmark = "얼어붙은 납골당 문",
+            hint = "폐허 뒤에서 원거리 사선을 끊으세요. 빗장 조사는 자리를 떠나도 진행도가 유지됩니다.\n첫 파동을 피할 틈을 확보하세요 · 공중 적 주의", tiles = {"Nsnw", "Nice", "Nsnr"}, light = "Lordaeron", hour = 0, weather = "SNls",
             sound = [[Sound\Ambient\BattleNetWindStereoLoop1.wav]],
             color = {145, 200, 255}, warning = {255, 80, 30},
             melee = [[Units\Creeps\Revenant\Revenant.mdl]], ranged = [[Units\Undead\Necromancer\Necromancer.mdl]],
             boss = [[Units\Creeps\Revenant\Revenant.mdl]]},
         {name = "폐허의 검문소", mission = "적 수색대의 검문소를 돌파하고 이송 경로를 확보하세요.", landmark = "수색대의 검문소",
-            hint = "연결된 길목으로 포위를 벗어나세요. 전령의 명령서를 회수하면 첫 지원 요청을 차단합니다.\n추적대장은 주기적으로 지원병을 부릅니다.", tiles = {"Ybtl", "Yrtl", "Ldrt", "Lrok"}, light = "Dalaran", hour = 2, weather = "RAlr",
+            hint = "연결된 길목으로 포위를 벗어나세요. 전령의 명령서를 회수하면 첫 지원 요청을 막을 수 있습니다.\n추적대장은 주기적으로 지원병을 부릅니다.", tiles = {"Ybtl", "Yrtl", "Ldrt", "Lrok"}, light = "Dalaran", hour = 2, weather = "RAlr",
             sound = [[Sound\Ambient\RainAmbience.wav]],
             color = {170, 190, 235}, warning = {255, 180, 40},
             melee = [[Units\Undead\Skeleton\Skeleton.mdl]], ranged = [[Units\Creeps\SkeletonArcher\SkeletonArcher.mdl]],
@@ -41,6 +41,21 @@ do
         theme.flying = theme.flying or [[Units\Undead\Gargoyle\Gargoyle.mdl]]
     end
     local effects, weather, sound, rect, arena = {}, nil, nil, nil, nil
+    local sceneProps, paintBounds, currentTheme = {}, nil, nil
+    local dialogueAudioOwners, soundVolume = {}, nil
+    local function RefreshAmbienceVolume()
+        local volume = next(dialogueAudioOwners) and 8 or 18
+        if sound and soundVolume ~= volume then
+            -- This is our loop's gain, independent of the player's master sound setting.
+            local ok = pcall(SetSoundVolume, sound, volume)
+            if ok then soundVolume = volume end
+        end
+    end
+    function SurvivorStage.SetDialogueAmbience(enabled, owner)
+        owner = owner or "story"
+        dialogueAudioOwners[owner] = enabled and true or nil
+        RefreshAmbienceVolume()
+    end
     local painted, paintedCells, heightLocation = {}, {}, nil
     local cells, walls, reachable, lava = {}, {}, {}, {}
     -- Stock assets, resolved through the player's graphics mode. No imported model overrides.
@@ -84,11 +99,15 @@ do
         end
         return false
     end
-    local function Terrain(index, x, y, tile, blighted)
+    local function Terrain(index, x, y, tile, blighted, background)
         -- Own a single terrain cell, including its authored variation and blight.
-        -- The outer editor landscape and blocked trees/cliffs remain intact.
+        -- Background texture includes blocked ground; height, water, cliffs and pathing stay authored.
         x, y = math.floor(x / 128) * 128 + 64, math.floor(y / 128) * 128 + 64
-        if not Inside(x, y) or (IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) and not OnOwnedWall(x, y)) then return end
+        if background then
+            if x < paintBounds.minX or x > paintBounds.maxX or y < paintBounds.minY or y > paintBounds.maxY then return end
+        elseif not Inside(x, y) or (IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) and not OnOwnedWall(x, y)) then
+            return
+        end
         local key = x .. ":" .. y
         if not paintedCells[key] then
             local cell = {x = x, y = y, tile = GetTerrainType(x, y),
@@ -110,37 +129,45 @@ do
         MoveLocation(heightLocation, x, y)
         BlzSetSpecialEffectZ(effect, GetLocationZ(heightLocation))
     end
-    local function Prop(index, model, x, y, scale, angle, tint)
-        if #effects >= 96 or x < arena.minX + 128 or x > arena.maxX - 128
-            or y < arena.minY + 128 or y > arena.maxY - 128 or InClearing(x, y) then return end
-        if IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) and not OnOwnedWall(x, y) then return end
+    local function Scenery(model, x, y, scale, angle, color)
         local effect = AddSpecialEffect(model, x, y)
         if not effect then return end
         effects[#effects + 1] = effect
         Ground(effect, x, y)
-        BlzSetSpecialEffectScale(effect, scale)
+        BlzSetSpecialEffectScale(effect, scale or 1)
         BlzSetSpecialEffectYaw(effect, angle or 0)
-        local color = tint or sceneryColors[index]
         BlzSetSpecialEffectColor(effect, color[1], color[2], color[3])
+        -- Place persistent scenery in its idle sequence instead of a transient spawn sequence.
+        BlzPlaySpecialEffect(effect, ANIM_TYPE_STAND)
         return effect
     end
+    function SurvivorStage.SceneProp(key, model, x, y, scale, angle, tint)
+        assert(currentTheme and heightLocation, "Initialize stage presentation before scene scenery")
+        if sceneProps[key] then return sceneProps[key] end
+        if #effects >= 96 or not Inside(x, y, 32) then return end
+        local effect = Scenery(model, x, y, scale, angle, tint or sceneryColors[currentTheme])
+        sceneProps[key] = effect
+        return effect
+    end
+    local function Prop(index, model, x, y, scale, angle, tint)
+        -- Reserve room for the same scenery viewed during the dialogue scene.
+        if #effects >= 80 or x < arena.minX + 128 or x > arena.maxX - 128
+            or y < arena.minY + 128 or y > arena.maxY - 128 or InClearing(x, y) then return end
+        if IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) and not OnOwnedWall(x, y) then return end
+        return Scenery(model, x, y, scale, angle, tint or sceneryColors[index])
+    end
     local function Decorate(index, x, y, scale, seed, solid)
-        if #effects >= 96 or x < arena.minX + 128 or x > arena.maxX - 128
+        if #effects >= 80 or x < arena.minX + 128 or x > arena.maxX - 128
             or y < arena.minY + 128 or y > arena.maxY - 128 or InClearing(x, y) then return end
         if not solid and IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) then return end
         local models = pools[index]
         local choice = 1 + math.floor(Variation(seed, 4) * #models)
         if solid and index ~= 3 and choice == #models then choice = 1 end -- Bones do not describe a solid wall.
         local model = models[choice]
-        local effect = AddSpecialEffect(model, x, y)
-        if not effect then return end
-        effects[#effects + 1] = effect
-        Ground(effect, x, y)
-        BlzSetSpecialEffectScale(effect, scale)
-        BlzSetSpecialEffectYaw(effect, Variation(seed, 5) * math.pi * 2)
-        BlzSetSpecialEffectRoll(effect, (Variation(seed, 6) - 0.5) * (solid and 0.10 or 0.20))
         local color, shade = sceneryColors[index], 0.9 + Variation(seed, 7) * 0.1
-        BlzSetSpecialEffectColor(effect, math.floor(color[1] * shade), math.floor(color[2] * shade), math.floor(color[3] * shade))
+        local effect = Scenery(model, x, y, scale, Variation(seed, 5) * math.pi * 2,
+            {math.floor(color[1] * shade), math.floor(color[2] * shade), math.floor(color[3] * shade)})
+        if effect then BlzSetSpecialEffectRoll(effect, (Variation(seed, 6) - 0.5) * (solid and 0.10 or 0.20)) end
     end
     local function TileAt(index, x, y)
         local patch = math.sin(x / 360 + index) + math.cos(y / 480 - index) + 0.35 * math.sin((x - y) / 190)
@@ -158,7 +185,7 @@ do
             if math.abs(math.abs(x) - 780) < 160 and math.abs(math.abs(y) - 430) < 120 then return "Dlvc" end
             return patch > -0.15 and "Ddkr" or patch < -1.15 and "Ldrt" or "Ddrt"
         elseif index == 3 then
-            -- The frozen search district has no dirt fallback; the outer editor biome remains.
+            -- Snow remains continuous across the playable district and its visible border.
             local frozenChannel = math.abs(x - math.sin(y / 760) * 390) < 160
             return (frozenChannel or (distance > 400 and patch > 1.2)) and "Nice"
                 or patch < -0.45 and "Nsnr" or "Nsnw"
@@ -175,20 +202,19 @@ do
         return patch > 1.25 and distance > 1100 and "Dlvc" or patch < -0.45 and "Lrok" or "Ddkr"
     end
     local function PaintTerrain(index, cx, cy)
-        -- A local search district overlays the original map. Never recolor the entire editor map.
-        -- A feathered outer edge keeps the road, town and trees beyond it recognizable.
-        local radius = math.min(1900, (arena.maxX - arena.minX - 256) / 2, (arena.maxY - arena.minY - 256) / 2)
-        local limit = math.ceil(radius / 128) * 128
-        for dx = -limit, limit, 128 do
-            for dy = -limit, limit, 128 do
-                local x, y = cx + dx, cy + dy
-                local distance = math.sqrt(dx * dx + dy * dy)
-                local feather = distance <= radius - 256 or Variation(dx * 13 + dy * 7, index) > (distance - radius + 256) / 256
-                if distance <= radius and feather then
-                    -- Blight accents belong to graves/the outer seal, never the central combat floor.
-                    local blighted = themes[index].blight == true and distance > 1000 and OnOwnedWall(x, y)
-                    Terrain(index, x, y, TileAt(index, dx, dy), blighted)
-                end
+        -- Follow the real movement area, with a bounded sight buffer beyond it. A small
+        -- central disc leaves the editor biome exposed as soon as the hero walks away.
+        local minX, minY = math.ceil((paintBounds.minX - 64) / 128) * 128 + 64,
+            math.ceil((paintBounds.minY - 64) / 128) * 128 + 64
+        for x = minX, paintBounds.maxX, 128 do
+            for y = minY, paintBounds.maxY, 128 do
+                local dx, dy = x - cx, y - cy
+                local edge = math.min(x - paintBounds.minX, paintBounds.maxX - x,
+                    y - paintBounds.minY, paintBounds.maxY - y)
+                -- Frosted rock forms a natural snowy border rather than revealing bare dirt.
+                local tile = index == 3 and edge < 512 and "Nsnr" or TileAt(index, dx, dy)
+                local blighted = themes[index].blight == true and dx * dx + dy * dy > 1000^2 and OnOwnedWall(x, y)
+                Terrain(index, x, y, tile, blighted, true)
             end
         end
     end
@@ -479,19 +505,29 @@ do
         ClearGeometry()
         RestoreTerrain()
         for _, effect in ipairs(effects) do DestroyEffect(effect) end
-        effects = {}
+        effects, sceneProps, currentTheme = {}, {}, nil
         if weather then EnableWeatherEffect(weather, false); RemoveWeatherEffect(weather); weather = nil end
         if sound then StopSound(sound, true, false); sound = nil end
+        soundVolume = nil
     end
     function SurvivorStage.Cleanup()
+        dialogueAudioOwners = {}
+        RefreshAmbienceVolume()
         ClearPresentation()
         if rect then RemoveRect(rect); rect = nil end
         if heightLocation then RemoveLocation(heightLocation); heightLocation = nil end
-        arena = nil
+        arena, paintBounds = nil, nil
     end
     function SurvivorStage.Init(bounds)
         SurvivorStage.Cleanup()
         arena = bounds
+        -- GetWorldBounds returns a new rectangle. Snapshot and release it immediately.
+        local world = GetWorldBounds()
+        paintBounds = {minX = math.max(bounds.minX - 1024, GetRectMinX(world) + 64),
+            maxX = math.min(bounds.maxX + 1024, GetRectMaxX(world) - 64),
+            minY = math.max(bounds.minY - 1024, GetRectMinY(world) + 64),
+            maxY = math.min(bounds.maxY + 1024, GetRectMaxY(world) - 64)}
+        RemoveRect(world)
         rect = Rect(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY)
         heightLocation = Location((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2)
     end
@@ -502,6 +538,7 @@ do
         ClearPresentation()
         SurvivorMetrics.End("stage.clear", phase)
         local theme = SurvivorStage.Get(index)
+        currentTheme = index
         local cx, cy = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
         phase = SurvivorMetrics.Begin()
         BuildGeometry(index, cx, cy)
@@ -527,7 +564,7 @@ do
         ResetTerrainFog()
         if theme.weather then weather = AddWeatherEffect(rect, FourCC(theme.weather)); EnableWeatherEffect(weather, true) end
         sound = CreateSound(theme.sound, true, false, false, 500, 500, "DefaultEAXON")
-        if sound then SetSoundVolume(sound, 18); StartSound(sound) end
+        if sound then RefreshAmbienceVolume(); StartSound(sound) end
         SurvivorMetrics.End("stage.apply", started)
     end
 end

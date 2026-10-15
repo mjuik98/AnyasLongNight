@@ -88,7 +88,7 @@ do
         frost = {name = "서리 기록관의 유물", prefix = "서리 기록관의", flavor = "얼어붙은 기록 속에 사라진 이들의 이름이 남아 있다.", code = "Hi", weapons = {"frostshard", "frostnova", "blizzard"},
             existing = {Head = "Hs09", Chest = "Hs08"},
             tiers = {{count = 2, text = "냉기 계열 둔화 지속 +1초", bonuses = {}},
-                {count = 4, text = "둔화 중 냉기 4회 적중: 1초 빙결 (대상별 5초)|n보스는 빙결 대신 해당 타격 피해 100% 추가", bonuses = {set = {frost = 1}}}}},
+                {count = 4, text = "둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가", bonuses = {set = {frost = 1}}}}},
         blade = {name = "그림자 순찰자의 장구", prefix = "그림자 순찰자의", flavor = "돌아오는 길까지 살피던 순찰자의 장구.", code = "Hb", weapons = {"orbitblade", "frontslash", "returnblade"},
             existing = {Gloves = "Hs07", Boots = "Hs13"},
             tiers = {{count = 2, text = "칼날 계열 피해 +15%p", bonuses = {}},
@@ -176,7 +176,7 @@ do
     }
     for _, entry in ipairs(catalog) do entry.flavor = entry.flavor or flavor[entry.id] end
     local slotNames = {Head = "머리", Chest = "가슴", Gloves = "장갑", Boots = "신발",
-        Trinket = "장신구 (장비용)", Ring = "반지 (두 칸 중 하나)", Primary = "무기", Offhand = "보조무기"}
+        Trinket = "장신구 (장비용)", Ring = "반지 (두 칸 중 하나)", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
     for _, entry in ipairs(catalog) do byType[FourCC(entry.id)], byId[entry.id] = entry, entry end
     local hero, build, eventTrigger
@@ -411,7 +411,7 @@ do
             local count = 0
             for _, piece in ipairs(set.pieces) do if equipped[piece] then count = count + 1 end end
             lines[#lines + 1] = ""
-            lines[#lines + 1] = string.format("|cffffcc00<%s> %d/%d 착용|r", set.name, count, #set.pieces)
+            lines[#lines + 1] = string.format("|cffffcc00<%s> %d/%d 장착|r", set.name, count, #set.pieces)
             for _, piece in ipairs(set.pieces) do
                 lines[#lines + 1] = (equipped[piece] and "|cff80ff80[장착] " or "|cff888888[미장착] ") .. byId[piece].name .. "|r"
             end
@@ -422,7 +422,7 @@ do
             end
             lines[#lines + 1] = "|cffaaaaaa보유 중인 해당 무기에만 적용|r"
             lines[#lines + 1] = "|cffaaaaaa기본 능력치는 각각 적용 · 동일 장비의 세트 개수는 1개|r"
-            lines[#lines + 1] = "|cffaaaaaa세트 추가 공격은 재발동하지 않음|r"
+            lines[#lines + 1] = "|cffaaaaaa세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음|r"
         end
         lines[#lines + 1] = "|cffaaaaaa확장 인벤토리에서 장착 시 적용|r"
         if entry.flavor then lines[#lines + 1] = "|cffaaaaaa" .. entry.flavor .. "|r" end
@@ -837,7 +837,7 @@ do
                     if dx * dx + dy * dy <= radius * radius and CanAutoPick(item, record, inventory) then
                         record.retry = elapsed + 0.5
                         if inventory.count < inventory.capacity and TryPickup(item, record, inventory) then
-                            SurvivorUI.Notify("장비 획득: " .. SurvivorEquipment.Name(Entry(item).id) .. "\n확장 인벤토리에서 장착")
+                            SurvivorUI.Notify("장비 획득: " .. SurvivorEquipment.Name(Entry(item).id) .. "\n확장 인벤토리에서 장착하세요.")
                         end
                     end
                 end

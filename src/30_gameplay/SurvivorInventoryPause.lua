@@ -87,6 +87,11 @@ do
                 -- Apply any last native gear transaction before resuming attacks.
                 SurvivorEquipment.Reconcile()
                 RunSession.SetInventoryOpen(value == "1")
+                -- Interrupt on the synchronized open event even if the bag closes
+                -- again before the preparation countdown's next timer tick.
+                if value == "1" and SurvivorUI.InterruptCombatPreparation then
+                    SurvivorUI.InterruptCombatPreparation()
+                end
                 SurvivorNativeLoadout.Refresh()
             end)
             if not ok then RunSession.Fail(message) end
