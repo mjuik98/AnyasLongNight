@@ -3760,6 +3760,7 @@ local anya,putress,figure,cart=effects[1],effects[2],effects[3],effects[4]
 assert(#effects<=96 and cart.model==SurvivorStory.transportModel and cart.alpha==0 and not hero.visible)
 assert(anya.model==[[Units\Forsaken\HeroAnya\HeroAnya.mdl]] and anya.colorPlayer==Player(0)and putress.colorPlayer==Player(0),
     'The ending uses the same native Anya model and red team for both companions')
+assert(figure.model==[[Units\Forsaken\Hero_ForsakenGarek\Hero_ForsakenGarek.mdl]],'The fallen figure is Garek, still unnamed in dialogue')
 local initialX,initialY=cart.x,cart.y
 for i=1,100 do TickTimers()end
 assert(cart.x==initialX and cart.y==initialY and cart.alpha==0 and completed==0,'Timer ticks cannot move the scene ahead')
