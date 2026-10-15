@@ -616,6 +616,99 @@ do
             end, hero, "보상 선택")
         end)
     end
+    -- Arrival scenes open stages 2-5 in the new place. They never repeat the previous
+    -- scene's destination line; they set the mood and hint at the stage boss.
+    local arrivals = {
+        [2] = {
+            Page("퓨트리스", "몇 해가 지났는데도 아직 타고 있군. 이 도시는 꺼질 줄을 몰라."),
+            Page("안야", "열기 때문에 발자국이 금방 흐려지겠어. 서두르자."),
+            Page("퓨트리스", "큰길은 피하게. 저 불길 속에서 뭔가 큰 게 움직이고 있어."),
+        },
+        [3] = {
+            Page("안야", "방금까지 불바다였는데, 여긴 서리가 꼈어."),
+            Page("퓨트리스", "냉기가 안쪽에서 새어 나오는군. 누군가 이 무덤에 파수꾼을 남겨 뒀어."),
+            Page("안야", "발자국은 저 문까지 이어져. 막으면 치우고 가자."),
+        },
+        [4] = {
+            Page("안야", "성문 앞에 검문소라니. 우리 집 앞마당인데."),
+            Page("퓨트리스", "대담한 놈들이군. 저 깃발 아래 지휘하는 자가 있을 걸세."),
+            Page("안야", "수색대보다 먼저야. 길은 내가 뚫을게."),
+        },
+        [5] = {
+            Page("안야", "물소리뿐이야. 발자국은 저 사슬 너머로 이어져."),
+            Page("퓨트리스", "늦진 않았군. 수레는 입구에 두고 왔네. 저 사슬엔 지켜보는 눈이 붙어 있어."),
+            Page("안야", "그럼 그 눈부터 감겨 줘야겠네."),
+        },
+    }
+    local arrivalSummaries = {
+        [2] = "불타는 스트라솔름 시가지에 들어섰다. 큰길 쪽 불길 속에서 커다란 무언가가 움직이고 있었다.",
+        [3] = "스트라솔름 납골당에는 서리가 끼어 있었다. 발자국이 이어진 문 앞을 파수꾼이 지키고 있었다.",
+        [4] = "로데론 수도 성문 앞에 스컬지 수색대의 검문소가 서 있었다. 수색대를 지휘하는 자가 있었다.",
+        [5] = "하수구에서 퓨트리스와 다시 만났다. 수레는 입구에 두었고, 발자국은 감시받는 사슬 너머로 이어졌다.",
+    }
+    function SurvivorStory.ShowArrival(index, hero, onComplete)
+        local source = assert(arrivals[index], "Unknown arrival scene")
+        currentStage = index
+        SurvivorStory.Cleanup()
+        local pages = {}
+        for i, page in ipairs(source) do pages[i] = Page(page.speaker, page.text) end
+        CreateScene(function()
+            local render
+            if hero then
+                local x, y = BeginScene(hero)
+                -- Both arrive together, except in the sewer where Putress already waits with the cart.
+                local waiting = index == 5
+                local anya = Actor(SurvivorStory.heroModel, x - 430, y - 60, 1, Player(0))
+                local putress = Actor(SurvivorStory.putressModel, waiting and x + 150 or x - 330,
+                    waiting and y + 175 or y - 120, 0.95, Player(0))
+                Yaw(anya, Atan2(300, 520)); Yaw(putress, waiting and Atan2(-235, -580) or Atan2(380, 520))
+                Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
+                -- Scene-only props: the stage keeps its own landmarks once combat begins.
+                if index == 2 then
+                    Actor([[Doodads\Dungeon\Rocks\Cave_FieryCrator\Cave_FieryCrator.mdl]], x + 360, y + 330, 0.4)
+                    Actor([[Doodads\Ruins\Rocks\CliffRubble_Single\CliffRubble_Single0.mdl]], x - 260, y + 300, 0.6)
+                elseif index == 3 then
+                    local frost = Actor([[Doodads\Cityscape\Props\CityGrave\CityGrave0.mdl]], x + 320, y + 320, 0.6)
+                    BlzSetSpecialEffectColor(frost, 170, 200, 230)
+                elseif index == 4 then
+                    for i = 1, 3 do
+                        local patrol = Actor([[Units\Undead\Skeleton\Skeleton.mdl]], x + 300 + i * 70, y + 420, 0.8)
+                        Yaw(patrol, -math.pi / 2)
+                    end
+                else
+                    Actor(SurvivorStory.transportModel, x + 300, y + 120, 0.6)
+                end
+                -- Page-one end marks; page two reads these instead of a possibly mid-walk position.
+                local marks = {[anya] = {x = x - 150, y = y + 90},
+                    [putress] = waiting and {x = x + 150, y = y + 175} or {x = x + 110, y = y + 150}}
+                render = function(page, concise)
+                    if page == 1 then
+                        local targets = {Pose(anya, marks[anya].x, marks[anya].y, x + 300, y + 360)}
+                        if not waiting then
+                            targets[2] = Pose(putress, marks[putress].x, marks[putress].y, x + 300, y + 360)
+                        end
+                        Choreograph(targets, 0.66, concise, "steps")
+                    elseif page == 2 then
+                        local speaker = source[2].speaker == "안야" and anya or putress
+                        local from, to = marks[speaker], marks[speaker == anya and putress or anya]
+                        Choreograph({Pose(speaker, from.x, from.y, to.x, to.y,
+                            {gesture = speaker == putress and ANIM_TYPE_SPELL or nil})}, 0.48, concise,
+                            speaker == putress and "inspect" or nil)
+                    else
+                        Choreograph({Pose(anya, x - 30, y + 170, x + 400, y + 420),
+                            Pose(putress, x + 120, y + 175, x + 400, y + 420)}, 0.66, concise, "steps")
+                    end
+                    if page == 1 or page == 3 then
+                        FrameScene(x + (page == 3 and 90 or 0), y + (page == 3 and 200 or 150),
+                            page == 3 and 1300 or 1350, concise and 0 or 0.48)
+                    end
+                end
+            end
+            Conversation("arrival" .. index, SurvivorStage.Get(index).name, pages,
+                arrivalSummaries[index] .. "\n이번 목표: " .. SurvivorStage.Get(index).mission,
+                onComplete, render, hero, "수색 준비")
+        end)
+    end
     function SurvivorStory.ShowEnding(hero, onComplete)
         currentStage = 5
         CreateScene(function()

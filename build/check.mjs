@@ -3061,7 +3061,7 @@ for frame,snapshot in pairs(originals)do
 end
 local writes=nativeWrites;GetLocalPlayer=function()return 12 end
 SurvivorUI.ShowStageIntro(2,function()completed=completed+1 end)
-SurvivorUI.AdvanceNarrative()
+for _=1,3 do SurvivorUI.AdvanceNarrative()end
 assert(nativeWrites==writes and completed==2,'Native cinematic visibility is local to the playable client')
 `);
 
@@ -3701,7 +3701,7 @@ for i=1,3 do
         assert(-button.anchor.y+button.height<=frames.HeroSurvivorCaption.height-0.007,'Dialogue controls stay inside the panel')
     end
     SurvivorUI.SkipConversation()
-    SurvivorUI.ShowStageIntro(2,function()end)
+    SurvivorUI.ShowNarrative('정적 안내','본문',function()end,'안내','수색 준비')
     assert(frames.HeroSurvivorStageText.anchor.target==frames.HeroSurvivorStoryContent)
     assert(frames.ScriptDialogButton700.absolute==FRAMEPOINT_CENTER and not frames.ScriptDialogButton700.anchor)
     SurvivorUI.AdvanceNarrative()
@@ -3747,6 +3747,39 @@ SurvivorUI.SkipConversation();SurvivorStory.Reset();SurvivorStory.SetSummaryMode
 SurvivorStory.ShowBriefing(Done);assert(frames.HSStoryPosition.text:find('1/4'))
 SurvivorUI.SkipConversation()
 assert(hero.visible and #Local(SurvivorStory.Cleanup,'sceneEffects')==0)
+`);
+
+suite('stage arrivals stage both companions in the new place, wait for clicks and lead to preparation', presentationMocks,
+    [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
+SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
+state='STAGE_CLEAR';local completed=0
+local hero=CreateUnit(0,'hero',-7600,7400,0)
+for index=2,5 do
+    SurvivorStory.SetSummaryMode(false)
+    SurvivorUI.ShowStageIntro(index,function()completed=completed+1 end,hero)
+    local effects=Local(SurvivorStory.Cleanup,'sceneEffects');local anya,putress=effects[1],effects[2]
+    assert(not hero.visible and frames.HSStoryPosition.text:find('1/3')and frames.ScriptDialogButton700.text=='다음 대사')
+    local putressX=putress.x
+    for i=1,100 do TickTimers()end
+    assert(completed==index-2,'Arrivals never advance on their own')
+    AdvanceVisualTime(.7)
+    assert(anya.x~=-7600-430 and (index==5)==(putress.x==putressX),'Both walk in, except Putress already waiting in the sewer')
+    SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.6);SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
+    assert(frames.ScriptDialogButton700.text=='수색 준비'and frames.HSStoryPosition.text:find('3/3'))
+    SurvivorUI.AdvanceNarrative()
+    assert(completed==index-1 and hero.visible)
+    for _,effect in ipairs(effects)do assert(effect.destroyed,'An arrival scene effect leaked')end
+    -- A seen arrival can collapse to its one-page summary, which keeps the stage mission.
+    SurvivorStory.SetSummaryMode(true);SurvivorUI.ShowStageIntro(index,function()completed=completed+1 end,hero)
+    assert(frames.HSStoryPosition.text:find('요약')and frames.HeroSurvivorStageText.text:find('mission'))
+    SurvivorUI.AdvanceNarrative();assert(completed==index and hero.visible)
+    completed=completed-1
+end
+local found=0
+for _,chapter in ipairs(SurvivorStory.JournalChapters())do
+    for _,page in ipairs(chapter.pages)do if page:find('퓨트리스')then found=found+1 end end
+end
+assert(found>=4,'Arrival dialogue is kept in the journal of its own stage')
 `);
 
 suite('ending transport preparation and joint departure advance only on explicit dialogue pages', presentationMocks,
@@ -4749,8 +4782,11 @@ for index=2,5 do
     end
     assert(HeroSurvivor.NextStage())
     assert(appliedStage==index and equipmentStage==index and expeditionStage==index and expeditionHero==hero)
-    assert(frames.ScriptDialogButton700.text=='수색 준비')
-    SurvivorUI.AdvanceNarrative();Waiting(index)
+    -- Each later stage opens on its arrival scene in the new place; nothing resumes until preparation.
+    assert(frames.ScriptDialogButton700.text=='다음 대사'and frames.HSStoryPosition.text:find('1/3')and not hero.visible)
+    SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative()
+    assert(frames.ScriptDialogButton700.text=='수색 준비'and RunSession.GetState()=='STAGE_CLEAR')
+    SurvivorUI.AdvanceNarrative();assert(hero.visible);Waiting(index)
     local currentText=frames.HSCombatPreparationTitle.text
     assert(not firstReady()and frames.HSCombatPreparationTitle.text==currentText and RunSession.GetState()=='STAGE_CLEAR',
         'An earlier stage start callback cannot resume a later stage preparation')
@@ -5099,9 +5135,9 @@ assert(loop.volume==8 and loop.volumeWrites==2,'Page actions and cue playback le
 SurvivorUI.SkipConversation()
 assert(completed==1 and hero.visible and loop.volume==18 and loop.volumeWrites==3 and next(owners)==nil,
     'UI completion releases its owner while story ownership holds the duck, then restores the gain once')
-SurvivorUI.ShowStageIntro(2,function()completed=completed+1 end)
-assert(owners.ui and not owners.story and loop.volume==8)
-SurvivorUI.AdvanceNarrative();assert(completed==2 and loop.volume==18 and next(owners)==nil)
+SurvivorUI.ShowStageIntro(2,function()completed=completed+1 end,hero)
+assert(owners.ui and owners.story and loop.volume==8 and not hero.visible,'An arrival is a staged scene with both owners')
+SurvivorUI.SkipConversation();assert(completed==2 and hero.visible and loop.volume==18 and next(owners)==nil)
 SurvivorStage.Cleanup()
 `);
 
