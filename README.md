@@ -66,6 +66,11 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\AnyasLongNight
 
 ## 4. 최근 반영한 사항
 
+### 2026-10-15 무기 툴팁 라벨 금색, 스토리 초상 체력 동기화
+
+- 무기 툴팁 라벨(`피해:` 등) 색을 회색(`|cffb0b0b0`)에서 금색(`|cffffcc00`)으로 바꿨습니다(`SurvivorAugments.lua`의 `StatLines`). `assets/war3map.wts`, 테스트 맵, 편집용 원본의 `war3map.wts`를 갱신했습니다(이전 원본: `dist/backups/*-before-weapon-label-color`).
+- 스토리 대화 중 선택되는 안야·퓨트리스 초상 유닛의 최대·현재 체력을 플레이어 영웅(안야)의 값과 같게 맞춥니다(`SurvivorStory.lua`의 `BeginPortraits`). 회귀 검사에 체력 일치 확인을 추가했습니다. 실제 게임 화면은 확인하지 않았습니다.
+
 ### 2026-10-15 무기 툴팁을 항목별 목록으로 변경
 
 - 무기 툴팁을 `·`로 이어 쓴 문장 대신 한 줄에 하나씩 `라벨: 값` 형식으로 바꿨습니다(`SurvivorAugments.lua`의 `WeaponTooltip`). 첫 줄은 무기 형태, 공격 대상(지상/지상·공중)은 피해 줄 끝에 괄호로 표시합니다. 라벨은 회색(`|cffb0b0b0`)입니다.

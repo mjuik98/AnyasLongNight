@@ -3167,6 +3167,7 @@ suite('last manual dialogue restores the live hero before portrait deletion and 
     [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);selectedUnit=hero
+hero.maxLife,hero.life=620,415
 local closing,events,removedPortraits=false,{},0
 local storyEffects,hiddenEffects,sunkEffects={},{},{}
 local show,select,remove,visible=ShowUnit,SelectUnit,RemoveUnit,BlzFrameSetVisible
@@ -3235,6 +3236,11 @@ end,hero)
 SurvivorUI.AdvanceNarrative()
 for _=1,3 do SurvivorUI.AdvanceNarrative()end
 assert(frames.HSStoryPosition.text:find('4/4')and selectedUnit.id=='hsPA')
+local mirrored=0
+for _,unit in pairs(Local(SurvivorStory.Cleanup,'portraitUnits'))do
+    assert(unit.maxLife==620 and unit.life==415,'Story portraits mirror the player hero HP');mirrored=mirrored+1
+end
+assert(mirrored==2,'Both story portraits exist')
 local retiring=Local(SurvivorStory.Cleanup,'sceneEffects')
 for _,effect in ipairs(retiring)do storyEffects[effect]=true end
 closing=true;SurvivorUI.AdvanceNarrative()

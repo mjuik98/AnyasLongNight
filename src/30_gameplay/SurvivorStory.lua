@@ -274,6 +274,9 @@ do
             assert(unit and GetUnitTypeId(unit) == entry.id, "Missing story portrait unit " .. entry.speaker)
             SetUnitColor(unit, PLAYER_COLOR_RED)
             SetUnitInvulnerable(unit, true)
+            -- The selected portrait shows its HP bar; mirror the player hero's current and maximum HP.
+            BlzSetUnitMaxHP(unit, BlzGetUnitMaxHP(hero))
+            SetWidgetLife(unit, GetWidgetLife(hero))
             SetUnitPathing(unit, false)
             -- Correct any engine spawn adjustment on a blocked editor corner after removing pathing.
             SetUnitX(unit, x); SetUnitY(unit, y)
