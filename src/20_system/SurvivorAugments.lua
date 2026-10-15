@@ -27,9 +27,9 @@ do
         returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "지속시간 동안 왕복하며, 이동 구간마다 1회 타격합니다. 지상 전용."},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
             text = "모든 무기의 피해가 증가합니다.", statName = "피해 증가", amount = 0.10},
-        haste = {kind = "trinket", name = "무기 쿨다운", icon = icons .. "BTNGlove.blp",
+        haste = {kind = "trinket", name = "신속의 인장", icon = icons .. "BTNGlove.blp",
             text = "모든 무기의 쿨다운이 짧아집니다.", statName = "무기 쿨다운 감소", amount = 0.10},
-        velocity = {kind = "trinket", name = "투사체 속도", icon = icons .. "BTNBootsOfSpeed.blp",
+        velocity = {kind = "trinket", name = "가속의 인장", icon = icons .. "BTNBootsOfSpeed.blp",
             text = "투사체가 더 빠르게 날아갑니다. 쿨다운과 타격 간격은 그대로입니다.", statName = "투사체 속도 증가", amount = 0.20},
         magnitude = {kind = "trinket", name = "확대의 인장", icon = icons .. "BTNOrbOfFire.blp",
             text = "모든 무기의 타격 크기와 공격 범위가 커집니다.", statName = "무기 크기 증가", amount = 0.15},
@@ -186,7 +186,7 @@ do
                 level * entry.amount * (entry.unit and 1 or 100), entry.unit or "%")
             description = description .. (entry.unit and "\n영웅에게 적용" or id == "velocity" and "\n이동하는 투사체에 적용" or "\n모든 무기에 적용")
             if id == "velocity" then
-                description = description .. "\n잿불 화살·서리 화살·폭풍 구슬·귀환 칼날\n회전검·장판·낙뢰·운석·즉시 공격에는 적용되지 않음"
+                description = description .. "\n잿불 화살·서리 화살·폭풍 구슬·귀환 칼날\n순찰자의 칼날·잿불 발자취·폭풍의 부름·잿불 낙성\n즉시 공격에는 적용되지 않음"
                 if not SurvivorAugments.HasProjectileWeapon(build) then description = description .. "\n|cffffcc00현재 적용 무기 없음|r" end
             elseif id == "magnitude" then
                 description = description .. "\n투사체·칼날: 충돌 크기 / 장판·낙뢰·베기: 타격 범위\n연쇄 번개: 전이 거리 증가"

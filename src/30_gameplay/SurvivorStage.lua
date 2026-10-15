@@ -4,7 +4,7 @@ SurvivorStage = {}
 do
     local themes = {
         {name = "침묵의 묘역", mission = "무너진 묘실 입구에서 무리를 벗어난 발자국을 찾으세요.", landmark = "무너진 묘실 입구",
-            hint = "묘비 군집 사이의 넓은 길로 돌아가세요. 발자국 세 곳을 따라가면 첫 보스 공격을 더 일찍 알아챌 수 있습니다.\n우클릭 이동 · 자동 공격 · 4분에 보스 등장", tiles = {"Ldro", "Ldrt", "Lgrd", "Lrok"}, blight = true, light = "Lordaeron", hour = 19,
+            hint = "발자국 세 곳을 따라가면 첫 보스 공격을 더 일찍 알아챌 수 있습니다.\n4분에 보스 등장", tiles = {"Ldro", "Ldrt", "Lgrd", "Lrok"}, blight = true, light = "Lordaeron", hour = 19,
             sound = [[Sound\Ambient\WindLoopStereo.wav]],
             color = {180, 220, 185}, warning = {255, 80, 40},
             melee = [[Units\Undead\Ghoul\Ghoul.mdl]], ranged = [[Units\Creeps\SkeletonArcher\SkeletonArcher.mdl]],

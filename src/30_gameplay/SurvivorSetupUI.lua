@@ -83,7 +83,7 @@ do
                 BlzFrameSetText(card.name, (id == selectedId and "|cff80ff80[선택됨] " or "|cffffcc00") .. entry.name .. "|r")
                 local text = entry.text
                 if category == "DIFFICULTY" then
-                    text = string.format("등장 %.0f%% · 생명력 %.0f%% · 공격력 %.0f%%\n공격 속도 %.0f%% · 이동 속도 %.0f%%",
+                    text = string.format("적 출현량 %.0f%% · 생명력 %.0f%% · 공격력 %.0f%%\n공격 속도 %.0f%% · 이동 속도 %.0f%%",
                         entry.spawn * 100, entry.life * 100, entry.damage * 100, entry.attackSpeed * 100, entry.moveSpeed * 100)
                 elseif category == "TRINKET" then
                     -- Universal modifier only; never a single weapon-specific example.

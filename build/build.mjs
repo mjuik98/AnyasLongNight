@@ -8,6 +8,7 @@ import luaparse from 'luaparse';
 import {openMap} from './mpq.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const baseMapPath = path.join(root, 'AnyasLongNight.w3x');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const firstMarker = '-- HeroSurvivor Lua prototype. Import at map script scope before main().';
 const lastMarker = '-- ===== END src/00_bootstrap/HeroSurvivor.lua =====';
@@ -609,7 +610,7 @@ export function publishTransaction(entries, {io = fs, stamp = new Date().toISOSt
 
 function main() {
     const args = process.argv.slice(2);
-    let check = false, refresh = false, portraits = false, compact = false, removeGold = false, basePath = path.join(root, 'HeroSurvivor.w3x');
+    let check = false, refresh = false, portraits = false, compact = false, removeGold = false, basePath = baseMapPath;
     let input = path.join(root, 'dist/HeroSurvivor-playtest.w3x'), output = input;
     let profile = 'playtest', outputExplicit = false, inputExplicit = false;
     for (let i = 0; i < args.length; i++) {

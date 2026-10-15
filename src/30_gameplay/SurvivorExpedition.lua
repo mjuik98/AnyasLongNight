@@ -3,13 +3,13 @@ SurvivorExpedition = {}
 do
     local chapters = {
         {name = "묘비 뒤의 발자국", action = "발자국 세 곳을 차례로 통과", mode = "trail", count = 3,
-            beats = {"묘비 앞에서 보폭이 짧아졌군.", "여기서 무리와 갈라졌군.", "묘비를 밟지 않고 돌아갔어. 어느 쪽에서 다가올지 짐작할 수 있겠군."},
-            advantage = "시체 수집자의 첫 폭발 예고 +1초", insight = "발자국이 향한 쪽이군. 첫 공격을 피할 틈이 있겠어.",
+            beats = {"묘비 앞에서 보폭이 짧아졌어.", "여기서 무리와 갈라졌네.", "묘비를 밟지 않고 돌아갔어. 어느 쪽에서 다가올지 짐작할 수 있겠어."},
+            advantage = "시체 수집자의 첫 폭발 예고 +1초", insight = "발자국이 향한 쪽이야. 첫 공격을 피할 틈이 있겠어.",
             finding = "발자국은 쓰러진 묘비를 돌아갔지만, 무리는 그 위를 밟고 지나갔다.",
-            reply = "묘비가 길을 막아서 돌아간 걸까? 아니면 밟고 싶지 않았던 걸까? 아직은 알 수 없어.",
+            reply = "길이 막혀서 돌아갔을 수도 있고, 묘비를 밟고 싶지 않았을 수도 있어. 아직은 알 수 없어.",
             relic = "이름 없는 묘의 봉인", temptation = "묘비 아래에서 쇠붙이가 울린다. 봉인을 건드리면 묘역이 깨어날 것이다."},
         {name = "재 속의 우회로", action = "불길 바깥의 표식 네 곳을 통과", mode = "route", count = 4,
-            beats = {"재가 얇군. 이쪽은 식었어.", "가까운 길에는 아직 열기가 남아 있군.", "돌아가도 발자국은 이어져.", "돌진이 오면 여기로 피하면 되겠어."},
+            beats = {"재가 얇네. 이쪽은 식었어.", "가까운 길에는 아직 열기가 남아 있어.", "돌아가도 발자국은 이어져.", "돌진이 오면 여기로 피하면 되겠어."},
             advantage = "도살자의 첫 돌진 잔불 제거", insight = "식은 통로를 봐 뒀어. 첫 돌진이 남기는 불길은 이곳까지 닿지 않아.",
             finding = "재가 얇게 쌓인 가장자리로 발자국이 이어졌다. 불길 쪽으로 되돌아간 흔적은 없었다.",
             reply = "되돌아간 흔적은 없어. 나도 이 길을 따라가겠어.",
@@ -21,13 +21,13 @@ do
             reply = "몸에 익은 동작이 남았을 수도 있겠지. 그래도 무슨 일이 있었는지는 직접 듣겠어.",
             relic = "서리에 잠긴 성물", temptation = "얼음 아래 성물이 희미하게 떨린다. 얼음을 깨면 수색대가 몰려올 것이다."},
         {name = "수색대의 전령", action = "이동하는 전령을 추격해 처치", mode = "courier", count = 3,
-            beats = {"지원을 요청하러 가던 전령이었군. 이 명령서는 더는 전해지지 않겠어."},
+            beats = {"지원을 요청하러 가던 전령이었어. 이 명령서는 더는 전해지지 않겠어."},
             advantage = "추적대장의 첫 지원병 호출 차단", insight = "명령서는 내 손에 있어. 첫 지원 요청은 전해지지 않을 거야.",
             finding = "전령의 명령서에 ‘이탈자’와 ‘회수’라는 말이 남아 있었다. 이름은 없었다. 지원 요청은 전달되지 않았다.",
             reply = "저들에게는 회수할 물건일 뿐이겠지. 나는 그가 누구인지 직접 묻겠어.",
             relic = "수색대의 압수품", temptation = "봉인된 압수품에 감시의 마력이 남아 있다. 손을 대면 경보가 울릴 것이다."},
         {name = "끊어진 사슬", action = "봉인 세 곳에서 각각 누적 2초 해제", mode = "seals", count = 3, seconds = 2,
-            beats = {"첫 고리는 풀렸어. 사슬은 아직 팽팽하군.", "이 고리도 같은 곳으로 이어져.", "가운데 사슬이 느슨해졌어. 감시자가 사슬을 펼치면 저 틈으로 가자."},
+            beats = {"첫 고리는 풀렸어. 사슬은 아직 팽팽해.", "이 고리도 같은 곳으로 이어져.", "가운데 사슬이 느슨해졌어. 감시자가 사슬을 펼치면 저 틈으로 가자."},
             advantage = "감시자의 첫 사슬 봉쇄에서 중앙 줄 제거", insight = "고리를 풀어 뒀어. 첫 사슬 봉쇄는 가운데로 빠져나가면 돼.",
             finding = "풀린 사슬의 끝이 바닥에 놓여 있었다. 그 너머에는 한 사람의 발자국만 이어졌다.",
             reply = "무리에서 벗어난 이유도 직접 듣겠어. 이제 거의 다 왔어.",
@@ -76,7 +76,7 @@ do
         local chapter = chapters[stage]
         local reward = stage <= 2 and "희귀 이상" or "영웅 등급"
         return {name = chapter.relic, remaining = math.ceil(180 - age), seconds = 30,
-            text = chapter.relic .. "\n30초 생존: " .. reward .. " 장비 택 1\n적 피해 +25% · 출현량 +35%\n장소를 벗어나도 도전은 계속됩니다."}
+            text = chapter.relic .. "\n30초 생존: " .. reward .. " 장비 택 1\n적 피해 +25% · 출현량 +35%\n장소를 벗어나도 도전은 유지됩니다."}
     end
     function SurvivorExpedition.AcceptRisk()
         if not SurvivorExpedition.RiskOffer() then return false end
@@ -231,9 +231,9 @@ do
         end
         if risk and risk.state == "offered" then
             lines[#lines + 1] = "|cffeb82f5위험: " .. chapter.relic .. "|r · " .. Locate(risk)
-            lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, 180 - (RunSession.GetElapsed() - started))), stage <= 2 and "희귀 이상" or "영웅")
+            lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, 180 - (RunSession.GetElapsed() - started))), stage <= 2 and "희귀 이상" or "영웅 등급")
             lines[#lines + 1] = "수락 후 30초: 적 피해 +25% · 출현량 +35%"
-            lines[#lines + 1] = "장소를 벗어나도 도전은 계속됩니다."
+            lines[#lines + 1] = "장소를 벗어나도 도전은 유지됩니다."
         elseif SurvivorExpedition.RiskActive() then
             lines[#lines + 1] = string.format("|cffeb82f5봉인 경보 %d초|r · 적 피해 +25%% / 출현량 +35%%", math.ceil(math.max(0, risk.untilTime - RunSession.GetElapsed())))
         end

@@ -8,7 +8,7 @@ import fengari from 'fengari';
 import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo, mapInfo,
     parseUnits, serializeUnits, installPortraitUnits, portraitUnits, validatePortraitObjects, publishTransaction, editorBundle,
     parseObjectData, serializeObjectData, removeGoldObjectData, removeGoldStrings, removeGoldMisc,
-    prepareGoldRemoval, validateGoldRemoval, root} from './build.mjs';
+    prepareGoldRemoval, validateGoldRemoval, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = fengari;
 function suite(name, before, files, after) {
@@ -1450,7 +1450,7 @@ assert(reward.x==600 and reward.y==800 and SurvivorEquipment.PendingRewardCount(
 now=1000;SurvivorEquipment.Step(now);assert(not reward.removed)
 -- Even with auto-pick OFF, explicitly chosen rewards take the available slot first.
 for i=1,3 do SurvivorEquipment.CyclePickup() end
-assert(SurvivorEquipment.PickupMode()=="OFF")
+assert(SurvivorEquipment.PickupMode()=="끔")
 hero.bag[1]=nil
 ordinary=SurvivorEquipment.DropAt(600,800,CatalogIndex("Hs01"))
 SurvivorEquipment.PrepareRest()
@@ -2602,9 +2602,6 @@ assert(frames.ScriptDialogButton700.text=='수색 준비','The final briefing ac
 SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation()
 assert(completed==1 and not SurvivorUI.IsNarrativeVisible(),"Completion is consumed once")
 local hero=CreateUnit(0,"hero",-7600,7400,0)
-local unrecorded=SurvivorStory.PreparationNote(1)
-assert(unrecorded==SurvivorStory.PreparationNote(2)
-    and unrecorded~=SurvivorStory.stages[1].clue,'Preparation cannot reveal an unrecorded next-stage clue')
 for stage=1,4 do
     finding=stage%2==0
     SurvivorStory.ShowInterlude(stage,hero,function()completed=completed+1 end)
@@ -2615,8 +2612,6 @@ for stage=1,4 do
     assert(frames.ScriptDialogButton700.text=='보상 선택')
     SurvivorUI.SkipConversation();SurvivorUI.SkipConversation()
     assert(hero.visible==true)
-    assert(SurvivorStory.PreparationNote(stage+1)==SurvivorStory.stages[stage].clue,
-        'The compact preparation note preserves only the preceding confirmed clue')
     for _,e in ipairs(effects)do assert(e.destroyed,"Story actor leaked")end
 end
 assert(completed==5)
@@ -2679,9 +2674,6 @@ for index=1,4 do
             'The last line names the next destination even when optional evidence was recovered')
         assert(frames.HSStoryPosition.text:find('4/4'))
         SurvivorUI.AdvanceNarrative()
-        local note=SurvivorStory.PreparationNote(index+1)
-        assert(note==SurvivorStory.stages[index].clue,
-            'The short preparation panel retains confirmed progress without overflowing its layout')
         SurvivorStory.SetSummaryMode(true)
         SurvivorStory.ShowInterlude(index,hero,function()completed=completed+1 end)
         assert(frames.HSStoryPosition.text:find('요약') and frames.HSStoryPosition.text:find('1/1'))
@@ -3326,7 +3318,7 @@ SurvivorEquipment={
     UIRevision=function()return revision end,
     PendingRewardCount=function()pendingReads=pendingReads+1;return pending end,
     PickupMode=function()return mode end,
-    CyclePickup=function()mode='OFF';revision=revision+1 end,
+    CyclePickup=function()mode='끔';revision=revision+1 end,
     CleanupFamilies=function()return {'화염','번개','얼음','칼날','공용'}end,
     BagEntries=function()bagReads=bagReads+1;return {{item='item',id='Hs15',locked=locked}},1,6 end,
     BagCount=function()error('A shared bag snapshot already contains its count and capacity')end,
@@ -3348,7 +3340,7 @@ assert(lootWrites==0 and bagReads==1 and pendingReads==reads and expeditionUpdat
 ClickFrame(frames.ScriptDialogButton821)
 assert(frames.ScriptDialogButton821.text:find('잠금') and bagReads==2,'Lock changes update the cached row')
 ChangePending(2);SurvivorLootUI.Refresh();assert(frames.HSPendingRewards.text:find('2개') and bagReads==3)
-ClickFrame(frames.ScriptDialogButton810);assert(frames.ScriptDialogButton810.text=='줍기: OFF')
+ClickFrame(frames.ScriptDialogButton810);assert(frames.ScriptDialogButton810.text=='줍기: 끔')
 narrative=true;SurvivorLootUI.Refresh();assert(not frames.HSLootRoot.visible)
 narrative=false;SurvivorLootUI.Refresh();assert(frames.HSLootRoot.visible and SurvivorLootUI.IsExpanded())
 SurvivorLootUI.SetInventoryVisible(false)
@@ -3558,9 +3550,9 @@ function SurvivorUI.ShowStageIntro(index,onReady,hero)
     return introduction(index,onReady,hero)
 end
 local prepare=SurvivorUI.ShowCombatPreparation
-function SurvivorUI.ShowCombatPreparation(index,details,onReady,canStart)
+function SurvivorUI.ShowCombatPreparation(index,onReady,canStart)
     latestReady,latestCanStart=onReady,canStart
-    return prepare(index,details,onReady,canStart)
+    return prepare(index,onReady,canStart)
 end
 local function CountdownText()
     return frames.HSCombatCountdown.text:gsub('|c%x%x%x%x%x%x%x%x',''):gsub('|r','')
@@ -3636,9 +3628,6 @@ for page=1,4 do
     SurvivorUI.AdvanceNarrative()
 end
 Waiting(1)
-assert(frames.HSCombatPreparationLoadout.text:find(SurvivorConfig.difficulties.normal.name,1,true)
-    and frames.HSCombatPreparationLoadout.text:find(SurvivorAugments.Get('firebolt').name,1,true)
-    and frames.HSCombatPreparationLoadout.text:find(SurvivorAugments.Get('power').name,1,true))
 local firstReady,firstCanStart=latestReady,latestCanStart
 StartCountdown()
 assert(RunSession.IsRunning()and not halted and not expeditionPaused and resumeCount==1)
@@ -3668,7 +3657,6 @@ for index=2,5 do
     local currentText=frames.HSCombatPreparationTitle.text
     assert(not firstReady()and frames.HSCombatPreparationTitle.text==currentText and RunSession.GetState()=='STAGE_CLEAR',
         'An earlier stage start callback cannot resume a later stage preparation')
-    assert(frames.HSCombatPreparationLoadout.text:find('Lv.1',1,true))
     StartCountdown();assert(Local(HeroSurvivor.BeginRun,'stage')==index and selectedUnit==hero)
 end
 assert(RunSession.Finish('test')and hero.removed and not halted and periodic==nil)
@@ -3736,7 +3724,7 @@ local function Ready()completed=completed+1 end
 local function CanStart()return allowed end
 assert(not SurvivorUI.BeginPreparedCombat()and not SurvivorUI.InterruptCombatPreparation())
 SurvivorUI.ShowNarrative('background','premise',Ready)
-SurvivorUI.ShowCombatPreparation(2,{record='recorded clue',loadout='difficulty / weapon / trinket'},Ready,CanStart)
+SurvivorUI.ShowCombatPreparation(2,Ready,CanStart)
 local root,start,countdown=frames.HSCombatPreparation,frames.HSCombatPreparationStart,frames.HSCombatCountdown
 assert(root.visible and start.visible and not countdown.visible and SurvivorUI.IsNarrativeVisible())
 assert(not frames.HeroSurvivorStageIntro.visible and not frames.HeroSurvivorShade.visible
@@ -3747,10 +3735,9 @@ assert(root.absolute==FRAMEPOINT_TOPRIGHT and root.x-root.width>.4 and root.x<.8
     and root.y-root.height>.16 and root.y<=.6,'The preparation panel leaves the central hero and lower console clear')
 assert(start.kind=='GLUETEXTBUTTON'and start~=frames.ScriptDialogButton700 and start~=frames.ScriptDialogButton701
     and start.anchor.target==root and start.anchor.y-start.height>=-root.height)
-assert(frames.HSCombatPreparationRecord.text:find('recorded clue',1,true)
-    and frames.HSCombatPreparationLoadout.text:find('difficulty / weapon / trinket',1,true)
-    and frames.HSCombatPreparationFooter.text:find('3초',1,true))
-for _,name in ipairs({'Title','Mission','Record','Hint','Loadout','Footer'})do
+assert(frames.HSCombatPreparationFooter.text==''and not frames.HSCombatPreparationRecord
+    and not frames.HSCombatPreparationLoadout,'Preparation omits the recap, loadout and pause explanation')
+for _,name in ipairs({'Title','Mission','Hint','Footer'})do
     local frame=frames['HSCombatPreparation'..name]
     assert(frame.parent==root and not frame.enabled and frame.width<root.width
         and frame.anchor.y-frame.height>=-root.height)
@@ -3776,10 +3763,10 @@ allowed=false;AdvanceVisualTime(1)
 assert(second.destroyed and completed==0 and root.visible and start.visible)
 allowed=true;AdvanceVisualTime(4);assert(completed==0 and LiveTimers(1)==0)
 assert(SurvivorUI.BeginPreparedCombat());local replaced=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
-SurvivorUI.ShowCombatPreparation(3,{},function()
+SurvivorUI.ShowCombatPreparation(3,function()
     assert(not SurvivorUI.IsCombatPreparationVisible(),'Detach the completed gate before its gameplay callback')
     completed=completed+10
-    SurvivorUI.ShowCombatPreparation(4,{},Ready,CanStart)
+    SurvivorUI.ShowCombatPreparation(4,Ready,CanStart)
 end,CanStart)
 assert(replaced.destroyed);replaced.callback();assert(completed==0 and root.visible)
 ClickFrame(start);local third=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer');AdvanceVisualTime(3)
@@ -3790,7 +3777,7 @@ third.callback();assert(fourth.running and LiveTimers(1)==1 and completed==10,
 SurvivorUI.HidePanel();fourth.callback()
 assert(fourth.destroyed and completed==10 and not SurvivorUI.IsNarrativeVisible()
     and not root.visible and not start.visible and not countdown.visible and LiveTimers(1)==0)
-SurvivorUI.ShowCombatPreparation(5,{},Ready,CanStart);ClickFrame(start)
+SurvivorUI.ShowCombatPreparation(5,Ready,CanStart);ClickFrame(start)
 local fifth=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
 SurvivorUI.ShowStageIntro(2,Ready);fifth.callback()
 assert(fifth.destroyed and not SurvivorUI.IsCombatPreparationVisible()and frames.HeroSurvivorStageIntro.visible)
@@ -3811,12 +3798,12 @@ local function AssertCleared(timer)
         and not frames.HSCombatPreparationStart.visible and not frames.HSCombatCountdown.visible)
     timer.callback();assert(completed==0,'Failed preparation callbacks stay inert after cleanup')
 end
-SurvivorUI.ShowCombatPreparation(1,{},function()error('injected prepared gameplay failure')end,function()return true end)
+SurvivorUI.ShowCombatPreparation(1,function()error('injected prepared gameplay failure')end,function()return true end)
 ClickFrame(frames.HSCombatPreparationStart);local timer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
 local ok,message=pcall(AdvanceVisualTime,3)
 assert(not ok and message:find('injected prepared gameplay failure')and failures==1);AssertCleared(timer)
 state='STAGE_CLEAR';local checking=false
-SurvivorUI.ShowCombatPreparation(1,{},Ready,function()
+SurvivorUI.ShowCombatPreparation(1,Ready,function()
     if checking then error('injected preparation guard failure')end;return true
 end)
 ClickFrame(frames.HSCombatPreparationStart);timer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
@@ -3827,13 +3814,13 @@ function TimerStart(handle,interval,...)
     if interval==1 then error('injected countdown start failure')end
     return timerStart(handle,interval,...)
 end
-state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,{},Ready,function()return true end)
+state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,Ready,function()return true end)
 ok,message=pcall(ClickFrame,frames.HSCombatPreparationStart);TimerStart=timerStart
 assert(not ok and message:find('injected countdown start failure')and failures==3)
 assert(timers[#timers].destroyed and not SurvivorUI.IsCombatPreparationVisible()and LiveTimers(1)==0 and completed==0)
 local pause,destroy=PauseTimer,DestroyTimer
 for _,fault in ipairs({'pause','destroy'})do
-    state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,{},Ready,function()return true end)
+    state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,Ready,function()return true end)
     ClickFrame(frames.HSCombatPreparationStart);timer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
     local pauseCalls,destroyCalls=0,0
     function PauseTimer(handle)
@@ -3852,7 +3839,7 @@ for _,fault in ipairs({'pause','destroy'})do
     timer.callback();assert(completed==0 and LiveTimers(1)==0)
     PauseTimer,DestroyTimer=pause,destroy;destroy(timer)
 end
-state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,{},Ready,function()return true end)
+state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,Ready,function()return true end)
 ClickFrame(frames.HSCombatPreparationStart);AdvanceVisualTime(3)
 assert(completed==1 and failures==3 and not SurvivorUI.IsCombatPreparationVisible()and #unsafeFrameCalls==0,
     'A fresh preparation completes once after handled countdown failures')
@@ -4230,7 +4217,7 @@ assert(counters['stage.calls']==3)
 SurvivorStage.Cleanup();SurvivorMetrics.Enable(false)
 `);
 
-const originalPathMap = openMap(path.join(root, 'HeroSurvivor.w3x'));
+const originalPathMap = openMap(baseMapPath);
 const originalPathTerrain = terrainInfo(originalPathMap.read('war3map.w3e'));
 const originalPathInfoBytes = originalPathMap.read('war3map.w3i'), originalPathInfo = mapInfo(originalPathInfoBytes);
 const originalMargins = Array.from({length: 4}, (_,i) => originalPathInfoBytes.readInt32LE(originalPathInfo.cameraOffset + 32 + i * 4));
@@ -4581,7 +4568,7 @@ console.log(`PASS Lua syntax (${count} sources), repeated bundle replacement, na
 }
 
 // Prepare the exact resized archive in memory: these checks never publish a map.
-const baseBytes = fs.readFileSync(path.join(root, 'HeroSurvivor.w3x'));
+const baseBytes = fs.readFileSync(baseMapPath);
 const baseMap = openMap(baseBytes), baseTerrain = terrainInfo(baseMap.read('war3map.w3e'));
 const baseMetadata = mapInfo(baseMap.read('war3map.w3i'));
 // Build player records independently of mapInfo: v39 inserts RaceHud before Flags.
@@ -4679,7 +4666,7 @@ assert(protectedEntry, 'Map has an ability/unit string for collision verificatio
 const conflictingStrings = Buffer.from(strings.replace(protectedEntry[0], protectedEntry[1] + 'Incorrect preserved unit name' + protectedEntry[3]));
 assert.throws(() => refreshBase(original, baseMap.replace(new Map([['war3map.wts', conflictingStrings]])), bundle),
     /string conflicts.*TRIGSTR_7/, 'New metadata strings must never silently corrupt preserved gameplay objects');
-assert.deepEqual(fs.readFileSync(path.join(root, 'HeroSurvivor.w3x')), baseBytes, 'Dry verification changed original');
+assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Dry verification changed original');
 assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original, 'Dry verification published output');
 console.log(`PASS resized-base refresh (${baseTerrain.width - 1}x${baseTerrain.height - 1} cells), native geography, undead rules, editor source, ${refreshed.preserved} gameplay entries and palette/pathing guards`);
 
@@ -4767,7 +4754,7 @@ const wrongField = wrongRow.fields.find(field => field.id === 'umdl');
 delete wrongRow.raw; delete wrongField.raw; wrongField.value = 'UnexpectedReplacement.mdl';
 assert.throws(() => installPortraitUnits(serializeUnits(wrongAnya), true, {migrateLegacyAnya: true}), /conflicting fields/,
     'Explicit installation only permits the known BansheeRanger-to-HeroAnya migration');
-assert.deepEqual(fs.readFileSync(path.join(root, 'HeroSurvivor.w3x')), baseBytes, 'Portrait preparation changed original');
+assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Portrait preparation changed original');
 assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original, 'Portrait preparation published a map');
 for (const [name, bytes] of unitAssetSnapshots) assert.deepEqual(fs.readFileSync(path.join(root, 'assets', name)), bytes,
     'Portrait dry preparation must not write its asset source');
@@ -4920,7 +4907,7 @@ if (encryptedFixtureIndex >= 0) {
         'Unsupported encrypted CRC layouts must not be published');
 }
 assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original);
-assert.deepEqual(fs.readFileSync(path.join(root, 'HeroSurvivor.w3x')), baseBytes);
+assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes);
 console.log('PASS MPQ no-op patching, compaction, prefix/locale/attributes, unnamed live blocks and encrypted FIX_KEY safety');
 {
     let inflates = 0;

@@ -14,7 +14,7 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\HeroSurvivor
 
 | 경로 | 역할 |
 | --- | --- |
-| `HeroSurvivor.w3x` | 사용자가 준비한 편집용 기준 맵 |
+| `AnyasLongNight.w3x` | 사용자가 준비한 편집용 기준 맵 (2026-10-15에 `HeroSurvivor.w3x`에서 이름 변경, 경로는 `build/build.mjs`의 `baseMapPath`) |
 | `dist/HeroSurvivor-playtest.w3x` | 현재 정식 테스트 맵 |
 | `dist/HeroSurvivor-release.w3x` | 자동 진단 기능을 끈 배포용 맵 |
 | `dist/HeroSurvivor-development.w3x` | 상세 이름 캐시·진단 기능을 켠 개발용 맵 |
@@ -591,6 +591,15 @@ Warcraft III/World Editor는 실행하지 않았습니다. 새 대사와 툴팁�
 | `dist/HeroSurvivor-playtest.w3x` | 641,101바이트 | `947186DC5A736D6D1DD2F8ED699D07EC7C1EA34E6AE9CD6F5F4995D0B0F02CA4` |
 | `dist/HeroSurvivor-release.w3x` | 641,070바이트 | `93FFE6C9301E9B6DB5D9962BA3B903B795AB2F1551DB76936E10AF24DC24B55A` |
 | `dist/HeroSurvivor-development.w3x` | 641,164바이트 | `84340E7DC4370E34E9AB34C6976A68552B8477639EFC951CA50ED4F5CAA9DE6B` |
+
+### 2026-10-15 표기·대사 정리와 수색 준비 패널 간소화
+
+- 난이도 카드의 `등장`을 `적 출현량`으로 바꿨습니다. `spawn`은 생성 속도 배율이고 동시 적 상한은 난이도와 무관하므로 ‘적의 수’ 대신 봉인 조사와 같은 ‘출현량’을 씁니다.
+- 스테이지 이름은 `SurvivorStage`만 사용합니다. 시작 알림도 여기서 읽고, 중복이던 `SurvivorConfig.encounters`의 `name` 필드를 제거했습니다.
+- 용어 통일: 보상 등급 ‘영웅 등급’, 줍기 모드 `OFF` → `끔`, 장신구 이름 `무기 쿨다운`/`투사체 속도` → `신속의 인장`/`가속의 인장`, 투사체 속도 미적용 목록을 실제 무기 이름으로 표기, ‘도전은 유지됩니다’로 통일. 맵 오브젝트(`war3map.wts`)의 기본 이름은 바꾸지 않았으며 Lua가 실행 중 덮어씁니다.
+- 대사: 퓨트리스의 ‘~군/~네’와 구분되도록 안야의 ‘~군’ 어미를 ‘~어/~네/~야’로 바꿨습니다. 1스테이지 수색 답변의 ‘~걸까? 아니면 ~걸까?’ 반복을 고치고, 최종 결과 제목을 엔딩과 같은 ‘이름 모를 언데드’로 맞췄습니다.
+- 수색 준비 패널: 직전 화면과 겹치는 수색 기록(이전 단서)·난이도/무기/장신구 요약·조작 안내·하단 정지 설명을 제거하고 **구역 제목·이번 목표·구역 안내**만 남겼습니다. 패널 높이는 0.40 → 0.30입니다. 하단 칸은 가방이 열려 있을 때의 경고에만 사용하며, 시작 안내는 3·2·1 카운트다운이 대신합니다. 1구역 안내는 `발자국 세 곳을 따라가면…` + `4분에 보스 등장`으로 줄였습니다. 이전 단서는 수색 기록 일지에서 확인합니다. 사용처가 없어진 `SurvivorStory.PreparationNote`와 관련 검사를 제거했습니다.
+- 기준 맵 이름 변경: 편집용 기준 맵을 `AnyasLongNight.w3x`로 바꾼 것에 맞춰 `build/build.mjs`에 `baseMapPath`를 두고 `--refresh-base` 기본값과 `build/check.mjs`의 맵 보존 검사가 이를 사용하도록 했습니다. 전체 회귀 검사 136개가 통과했습니다.
 
 ## 5. 남은 확인 사항
 
