@@ -1345,6 +1345,26 @@ now=5030;SurvivorExpedition.Step(.02,now)
 assert(#notifications==count and not SurvivorExpedition.Status(true):find('선택 수색'),
     'Risk offer terms can be shown alone during dialogue without a duplicate start popup')
 SurvivorExpedition.Reset()
+
+-- Killing the courier speaks its own line before the reply; the scene reply never repeats the subtitle.
+local speech={};SurvivorUI.Say=function(speaker,text)speech[#speech+1]=text end
+Begin(4,6000);hero.x,hero.y=0,0;now=6020;SurvivorExpedition.Step(.02,now)
+objective=Local(SurvivorExpedition.Step,'objective')
+assert(objective.courier and SurvivorExpedition.GetSceneReply(4)==nil,'No scene reply before the search is complete')
+SurvivorExpedition.OnKill(objective.courier,false)
+assert(#speech==2 and speech[1]:find('지원 요청') and speech[2]==SurvivorExpedition.GetReply(4),'Courier line precedes the reply')
+assert(SurvivorExpedition.GetSceneReply(4) and SurvivorExpedition.GetSceneReply(4)~=SurvivorExpedition.GetReply(4))
+SurvivorExpedition.Reset()
+for index=1,5 do
+    speech={};Begin(index,7000+index*1000);hero.x,hero.y=0,0
+    local opens=Local(SurvivorExpedition.RiskOffer,'RiskWindow')()
+    now=7000+index*1000+opens;SurvivorExpedition.Step(.02,now)
+    risk=Local(SurvivorExpedition.Step,'risk');hero.x,hero.y=risk.x,risk.y
+    assert(SurvivorExpedition.AcceptRisk() and speech[#speech] and speech[#speech]~='','Every stage has its own risk line')
+    if index>1 then assert(speech[#speech]~=previousRiskLine)end
+    previousRiskLine=speech[#speech]
+    SurvivorExpedition.Reset()
+end
 for index,window in ipairs({{30,90},{90,150},{95,180},{95,180},{95,180}})do
     Begin(index,7000);hero.x,hero.y=0,0
     now=7000+window[1]-.02;SurvivorExpedition.Step(.02,now)
@@ -3531,7 +3551,7 @@ suite('each clue branch and remembered summary retains current progress and the 
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7600,7400,0)
 local destinations={'불타는 스트라솔름','스트라솔름 납골당','로데론 수도','로데론 수도 하수구'}
-local progress={'무리와 갈라진 발자국','담장 가장자리로 발자국','납골당의 문은','스컬지 수색대도 같은 방향'}
+local progress={'무리와 갈라진 발자국','담장 가장자리로 발자국','납골당의 문은','스컬지 수색대도 같은 방향으로 그를'}
 local completed=0
 for index=1,4 do
     local defaultObservation
@@ -3754,6 +3774,19 @@ assert(frames.HeroSurvivorStageText.text:find('지하 묘실') and completed==0)
 SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation()
 assert(completed==1 and hero.visible)
 for _,effect in ipairs(effects)do assert(effect.destroyed,'An ending scene effect leaked')end
+-- Page three is Anya's line, so Anya (not Putress) moves; the sewer seal search changes page four.
+for _,found in ipairs({false,true})do
+    finding=found;SurvivorStory.ShowEnding(hero,function()completed=completed+1 end)
+    effects=Local(SurvivorStory.Cleanup,'sceneEffects');anya,putress=effects[1],effects[2]
+    SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
+    local putressX,putressY,anyaX=putress.x,putress.y,anya.x
+    SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
+    assert(frames.HeroSurvivorStageText.text:find('물어보자')and putress.x==putressX and putress.y==putressY and anya.x~=anyaX)
+    SurvivorUI.AdvanceNarrative()
+    assert((frames.HeroSurvivorStageText.text:find('사슬을 풀어')~=nil)==found,'Only a completed seal search changes the cart line')
+    SurvivorUI.SkipConversation()
+end
+finding=nil
 `);
 
 suite('actor actions ease between manual pages, use Walk and Spell then Stand, and remain bounded with reusable quiet cues',

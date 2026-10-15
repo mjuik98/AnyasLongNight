@@ -15,7 +15,7 @@ SurvivorStory = {
         {clue = "스컬지 무리와 다른 방향으로 이어진 발자국.",
             nextGoal = "불타는 스트라솔름 시가지로 이어지는 발자국을 따라간다."},
         {clue = "불붙은 큰길을 피해 담장 가장자리로 돌아간 흔적.",
-            nextGoal = "스트라솔름 납골당에서 냉기의 출처와 이어지는 흔적을 확인한다."},
+            nextGoal = "발자국이 이어진 스트라솔름 납골당을 살핀다."},
         {clue = "부서지지 않은 문과 안쪽에서 풀린 빗장. 발자국은 서쪽으로 향했다.",
             nextGoal = "로데론 수도 성문을 넘어 흔적의 주인을 계속 추적한다."},
         {clue = "같은 방향으로 이동한 스컬지 수색대의 흔적. 대상의 발자국은 배수로로 빠졌다.",
@@ -509,7 +509,7 @@ do
             Page("퓨트리스", "불붙은 큰길을 두고 담장 가장자리로 꺾였군. 불길을 피해 갔어."),
             Page("안야", "돌아가면 한참 멀 텐데. 급하게 도망친 건 아닌가 봐."),
             Page("퓨트리스", "불이 두려운 걸지도 모르지. 이 도시가 불타던 날을 기억한다면 말이야."),
-            Page("안야", "계속 따라가 보자. 저 앞이 스트라솔름 납골당이야."),
+            Page("안야", "발자국은 저 앞 스트라솔름 납골당으로 들어갔어."),
         },
         {
             Page("퓨트리스", "문은 부수지 않았네. 안쪽에서 빗장을 풀고 나갔어."),
@@ -518,14 +518,14 @@ do
             Page("안야", "발자국은 서쪽, 로데론 수도로 가. 어디로 가는지 아는 거야."),
         },
         {
-            Page("퓨트리스", "밤새 서쪽으로 걸어 여기까지 왔군. 스컬지 수색대도 성문을 지나갔어. 우리와 같은 쪽이야."),
+            Page("퓨트리스", "밤새 서쪽으로 걸어 여기까지 왔군. 검문소까지 세운 걸 보면, 스컬지 수색대도 같은 자를 쫓고 있어."),
             Page("안야", "서둘러야겠어. 저놈들이 먼저 찾게 둘 순 없어."),
-            Page("퓨트리스", "발자국은 성문이 아니라 배수로로 빠졌네. 성 안 길을 아는 자야. 돌아갈 길과 수레는 내가 맡지."),
+            Page("퓨트리스", "발자국은 성문이 아니라 배수로로 빠졌네. 성 안 길을 아는 자야. 제 발로 따라오지 않을 수도 있으니, 수레는 내가 마련하지."),
             Page("안야", "좋아. 로데론 수도 하수구의 사슬 관문에서 만나. 내가 먼저 가 볼게."),
         },
     }
     local optionalObservations = {
-        "자네가 본 발자국 말이야. 쓰러진 묘비를 돌아갔군. 나머지는 그대로 밟고 갔고.",
+        "자네가 본 발자국 말이야. 쓰러진 묘비를 돌아갔군. 다른 놈들은 그 위를 그냥 밟고 갔고.",
         "자네가 찾아낸 길로 계속 갔군. 재가 식은 담장 밑만 밟고 지나갔어.",
         "빗장에 손가락 자국이 남았군. 자네가 찾은 흔적이 이거였나.",
         "명령서엔 ‘이탈자 회수’라… 이름은 한 줄도 없군.",
@@ -538,7 +538,9 @@ do
         local pages = {}
         for i, page in ipairs(source) do pages[i] = Page(page.speaker, page.text) end
         -- Optional discoveries change what Anya knows, never invent a completed search.
-        local finding, reply = SurvivorExpedition.GetFinding(index), SurvivorExpedition.GetReply(index)
+        local finding = SurvivorExpedition.GetFinding(index)
+        local reply = finding and (SurvivorExpedition.GetSceneReply and SurvivorExpedition.GetSceneReply(index)
+            or SurvivorExpedition.GetReply(index))
         if finding then pages[1] = Page("퓨트리스", optionalObservations[index]) end
         if reply then pages[2] = Page("안야", reply) end
         if finding and optionalFollowUps[index] then pages[3] = Page("퓨트리스", optionalFollowUps[index]) end
@@ -575,10 +577,10 @@ do
                 end
             end
             local summaries = {
-                "스트라솔름 폐허에서 무리와 갈라진 발자국을 확인했다. 단순히 장애물을 피한 것인지, 스스로 판단한 것인지는 아직 알 수 없다.",
-                "불타는 시가지의 큰길 대신 담장 가장자리로 발자국이 이어졌다. 안야는 지나갈 길을 열고, 퓨트리스는 잔해를 살폈다.",
+                "스트라솔름 폐허에서 무리와 갈라진 발자국을 확인했다. 그가 왜 혼자 묘지를 빠져나갔는지는 아직 알 수 없다.",
+                "불타는 시가지의 큰길 대신 담장 가장자리로 발자국이 이어졌다. 발자국은 스트라솔름 납골당으로 들어갔다.",
                 "납골당의 문은 부서지지 않았고, 빗장은 안쪽에서 풀려 있었다. 발자국은 서쪽으로, 로데론 수도를 향해 이어졌다.",
-                "스컬지 수색대도 같은 방향으로 이동하고 있었다. 퓨트리스는 돌아갈 길을, 안야는 하수구의 마지막 봉쇄를 넘을 길을 확보하기로 했다.",
+                "스컬지 수색대도 같은 방향으로 그를 쫓고 있었다. 발자국은 배수로로 빠졌고, 퓨트리스는 수레를, 안야는 하수구의 마지막 봉쇄를 넘을 길을 맡기로 했다.",
             }
             local summary = (finding or summaries[index]) .. (reply and "\n안야: " .. reply or "")
                 .. "\n다음 목표: " .. SurvivorStory.stages[index].nextGoal
@@ -631,9 +633,11 @@ do
             Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
             local pages = {
                 Page("안야", "여기 있어. 경비대 휘장을 달았고… 손엔 아직 열쇠 꾸러미를 쥐고 있어."),
-                Page("퓨트리스", "수도 경비대였군. 그래서 하수구 길을 알았어. 반응은 있지만… 언제 깨어날진 모르겠네."),
+                Page("퓨트리스", "수도 경비대였군. 그래서 하수구 길을 알았어. 집에 닿자 버티던 힘이 끊겼나 보군. 반응은 있지만, 언제 깨어날진 모르겠네."),
                 Page("안야", "스트라솔름에서 여기까지 혼자 돌아온 거야. 이름은 깨어나면 물어보자."),
-                Page("퓨트리스", "수레는 준비됐네. 자, 반대쪽을 잡게."),
+                -- Clearing the outer seals in the sewer is what opened the cart's way through the chains.
+                Page("퓨트리스", SurvivorExpedition.GetFinding(5) and "사슬을 풀어 둔 덕에 수레가 지나갈 길은 트였네. 자, 반대쪽을 잡게."
+                    or "수레는 준비됐네. 자, 반대쪽을 잡게."),
                 Page("수색 기록", "두 사람은 그를 하수구 아래 로데론 지하 묘실로 옮겼다.\n이름을 묻는 일은 그가 눈을 뜬 뒤로 미뤘다."),
             }
             Conversation("ending", "돌아갈 길", pages,
@@ -646,8 +650,8 @@ do
                 elseif page == 2 then
                     Choreograph({Pose(putress, x + 120, y + 225, x + 40, y + 280)}, 0.54, concise, "steps")
                 elseif page == 3 then
-                    Choreograph({Pose(putress, x + 120, y + 225, x + 40, y + 280,
-                        {gesture = ANIM_TYPE_SPELL})}, 0.48, concise, "inspect")
+                    -- Anya speaks here; she steps closer while Putress keeps watching the figure.
+                    Choreograph({Pose(anya, x - 20, y + 215, x + 40, y + 280)}, 0.48, concise, "steps")
                 else
                     -- Loading and departure are separate actions reached only by a manual page click.
                     local tx, ty = x + (page == 5 and 400 or 20), y + (page == 5 and 505 or 290)
