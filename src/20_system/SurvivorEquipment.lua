@@ -188,7 +188,7 @@ do
     local HelpfulBossIndex
     local currentStage = 1
     local pickupMode, locked = 1, {}
-    local pickupNames = {"전체", "희귀 이상", "영웅만", "OFF"}
+    local pickupNames = {"전체", "희귀 이상", "영웅만", "끔"}
     local rarityRank = {common = 1, rare = 2, epic = 3}
     local function TouchUI() uiRevision = uiRevision + 1 end
 

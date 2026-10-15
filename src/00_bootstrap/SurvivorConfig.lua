@@ -75,15 +75,15 @@ SurvivorConfig = {
     stageBossLife = {1, 2.5, 4.5, 7.5, 11.0},
     -- Compositions change encounter roles without introducing unverified rawcodes.
     encounters = {
-        {name = "침묵의 묘역", ranged = 15, flying = 0, rangedStart = 45, flyingStart = 90,
+        {ranged = 15, flying = 0, rangedStart = 45, flyingStart = 90,
             meleeSpeed = 1, meleeLife = 1, meleeName = "묘역 배회자", rangedName = "썩은 활잡이", flyingName = "묘역 가고일", bossName = "시체 수집자", pattern = "target"},
-        {name = "불타는 보급로", ranged = 45, flying = 10, rangedStart = 15, flyingStart = 90,
+        {ranged = 45, flying = 10, rangedStart = 15, flyingStart = 90,
             meleeSpeed = 1.15, meleeLife = 0.85, meleeName = "잿더미 구울", rangedName = "불씨 술사", flyingName = "잿빛 가고일", bossName = "불타는 도살자", pattern = "dash"},
-        {name = "서리 낀 납골당", ranged = 15, flying = 45, rangedStart = 20, flyingStart = 10,
+        {ranged = 15, flying = 45, rangedStart = 20, flyingStart = 10,
             meleeSpeed = 1, meleeLife = 1, meleeName = "서리 망령", rangedName = "냉기 강령술사", flyingName = "서리날개 가고일", bossName = "납골당 파수꾼", pattern = "wave"},
-        {name = "폐허의 검문소", ranged = 30, flying = 20, rangedStart = 10, flyingStart = 30,
+        {ranged = 30, flying = 20, rangedStart = 10, flyingStart = 30,
             meleeSpeed = 0.85, meleeLife = 1.6, meleeName = "해골 추적병", rangedName = "저주의 사수", flyingName = "비명 밴시", bossName = "추적대장", pattern = "cross"},
-        {name = "지하로 가는 길", ranged = 35, flying = 30, rangedStart = 0, flyingStart = 0,
+        {ranged = 35, flying = 30, rangedStart = 0, flyingStart = 0,
             meleeSpeed = 1.1, meleeLife = 1.2, meleeName = "사슬 근위병", rangedName = "지배의 강령술사", flyingName = "속박된 망령", bossName = "사슬의 감시자", pattern = "cycle"},
     },
     extraWeapons = {

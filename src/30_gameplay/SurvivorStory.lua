@@ -141,12 +141,8 @@ do
     end
     function SurvivorStory.Record(index)
         local entry = assert(SurvivorStory.stages[index], "Unknown story stage")
-        clues[index] = {name = SurvivorStage.Get(index).name, note = entry.clue,
+        clues[index] = {name = SurvivorStage.Get(index).name,
             text = entry.clue .. (entry.nextGoal and "\n다음 목표: " .. entry.nextGoal or "")}
-    end
-    function SurvivorStory.PreparationNote(index)
-        local previous = clues[index - 1]
-        return previous and (previous.note or previous.text) or "안야가 앞서 길을 열고, 퓨트리스가 뒤에서 흔적을 살핍니다."
     end
     function SurvivorStory.JournalChapters()
         local chapters = {}
@@ -505,7 +501,7 @@ do
     local scenes = {
         {
             Page("퓨트리스", "묘지 입구까지는 무리와 함께 움직였네. 여기서 혼자 다른 길로 갔군."),
-            Page("안야", "다른 놈들은 쓰러진 묘비를 밟고 갔어. 그런데 이 발자국은 묘비를 돌아갔어."),
+            Page("안야", "다른 놈들은 쓰러진 묘비를 밟고 갔어. 그런데 이 발자국은 묘비를 피해 돌아갔네."),
             Page("퓨트리스", "무리와 다른 행동은 분명하네. 다만 이것만으로 의식이 남았다고 단정하긴 어렵지."),
             Page("안야", "아직은 알 수 없어. 발자국이 불탄 보급로 쪽으로 이어져. 내가 먼저 길을 열겠어."),
         },

@@ -26,8 +26,8 @@ do
     local retrySame, journalPrevious, journalNext, chapterPrevious, chapterNext, journalPosition
     local conversation, conversationIndex, conversationAction, conversationTitle, sceneSkip, conversationClose
     local conversationFinishLabel
-    local preparationRoot, preparationButton, preparationTitle, preparationMission, preparationRecord
-    local preparationHint, preparationLoadout, preparationFooter, preparationCountdown
+    local preparationRoot, preparationButton, preparationTitle, preparationMission
+    local preparationHint, preparationFooter, preparationCountdown
     local preparationReady, preparationCheck, preparationTimer
     local preparationGeneration = 0
     local speechTimer, speechTimerPaused
@@ -993,22 +993,20 @@ do
         end)
         -- A distinct action frame prevents a queued narrative click from starting combat.
         -- Keep the live hero and the arena visible to the left of this preparation panel.
-        preparationRoot = FramedPanel(parent, "HSCombatPreparation", 714, 0.35, 0.40)
+        preparationRoot = FramedPanel(parent, "HSCombatPreparation", 714, 0.35, 0.30)
         BlzFrameSetAbsPoint(preparationRoot, FRAMEPOINT_TOPRIGHT, 0.78, 0.585)
         BlzFrameSetLevel(preparationRoot, 24)
-        preparationTitle = Text(preparationRoot, "HSCombatPreparationTitle", 0.31, 0.033, 0, -0.016)
-        preparationMission = Text(preparationRoot, "HSCombatPreparationMission", 0.31, 0.046, 0, -0.056)
-        preparationRecord = Text(preparationRoot, "HSCombatPreparationRecord", 0.31, 0.049, 0, -0.106)
-        preparationHint = Text(preparationRoot, "HSCombatPreparationHint", 0.31, 0.072, 0, -0.160)
-        preparationLoadout = Text(preparationRoot, "HSCombatPreparationLoadout", 0.31, 0.049, 0, -0.237)
-        preparationFooter = Text(preparationRoot, "HSCombatPreparationFooter", 0.31, 0.049, 0, -0.291)
-        for _, frame in ipairs({preparationTitle, preparationMission, preparationRecord,
-            preparationHint, preparationLoadout, preparationFooter}) do
+        -- Only what the player has not just seen: goal, one zone tip and inventory warnings.
+        preparationTitle = Text(preparationRoot, "HSCombatPreparationTitle", 0.31, 0.020, 0, -0.016)
+        preparationMission = Text(preparationRoot, "HSCombatPreparationMission", 0.31, 0.046, 0, -0.050)
+        preparationHint = Text(preparationRoot, "HSCombatPreparationHint", 0.31, 0.080, 0, -0.108)
+        preparationFooter = Text(preparationRoot, "HSCombatPreparationFooter", 0.31, 0.034, 0, -0.198)
+        for _, frame in ipairs({preparationTitle, preparationMission, preparationHint, preparationFooter}) do
             BlzFrameSetLevel(frame, 3)
             BlzFrameSetTextAlignment(frame, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
         end
         preparationButton = BlzCreateFrameByType("GLUETEXTBUTTON", "HSCombatPreparationStart", parent, "ScriptDialogButton", 0)
-        BlzFrameSetPoint(preparationButton, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -0.353)
+        BlzFrameSetPoint(preparationButton, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -0.248)
         BlzFrameSetSize(preparationButton, 0.24, 0.034)
         BlzFrameSetLevel(preparationButton, 26)
         BlzFrameSetText(preparationButton, "수색 시작")
@@ -1120,20 +1118,17 @@ do
                 SurvivorStory.ShowBriefing(hero, onReady)
             end or onReady, footer, index == 1 and "장면 보기" or "수색 준비")
     end
-    function SurvivorUI.ShowCombatPreparation(index, details, onReady, canStart)
+    function SurvivorUI.ShowCombatPreparation(index, onReady, canStart)
         assert(type(onReady) == "function", "Combat preparation needs a start callback")
         SurvivorUI.HidePanel()
         SurvivorUI.ClearSpeech()
         DisplayDamageBoard(false)
         local theme = SurvivorStage.Get(index)
-        details = details or {}
         preparationReady, preparationCheck = onReady, canStart
-        SetText(preparationTitle, string.format("|cffffcc00%d / %d · %s\n수색 준비|r", index, SurvivorConfig.stages, theme.name))
+        SetText(preparationTitle, string.format("|cffffcc00%d / %d · %s|r", index, SurvivorConfig.stages, theme.name))
         SetText(preparationMission, "|cff9bdbc0이번 목표|r\n" .. theme.mission)
-        SetText(preparationRecord, "|cffc4b2df수색 기록|r\n" .. (details.record or "흔적을 따라 다음 길목으로 향합니다."))
         SetText(preparationHint, "|cffffcc00구역 안내|r\n" .. theme.hint)
-        SetText(preparationLoadout, details.loadout or "우클릭 이동 · 무기는 자동 공격")
-        SetText(preparationFooter, "‘수색 시작’을 누르기 전까지 전투와 시간이 멈춥니다.\n누른 뒤 3초 동안 주변을 살펴보세요.")
+        SetText(preparationFooter, "") -- Reserved for inventory warnings; the countdown explains the start.
         RenderPreparationVisibility()
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
@@ -1261,7 +1256,7 @@ do
         SetRerollsVisible(false)
         DisplayDamageBoard(true)
         local title = reason == "survived" and "생존 성공!" or reason == "defeated" and "다시 도전해 보세요" or "플레이 종료"
-        if reason == "boss_defeated" then title = "수색 완료 · 이름 없는 생존자" end
+        if reason == "boss_defeated" then title = "수색 완료 · 이름 모를 언데드" end
         if reason == "stage_clear" then title = "경로 확보 · " .. SurvivorStage.Get(stage).name end
         if reason == "timeout" then title = "시간 초과 · 스테이지 보스 미처치" end
         if reason == "error" then title = "실행 오류 · 게임 메시지를 확인하세요" end

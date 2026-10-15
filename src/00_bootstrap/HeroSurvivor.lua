@@ -220,7 +220,7 @@ do
         elseif kind == "risk" then
             eventOffers = SurvivorEquipment.RollRiskReward()
             assert(RunSession.BeginChoice(), "Risk reward requires running session")
-            SurvivorUI.ShowGearRewards(eventOffers, stage, ChooseEventGear, "봉인 경보 해제 · " .. (stage <= 2 and "희귀 이상" or "영웅") .. " 장비 하나 선택")
+            SurvivorUI.ShowGearRewards(eventOffers, stage, ChooseEventGear, "봉인 경보 해제 · " .. (stage <= 2 and "희귀 이상" or "영웅 등급") .. " 장비 하나 선택")
         end
         RefreshDamageBoard()
     end
@@ -342,18 +342,7 @@ do
         SurvivorUI.ShowStageIntro(expectedStage, function()
             if prepared or not SameTransition() then return end
             prepared = true -- An old intro completion cannot replace a live preparation/countdown.
-            local difficulty = SurvivorConfig.difficulties[selectedDifficulty].name
-            local loadout
-            if startingWeapon then
-                loadout = "난이도: " .. difficulty .. "\n시작 무기: " .. SurvivorAugments.Get(startingWeapon).name
-                    .. "\n시작 장신구: " .. SurvivorAugments.Get(startingTrinket).name
-            else
-                loadout = string.format("난이도: %s · 안야 Lv.%d\n생명력 %.0f/%.0f · 무기 %d/%d · 장신구 %d/%d",
-                    difficulty, GetHeroLevel(expectedHero), GetWidgetLife(expectedHero), BlzGetUnitMaxHP(expectedHero),
-                    #build.weapons, SurvivorConfig.weaponSlots, #build.trinkets, SurvivorConfig.trinketSlots)
-            end
-            SurvivorUI.ShowCombatPreparation(expectedStage,
-                {record = SurvivorStory.PreparationNote(expectedStage), loadout = loadout}, function()
+            SurvivorUI.ShowCombatPreparation(expectedStage, function()
                     if not CanStart() then return false end
                     resumed = true
                     stageTransition = false -- Consume once, only after the preparation countdown completes.
@@ -361,9 +350,9 @@ do
                     if startingWeapon then
                         for _ = 1, 3 do SurvivorCombat.Spawn() end
                         SurvivorCombat.CastWeapon(startingWeapon)
-                        SurvivorUI.Notify(SurvivorConfig.encounters[expectedStage].name)
+                        SurvivorUI.Notify(SurvivorStage.Get(expectedStage).name)
                     else
-                        SurvivorUI.Notify(SurvivorConfig.encounters[expectedStage].name .. " · 생명력 회복")
+                        SurvivorUI.Notify(SurvivorStage.Get(expectedStage).name .. " · 생명력 회복")
                     end
                     RefreshDamageBoard()
                     return true
