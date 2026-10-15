@@ -1524,10 +1524,10 @@ do
         choosing, restVisible = false, reason == "stage_clear"
         SetRerollsVisible(false)
         DisplayDamageBoard(true)
-        local title = reason == "survived" and "생존 성공!" or reason == "defeated" and "다시 도전해 보세요" or "플레이 종료"
+        local title = reason == "survived" and "생존 성공!" or reason == "defeated" and "흔적이 끊겼다 · 다시 도전해 보세요" or "플레이 종료"
         if reason == "boss_defeated" then title = "수색 완료 · 이름 모를 언데드" end
         if reason == "stage_clear" then title = "경로 확보 · " .. SurvivorStage.Get(stage).name end
-        if reason == "timeout" then title = "시간 초과 · 스테이지 보스 미처치" end
+        if reason == "timeout" then title = "시간 초과 · 수색대가 먼저 지나갔다" end
         if reason == "error" then title = "실행 오류 · 게임 메시지를 확인하세요" end
         BlzFrameSetVisible(heading, false)
         BlzFrameSetVisible(note, false)

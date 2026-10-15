@@ -8,6 +8,8 @@ do
     local enemyCount, frozen = 0, false
     local inventoryFrozen, inventoryVitals = false, nil
     local stage, stageStarted, damageTotals, warningUntil = 1, 0, {}, 0
+    local escapeLines = {"위험했네… 여기서 벗어나자.", "불길이 코앞이었어. 빠지자.", "냉기가 스며들기 전에 물러나자.",
+        "포위됐어. 길을 다시 열자.", "물길로 빠지자. 아직 끝나지 않았어."}
     local difficulty = SurvivorConfig.difficulties.normal
     local Slow, SetHit, ExpireEmber, ZoneLifetime
     local stormHits, stormReady, bladeReady = 0, 0, 0
@@ -1843,7 +1845,7 @@ do
                     SurvivorUI.Alert(6,
                         "|cffbbaaff그림자 탈출 · " .. (moved and "순간 이동" or "제자리 보호")
                         .. "|r\n생명력 최소 30% · 2.5초 무적\n다음 스테이지에서 재충전", 50, "escape")
-                    SurvivorUI.Say("안야", "위험했네… 여기서 벗어나자.")
+                    SurvivorUI.Say("안야", escapeLines[stage] or escapeLines[1])
                 else BlzSetEventDamage(damage) end
                 if damage > 0 then
                     if #recentDamage == 5 then table.remove(recentDamage, 1) end

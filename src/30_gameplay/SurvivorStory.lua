@@ -18,7 +18,7 @@ SurvivorStory = {
             nextGoal = "스트라솔름 납골당에서 냉기의 출처와 이어지는 흔적을 확인한다."},
         {clue = "부서지지 않은 문과 안쪽에서 풀린 빗장. 발자국은 서쪽으로 향했다.",
             nextGoal = "로데론 수도 성문을 넘어 흔적의 주인을 계속 추적한다."},
-        {clue = "같은 방향으로 이동한 스컬지 수색대의 흔적.",
+        {clue = "같은 방향으로 이동한 스컬지 수색대의 흔적. 대상의 발자국은 배수로로 빠졌다.",
             nextGoal = "로데론 수도 하수구의 사슬 관문을 넘어 대상을 찾고, 퓨트리스와 함께 옮길 준비를 한다."},
         {clue = "하수구 봉쇄 너머에서 쓰러진 언데드를 발견했다. 지하 묘실로 옮겼지만, 이름은 아직 알지 못한다."},
     },
@@ -494,7 +494,7 @@ do
                 end
             end
             Conversation("briefing", "수색을 시작하며", pages,
-                "어둠의 여왕의 명으로 안야와 퓨트리스가 스트라솔름 폐허로 수색에 나섰다. 안야는 앞서 길을 열고, 퓨트리스는 흔적을 살피기로 했다.\n안야는 찾아낸 언데드에게 먼저 말을 걸어 볼 생각이었다.",
+                "어둠의 여왕의 명으로 안야와 퓨트리스가 스트라솔름 폐허로 수색에 나섰다. 안야는 앞서 길을 열고, 퓨트리스는 흔적을 살피기로 했다.\n안야는 찾아낸 언데드에게 먼저 말을 걸어 볼 생각이었다.\n목격된 언데드는 무리와 떨어져 서쪽으로 움직이고 있었다.",
                 onComplete, render, hero, "수색 준비")
         end)
     end
@@ -518,9 +518,9 @@ do
             Page("안야", "발자국은 서쪽, 로데론 수도로 가. 어디로 가는지 아는 거야."),
         },
         {
-            Page("퓨트리스", "스컬지 수색대가 성문을 지나갔군. 우리와 같은 쪽이야."),
-            Page("안야", "하수구로 내려갔다면 성 안 길을 아는 사람이야. 저놈들이 먼저 찾게 둘 순 없어."),
-            Page("퓨트리스", "나는 돌아갈 길을 열어 두겠네. 수레도 끌고 가지."),
+            Page("퓨트리스", "밤새 서쪽으로 걸어 여기까지 왔군. 스컬지 수색대도 성문을 지나갔어. 우리와 같은 쪽이야."),
+            Page("안야", "서둘러야겠어. 저놈들이 먼저 찾게 둘 순 없어."),
+            Page("퓨트리스", "발자국은 성문이 아니라 배수로로 빠졌네. 성 안 길을 아는 자야. 돌아갈 길과 수레는 내가 맡지."),
             Page("안야", "좋아. 로데론 수도 하수구의 사슬 관문에서 만나. 내가 먼저 가 볼게."),
         },
     }
@@ -530,6 +530,8 @@ do
         "빗장에 손가락 자국이 남았군. 자네가 찾은 흔적이 이거였나.",
         "명령서엔 ‘이탈자 회수’라… 이름은 한 줄도 없군.",
     }
+    -- Replaces a default reply only where it would no longer answer the changed second line.
+    local optionalFollowUps = {[1] = "피할 줄 안다고 정신까지 온전하다는 뜻은 아니지만."}
     function SurvivorStory.ShowInterlude(index, hero, onComplete)
         currentStage = index
         local source = assert(scenes[index], "Unknown interlude")
@@ -539,6 +541,7 @@ do
         local finding, reply = SurvivorExpedition.GetFinding(index), SurvivorExpedition.GetReply(index)
         if finding then pages[1] = Page("퓨트리스", optionalObservations[index]) end
         if reply then pages[2] = Page("안야", reply) end
+        if finding and optionalFollowUps[index] then pages[3] = Page("퓨트리스", optionalFollowUps[index]) end
         -- Every discovery branch closes on the same concrete route and shared task.
         CreateScene(function()
             local x, y = BeginScene(hero)
@@ -627,7 +630,7 @@ do
             Yaw(anya, 0.8); Yaw(putress, 2.4)
             Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
             local pages = {
-                Page("안야", "여기 있어. 발자국이 이 사람한테서 끊겼어. 경비대 휘장을 달고 있네."),
+                Page("안야", "여기 있어. 경비대 휘장을 달았고… 손엔 아직 열쇠 꾸러미를 쥐고 있어."),
                 Page("퓨트리스", "수도 경비대였군. 그래서 하수구 길을 알았어. 반응은 있지만… 언제 깨어날진 모르겠네."),
                 Page("안야", "스트라솔름에서 여기까지 혼자 돌아온 거야. 이름은 깨어나면 물어보자."),
                 Page("퓨트리스", "수레는 준비됐네. 자, 반대쪽을 잡게."),

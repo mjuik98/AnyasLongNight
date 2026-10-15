@@ -16,7 +16,7 @@ do
             melee = [[Units\Undead\Ghoul\Ghoul.mdl]], ranged = [[Units\Undead\SkeletonMage\SkeletonMage.mdl]],
             boss = [[Units\Undead\Abomination\Abomination.mdl]], burningBoss = true},
         {name = "스트라솔름 납골당", mission = "서리 낀 납골당에서 새어 나오는 냉기를 헤치고, 안쪽에서 빗장이 풀린 문을 살피세요.", landmark = "얼어붙은 납골당 문",
-            hint = "폐허 뒤에서 원거리 사선을 끊으세요. 빗장 조사는 자리를 떠나도 진행도가 유지됩니다.\n첫 파동을 피할 틈을 확보하세요 · 공중 적 주의", tiles = {"Nsnw", "Nice", "Nsnr"}, light = "Lordaeron", hour = 0, weather = "SNls",
+            hint = "무너진 석관 뒤에서 원거리 사선을 끊으세요. 빗장 조사는 자리를 떠나도 진행도가 유지됩니다.\n첫 파동을 피할 틈을 확보하세요 · 공중 적 주의", tiles = {"Nsnw", "Nice", "Nsnr"}, light = "Lordaeron", hour = 0, weather = "SNls",
             sound = [[Sound\Ambient\BattleNetWindStereoLoop1.wav]],
             color = {145, 200, 255}, warning = {255, 80, 30},
             melee = [[Units\Creeps\Revenant\Revenant.mdl]], ranged = [[Units\Undead\Necromancer\Necromancer.mdl]],
