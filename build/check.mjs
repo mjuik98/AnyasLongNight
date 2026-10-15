@@ -6440,7 +6440,8 @@ console.log('PASS MPQ no-op patching, compaction, prefix/locale/attributes, unna
     }
     const replacedSizes = ['-- a', '-- b'].map(suffix => openMap(compactBytes).replace(new Map([['war3map.lua',
         Buffer.from(map.read('war3map.lua').toString('utf8') + suffix)]])).length);
-    assert(Math.abs(patched.length - replacedSizes[0]) < 64 && replacedSizes[0] === replacedSizes[1],
+    // Compressed sizes vary by a few bytes with content; an orphaned copy would add the whole script.
+    assert(Math.abs(patched.length - replacedSizes[0]) < 64 && Math.abs(replacedSizes[0] - replacedSizes[1]) < 64,
         'Repeated patches keep the archive at a single-copy size');
     const {bundle} = collectSources({profile: 'playtest'});
     const synced = syncBase(dirty, bundle), syncedMap = openMap(synced.patched);

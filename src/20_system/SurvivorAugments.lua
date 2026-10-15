@@ -143,38 +143,83 @@ do
     end
     function SurvivorAugments.Get(id) return catalog[id] end
     function SurvivorAugments.Level(build, id) return build.levels[id] or 0 end
+    -- Trailing zeros are dropped so 30.0 reads as 30 and 2.40 as 2.4.
+    local function StatNumber(value, decimals)
+        local text = string.format("%." .. decimals .. "f", value)
+        if decimals > 0 then text = (text:gsub("0+$", ""):gsub("%.$", "")) end
+        return text
+    end
+    -- Rows are {label, value, decimals, suffix}; zero values are omitted rather than shown blank.
+    local function StatLines(lines, rows)
+        for _, row in ipairs(rows) do
+            local value = row[2]
+            if type(value) == "string" or value > 0 then
+                if type(value) ~= "string" then value = StatNumber(value, row[3] or 0) .. (row[4] or "") end
+                lines[#lines + 1] = "|cffb0b0b0" .. row[1] .. ":|r " .. value
+            end
+        end
+    end
+    -- Weapons list shared stats in a fixed order (count, damage, range, area, duration, cooldown),
+    -- followed by weapon-specific stats and notes.
+    local function WeaponTooltip(id, entry, stats)
+        local kind, target = entry.text:match("^(.*) · (지상.*)$")
+        assert(kind, "Weapon text must end with its target type")
+        local hit = " (" .. target .. ")"
+        local rows, notes
+        if id == "firebolt" then
+            rows = {{"투사체 수", stats.missileCount}, {"피해", stats.missileDamage, 1, hit},
+                {"거리", stats.missileRange}, {"범위", stats.missileHitRadius},
+                {"지속 시간", stats.missileLifetime, 2, "초"}, {"쿨다운", stats.missileInterval, 2, "초"},
+                {"투사체 속도", stats.missileSpeed}}
+        elseif id == "flamefield" then
+            rows = {{"피해", stats.zoneDamage, 1, hit}, {"범위", stats.zoneRadius},
+                {"지속 시간", stats.zoneDuration, 2, "초"}, {"쿨다운", stats.zoneInterval, 2, "초"},
+                {"타격 간격", stats.zonePulse, 2, "초"}}
+        elseif id == "chainlightning" then
+            rows = {{"최대 대상", stats.chainTargets}, {"피해", stats.chainDamage, 1, hit},
+                {"거리", stats.chainRange}, {"쿨다운", stats.chainInterval, 2, "초"},
+                {"연쇄 거리", stats.chainJumpRange}}
+            notes = {"전이마다 피해 -15%"}
+        elseif id == "orbitblade" then
+            rows = {{"투사체 수", stats.bladeCount}, {"피해", stats.bladeDamage, 1, hit},
+                {"범위", stats.bladeRadius}, {"지속 시간", stats.bladeDuration, 2, "초"},
+                {"쿨다운", stats.bladeInterval, 2, "초"}, {"타격 간격", stats.bladeHitInterval, 2, "초"}}
+            notes = {"새 칼날은 기존 칼날과 중첩"}
+        elseif id == "monsoon" then
+            rows = {{"낙뢰 수", stats.monsoonCount}, {"피해", stats.monsoonDamage, 1, hit},
+                {"거리", stats.monsoonRange}, {"범위", stats.monsoonRadius}, {"쿨다운", stats.monsoonInterval, 2, "초"}}
+        elseif id == "frontslash" then
+            rows = {{"피해", stats.slashDamage, 1, hit}, {"거리", stats.slashRange},
+                {"지속 시간", stats.slashDuration, 2, "초"}, {"쿨다운", stats.slashInterval, 2, "초"},
+                {"각도", stats.slashAngle, 0, "도"}}
+            notes = {"대상별 1회 타격"}
+        elseif id == "frostshard" then
+            rows = {{"최대 관통", stats.frostPierce}, {"피해", stats.frostDamage, 1, hit},
+                {"거리", stats.frostRange}, {"범위", stats.frostHitRadius},
+                {"지속 시간", stats.frostLifetime, 2, "초"}, {"쿨다운", stats.frostInterval, 2, "초"},
+                {"투사체 속도", stats.frostSpeed},
+                {"둔화", string.format("-%.0f%% · %s초", stats.frostSlow * 100, StatNumber(stats.frostSlowDuration, 2))}}
+        else
+            local w = stats.extraWeapons[id]
+            rows = {{"피해", w.damage, 1, hit}, {"거리", w.range}, {"범위", w.radius},
+                {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"}}
+            if id == "meteor" then notes = {"잔불: 충돌 피해 20%/타격"}
+            elseif id == "returnblade" then notes = {"귀환 후 남은 시간 동안 재발사"} end
+        end
+        if stats.multiCount > 0 then
+            rows[#rows + 1] = {"추가 공격", string.format("%d회 (개별 피해 %.0f%%)", stats.multiCount, stats.multiDamage * 100)}
+        end
+        local lines = {kind}
+        StatLines(lines, rows)
+        for _, note in ipairs(notes or {}) do lines[#lines + 1] = "※ " .. note end
+        return table.concat(lines, "\n")
+    end
     function SurvivorAugments.OwnedTooltip(id, build)
         local entry, stats = catalog[id], build.stats
         local level = SurvivorAugments.Level(build, id)
         local description = entry.text
-        if id == "firebolt" then
-            description = description .. string.format("\n피해 %.1f · 발사 수 %d\n쿨다운 %.2f초 · 탐색 거리 %.0f",
-                stats.missileDamage, stats.missileCount, stats.missileInterval, stats.missileRange)
-        elseif id == "flamefield" then
-            description = description .. string.format("\n%.2f초마다 피해 %.1f · 반경 %.0f\n%.1f초 지속 · 쿨다운 %.2f초",
-                stats.zonePulse, stats.zoneDamage, stats.zoneRadius, stats.zoneDuration, stats.zoneInterval)
-        elseif id == "chainlightning" then
-            description = description .. string.format("\n첫 피해 %.1f · 최대 %d명 · 쿨다운 %.2f초\n탐색 %.0f / 연쇄 %.0f · 전이마다 피해 -15%%",
-                stats.chainDamage, stats.chainTargets, stats.chainInterval, stats.chainRange, stats.chainJumpRange)
-        elseif id == "orbitblade" then
-            description = description .. string.format("\n피해 %.1f · 칼날 %d개 · 궤도 반경 %.0f\n회전 %.2f초 · 칼날별 동일 대상 간격 %.2f초",
-                stats.bladeDamage, stats.bladeCount, stats.bladeRadius, stats.bladePeriod, stats.bladeHitInterval)
-                .. string.format("\n생성 쿨다운 %.2f초 · 유지 %.2f초 · 중첩", stats.bladeInterval, stats.bladeDuration)
-        elseif id == "monsoon" then
-            description = description .. string.format("\n피해 %.1f · 낙뢰 %d회 · 쿨다운 %.2f초\n탐색 거리 %.0f · 타격 반경 %.0f",
-                stats.monsoonDamage, stats.monsoonCount, stats.monsoonInterval, stats.monsoonRange, stats.monsoonRadius)
-        elseif id == "frontslash" then
-            description = description .. string.format("\n피해 %.1f · 쿨다운 %.2f초\n전방 거리 %.0f · 각도 %.0f도",
-                stats.slashDamage, stats.slashInterval, stats.slashRange, stats.slashAngle)
-                .. string.format("\n판정 %.2f초 · 대상별 1회 타격", stats.slashDuration)
-        elseif id == "frostshard" then
-            description = description .. string.format("\n피해 %.1f · 최대 %d명 관통 · 쿨다운 %.2f초\n둔화 -%.0f%% · %.1f초",
-                stats.frostDamage, stats.frostPierce, stats.frostInterval, stats.frostSlow * 100, stats.frostSlowDuration)
-        elseif SurvivorConfig.extraWeapons[id] then
-            local w = stats.extraWeapons[id]
-            description = description .. string.format("\n피해 %.1f · 쿨다운 %.2f초\n범위 %.0f · 사정거리 %.0f · 지속 %.2f초", w.damage, w.interval, w.radius, w.range, w.duration)
-            if id == "meteor" then description = description .. "\n잔불: 충돌 피해 20%/타격"
-            elseif id == "returnblade" then description = description .. "\n귀환 후 남은 시간 동안 재발사" end
+        if entry.kind == "weapon" then
+            description = WeaponTooltip(id, entry, stats)
         elseif id == "multicast" then
             description = string.format("추가 공격 +%d회\n추가 공격 피해 %.0f%%",
                 stats.multiCount, stats.multiDamage * 100)
@@ -187,16 +232,8 @@ do
                 description = description .. "\n|cffffcc00현재 적용 무기 없음|r"
             end
         end
-        if id == "firebolt" or id == "frostshard" then
-            local speed, radius, range, life = stats.missileSpeed, stats.missileHitRadius, stats.missileRange, stats.missileLifetime
-            if id == "frostshard" then speed, radius, range, life = stats.frostSpeed, stats.frostHitRadius, stats.frostRange, stats.frostLifetime end
-            description = description .. string.format("\n투사체 속도 %.0f · 충돌 반경 %.0f\n최대 비행 %.0f · 최대 %.1f초", speed, radius, range, life)
-        end
         local evolved = build.evolutions and build.evolutions[id]
         if evolved then description = description .. "\n|cffffcc00진화: " .. catalog[evolved].name .. "|r\n" .. catalog[evolved].text end
-        if entry.kind == "weapon" and stats.multiCount > 0 then
-            description = description .. string.format("\n다중: 추가 %d회 · 개별 피해 %.0f%%", stats.multiCount, stats.multiDamage * 100)
-        end
         return description
     end
     local function EquipmentTotals(sources)
