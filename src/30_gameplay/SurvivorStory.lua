@@ -4,7 +4,8 @@ SurvivorStory = {
     premise = "스트라솔름 폐허에서 스컬지 무리를 벗어난 언데드가 목격됐다.\n안야가 길을 여는 동안, 퓨트리스는 그가 남긴 흔적을 살핀다.\n그가 왜 홀로 서쪽으로 걷는지는 아직 모른다.",
     notice = "공식 캠페인의 첫 만남 이전을 상상한 창작 외전",
     heroModel = [[Units\Forsaken\HeroAnya\HeroAnya.mdl]],
-    figureModel = [[Units\Creeps\Zombie\Zombie.mdl]],
+    -- Garek (Ugrk), the campaign's awakening Forsaken; the dialogue still never names him.
+    figureModel = [[Units\Forsaken\Hero_ForsakenGarek\Hero_ForsakenGarek.mdl]],
     -- User-provided built-in Forsaken model; resolved from the game's own assets.
     putressModel = [[Units\Forsaken\Hero_Putress\Hero_Putress.mdl]],
     transportModel = [[Doodads\LordaeronSummer\Props\HayCart\HayCart.mdl]],
@@ -626,9 +627,10 @@ do
             BlzSetSpecialEffectAlpha(cart, 0)
             Scenery("ending-gate", [[Doodads\LordaeronSummer\Terrain\Gate\Gate.mdl]],
                 x + 660, y + 670, 0.75, math.pi / 2, {125, 135, 150})
-            BlzSetSpecialEffectColor(figure, 100, 105, 100)
+            -- Pale but recognizable; he must already lie still when the scene fades in.
+            BlzSetSpecialEffectColor(figure, 150, 155, 150)
             BlzPlaySpecialEffect(figure, ANIM_TYPE_DEATH)
-            BlzSetSpecialEffectTimeScale(figure, 0.5)
+            BlzSetSpecialEffectTimeScale(figure, 4)
             Yaw(anya, 0.8); Yaw(putress, 2.4)
             Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
             local pages = {
