@@ -4765,9 +4765,11 @@ const refreshed = refreshBase(original, baseBytes, bundle), refreshedMap = openM
 assert.deepEqual(terrainInfo(refreshedMap.read('war3map.w3e')), baseTerrain);
 assert.deepEqual(refreshed.playable, {width: baseMetadata.width, height: baseMetadata.height});
 for (const name of ['war3map.w3e', 'war3map.wpm', 'war3map.shd', 'war3map.mmp', 'war3map.doo',
-    'war3mapUnits.doo', 'war3mapMap.blp', 'war3map.w3c', 'war3map.w3r', 'war3map.wts', 'war3map.wtg']) {
+    'war3mapUnits.doo', 'war3mapMap.blp', 'war3map.w3c', 'war3map.w3r', 'war3map.wtg']) {
     assert.deepEqual(refreshedMap.read(name), baseMap.read(name), 'Base geography must match byte for byte: ' + name);
 }
+assert.deepEqual(refreshedMap.read('war3map.wts').subarray(0, baseMap.read('war3map.wts').length), baseMap.read('war3map.wts'),
+    'Every authored base string byte must survive; only missing protected strings may be appended');
 for (const name of ['war3map.w3a', 'war3map.w3t', 'war3map.w3u', 'war3mapMisc.txt',
     'war3mapSkin.w3a', 'war3mapSkin.w3t', 'war3mapSkin.w3u', 'CustomTooltip.fdf', 'CustomTooltip.toc']) {
     assert.deepEqual(refreshedMap.read(name), map.read(name), 'Test gameplay asset must survive: ' + name);
@@ -4813,11 +4815,40 @@ if (baseMetadata.version === 39) {
         baseInfoBytes.subarray(playerOffset + 12, playerOffset + 16), 'RaceHud must never be edited as flags');
 }
 const strings = baseMap.read('war3map.wts').toString('utf8');
-const protectedEntry = strings.match(/^(STRING 7\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n)([\s\S]*?)(\r?\n\})/m);
+const referencedIds = new Set(['war3map.w3a', 'war3map.w3t', 'war3map.w3u', 'war3mapSkin.w3a', 'war3mapSkin.w3t', 'war3mapSkin.w3u']
+    .flatMap(name => [...(map.read(name)?.toString('utf8') ?? '').matchAll(/TRIGSTR_(\d+)/g)].map(match => Number(match[1]))));
+const protectedEntry = [...strings.matchAll(/^(STRING (\d+)\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n)([\s\S]*?)(\r?\n\})/gm)]
+    .find(match => referencedIds.has(Number(match[2])));
 assert(protectedEntry, 'Map has an ability/unit string for collision verification');
-const conflictingStrings = Buffer.from(strings.replace(protectedEntry[0], protectedEntry[1] + 'Incorrect preserved unit name' + protectedEntry[3]));
+const conflictingStrings = Buffer.from(strings.replace(protectedEntry[0], protectedEntry[1] + 'Incorrect preserved unit name' + protectedEntry[4]));
 assert.throws(() => refreshBase(original, baseMap.replace(new Map([['war3map.wts', conflictingStrings]])), bundle),
-    /string conflicts.*TRIGSTR_7/, 'New metadata strings must never silently corrupt preserved gameplay objects');
+    new RegExp('string conflicts.*TRIGSTR_' + Number(protectedEntry[2]) + '(?!\\d)'),
+    'New metadata strings must never silently corrupt preserved gameplay objects');
+{
+    const readStrings = bytes => new Map([...bytes.toString('utf8').replaceAll('\r\n', '\n')
+        .matchAll(/^STRING (\d+)\n(?:\/\/[^\n]*\n|[ \t]*\n)*\{\n([\s\S]*?)\n\}/gm)]
+        .map(match => [Number(match[1]), match[2]]));
+    const protectedId = Number(protectedEntry[2]), oldStrings = readStrings(map.read('war3map.wts'));
+    const withOrphan = map.replace(new Map([['war3map.wts', Buffer.concat([map.read('war3map.wts'),
+        Buffer.from('\nSTRING 90000\n{\nunused test-only text\n}\n')])]]));
+    for (const newline of ['\n', '\r\n']) {
+        const missing = Buffer.from(strings.replace(protectedEntry[0], '').replaceAll('\r\n', '\n').replaceAll('\n', newline));
+        const baseWithoutString = baseMap.replace(new Map([['war3map.wts', missing]]));
+        const result = refreshBase(withOrphan, baseWithoutString, bundle);
+        const output = openMap(result.patched).read('war3map.wts'), values = readStrings(removeGoldStrings(output));
+        assert.deepEqual(output.subarray(0, missing.length), missing, 'All existing source bytes survive string retention');
+        assert.equal(values.get(protectedId), oldStrings.get(protectedId), 'A deleted protected value comes from its preserved object data');
+        assert(!values.has(90000), 'Unused test strings must not be imported into the base refresh');
+        for (const id of referencedIds) assert.equal(values.get(id), oldStrings.get(id));
+        const repeat = refreshBase(result.patched, baseWithoutString, bundle);
+        assert.deepEqual(openMap(repeat.patched).read('war3map.wts'), output, 'Retained strings are deterministic and never duplicate');
+    }
+    const missingFromTest = map.read('war3map.wts').toString('utf8').replace(
+        new RegExp('^STRING ' + protectedId + '\\r?\\n(?:\\/\\/[^\\r\\n]*\\r?\\n)*\\{\\r?\\n[\\s\\S]*?\\r?\\n\\}\\r?\\n?', 'm'), '');
+    assert.throws(() => refreshBase(map.replace(new Map([['war3map.wts', Buffer.from(missingFromTest)]])), baseBytes, bundle),
+        /Preserved gameplay object references a missing string/, 'Invalid existing test references cannot be silently repaired');
+    console.log('PASS base string deletion retains only referenced gameplay text, source bytes, LF/CRLF, idempotence and collision guards');
+}
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Dry verification changed original');
 assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original, 'Dry verification published output');
 console.log(`PASS resized-base refresh (${baseTerrain.width - 1}x${baseTerrain.height - 1} cells), native geography, undead rules, editor source, ${refreshed.preserved} gameplay entries and palette/pathing guards`);
