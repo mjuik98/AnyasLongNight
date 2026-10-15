@@ -542,17 +542,37 @@ export function refreshBase(before, base, bundle) {
         assert(entry || !test.read(name), 'Base is missing an existing geography/editor entry: ' + name);
         if (entry) changes.set(name, entry);
     }
-    const baseStrings = stringTable(source.read('war3map.wts')), testStrings = stringTable(test.read('war3map.wts'));
+    const baseStringBytes = source.read('war3map.wts');
+    const baseStrings = stringTable(baseStringBytes), testStrings = stringTable(test.read('war3map.wts'));
+    const retainedStrings = new Map();
     for (const name of ['war3map.w3a', 'war3map.w3t', 'war3map.w3u', 'war3mapSkin.w3a',
         'war3mapSkin.w3t', 'war3mapSkin.w3u']) {
         for (const match of (test.read(name)?.toString('utf8') ?? '').matchAll(/TRIGSTR_(\d+)/g)) {
             const id = Number(match[1]);
+            assert(testStrings.has(id), 'Preserved gameplay object references a missing string: ' + name + ' TRIGSTR_' + id);
+            if (!baseStrings.has(id)) {
+                // The editor can remove strings when a stock override is reset.
+                // Retain values still used by preserved test objects without
+                // restoring that override in the edited source map.
+                retainedStrings.set(id, testStrings.get(id));
+                continue;
+            }
             // A removed sale sentence is an owned gameplay change. Geography refresh
             // still copies the original WTS; --remove-gold reapplies it before publication.
-            assert(testStrings.has(id) && baseStrings.has(id)
-                && stripGoldTooltipText(baseStrings.get(id)) === stripGoldTooltipText(testStrings.get(id)),
+            assert(stripGoldTooltipText(baseStrings.get(id)) === stripGoldTooltipText(testStrings.get(id)),
                 'Base map string conflicts with preserved gameplay data: ' + name + ' TRIGSTR_' + id);
         }
+    }
+    if (retainedStrings.size) {
+        const newline = baseStringBytes.includes(Buffer.from('\r\n')) ? '\r\n' : '\n';
+        const additions = [...retainedStrings].sort(([a], [b]) => a - b)
+            .map(([id, value]) => `STRING ${id}${newline}{${newline}${value.replaceAll('\n', newline)}${newline}}${newline}`)
+            .join(newline);
+        const merged = Buffer.concat([baseStringBytes, Buffer.from(newline + additions)]);
+        const verified = stringTable(merged);
+        assert.equal(verified.size, baseStrings.size + retainedStrings.size, 'Retained strings must not replace base entries');
+        for (const [id, value] of [...baseStrings, ...retainedStrings]) assert.equal(verified.get(id), value);
+        changes.set('war3map.wts', merged);
     }
     const pathing = changes.get('war3map.wpm');
     assert(pathing && pathing.toString('ascii', 0, 4) === 'MP3W', 'Missing or invalid base pathing');
