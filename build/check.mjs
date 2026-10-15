@@ -40,6 +40,12 @@ UNIT_STATE_MANA, UNIT_STATE_MAX_MANA = "mana", "maxMana"
 UNIT_RF_HIT_POINTS_REGENERATION_RATE = 'uhpr'
 function FourCC(x) return x end
 function Player(x) return x end
+playerColors, playerNames, alliances, ALLIANCE_PASSIVE = {}, {}, {}, 'passive'
+function GetPlayerColor(p) return playerColors[p] or 'color' .. tostring(p) end
+function SetPlayerColor(p,c) playerColors[p]=c end
+function GetPlayerName(p) return playerNames[p] or 'Player ' .. tostring(p) end
+function SetPlayerName(p,n) playerNames[p]=n end
+function SetPlayerAlliance(a,b,kind,on) alliances[tostring(a) .. '>' .. tostring(b) .. ':' .. kind]=on end
 function CreateUnit(owner, id, x, y, facing)
     serial = serial + 1
     local u = {owner=owner,id=id,x=x,y=y,facing=facing,life=100000,maxLife=100000,handle=serial,abilities={},inventory={},speed=300}
@@ -1274,6 +1280,62 @@ for index,cap in ipairs({180,203,225,225,225})do
     assert(SurvivorCombat.Counts()==cap and not SurvivorCombat.SpawnBoss(),'A single boss fills the reserved slot without exceeding the cap')
     SurvivorCombat.Cleanup()
 end
+`);
+
+suite('enemies rotate across allied Neutral Hostile look-alike owners and skip redundant move orders', mocks + String.raw`
+PATHING_TYPE_WALKABILITY,PLAYER_NEUTRAL_AGGRESSIVE='walk',12
+function GetRandomInt(a,b)return a end
+function GetRandomReal(a,b)return a end
+function IsTerrainPathable()return false end
+for _,name in ipairs({'BlzSetUnitName','BlzSetUnitBaseDamage','BlzSetUnitAttackCooldown','SetUnitScale','SetUnitVertexColor',
+    'ALICE_AddIdentifier','SetUnitCreepGuard','RemoveGuardPosition','BlzUnitDisableAbility','IssueImmediateOrder','SetUnitFacing','SetUnitAnimation'})do
+    _G[name]=function()end
+end
+function BlzGetUnitAttackCooldown()return 1.5 end
+function IssueTargetOrder(unit,order)unit.order=order end
+moveOrders=0
+function IssuePointOrder(unit,order,x,y)unit.order,unit.target=order,{x,y};moveOrders=moveOrders+1 end
+function GetUnitCurrentOrder(unit)return unit.order or 0 end
+function OrderId(order)return order end
+SurvivorStage.LineClear=function()return true end
+SurvivorStage.Get=function(index)return {ids={melee='sm0'..index,ranged='sr0'..index,flying='sf0'..index,boss='sb0'..index},
+    color={180,220,185}}end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('orbitblade')
+local ids,owners=SurvivorConfig.enemyPlayerIds,{}
+assert(#ids>=4,'Enough owners must share the pathing load')
+for count=1,#ids*2 do
+    local ok,unit=SurvivorCombat.Spawn(false,'melee')
+    assert(ok and unit.owner==ids[(count-1)%#ids+1],'Enemies rotate through every spare owner')
+    owners[unit.owner]=(owners[unit.owner] or 0)+1
+end
+for _,id in ipairs(ids)do
+    assert(owners[id]==2,'Each owner receives an even share')
+    assert(playerColors[id]=='color12' and playerNames[id]=='Player 12','Owners borrow Neutral Hostile color and name')
+    assert(alliances[id..'>0:passive']==false and alliances['0>'..id..':passive']==false,'Owners stay hostile to the hero player')
+    for _,other in ipairs(ids)do
+        if other~=id then assert(alliances[id..'>'..other..':passive']==true,'Enemy owners never fight each other')end
+    end
+end
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('orbitblade')
+local ok,ranged=SurvivorCombat.Spawn(false,'ranged')
+assert(ok and ranged.order=='move' and moveOrders==1)
+hero.x,hero.y=ranged.x+3000,ranged.y
+SurvivorCombat.UpdateEnemies(1)
+local issued=moveOrders
+SurvivorCombat.UpdateEnemies(1.5)
+assert(moveOrders==issued,'An unchanged chase target must not repath')
+hero.y=hero.y+40
+SurvivorCombat.UpdateEnemies(2)
+assert(moveOrders==issued,'A small hero step within slack must not repath a distant chaser')
+hero.y=hero.y+2000
+SurvivorCombat.UpdateEnemies(2.5)
+assert(moveOrders==issued+1 and ranged.target[2]==hero.y,'A large hero shift re-aims the chaser')
+ranged.order=0
+SurvivorCombat.UpdateEnemies(3)
+assert(moveOrders==issued+2,'A unit that lost its move order is ordered again')
+SurvivorCombat.Cleanup()
 `);
 
 suite('risk investigations require explicit live acceptance and search deadlines use paused run time', mocks + String.raw`
