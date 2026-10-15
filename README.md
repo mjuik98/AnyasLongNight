@@ -27,6 +27,7 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\AnyasLongNight
 | `build/build.mjs` | 소스 결합, 문법 검사, 테스트 맵의 Lua 부분 패치 |
 | `build/check.mjs` | Lua 모의 실행 및 맵 보존 회귀 검사 |
 | `build/mpq.mjs` | 프로젝트 내부 MPQ 읽기·패치 도구 |
+| `build/sync-base.mjs` | 편집용 원본에 실행 Lua·WCT 반영(`npm run sync:base`, 확인만: `npm run check:base`) |
 | `assets` | 오브젝트·지형·설정·UI 등 맵 내부 데이터 |
 | `assets/war3mapImported` | FDF·TOC 및 UI 리소스 |
 | `vendor` | 라이브러리 출처 및 API 참고 자료 |
@@ -64,6 +65,13 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\AnyasLongNight
 - 과거에 텍스트 겹침·화면 밖 배치·테두리 늘어짐·흰 화면 문제가 있었으므로 기존 해결 방식을 유지합니다.
 
 ## 4. 최근 반영한 사항
+
+### 2026-10-15 맵 파일에 쓰지 않는 데이터가 쌓이지 않게 정리
+
+- 원인: `build/mpq.mjs`의 `replace()`는 바뀐 항목을 파일 끝에 붙이고 예전 데이터를 남겨 두었습니다. 편집용 원본에 Lua·WCT를 반영할 때마다 약 580KB씩 쌓여 원본이 5,021,739바이트까지 커졌고, compact 없이 빌드한 테스트 맵도 같은 이유로 커졌습니다. 원본은 정리해 658,608바이트가 되었습니다(40개 항목 동일, 이전 원본: `dist/backups/2026-10-15T13-06-20.556Z-before-compact`).
+- `replace()`는 이제 항상 정리(compact)된 맵을 돌려줍니다. `build.mjs`도 출력 맵을 항상 정리하므로 `--compact`는 더 이상 필요 없습니다(예전 명령과의 호환을 위해 받기만 합니다). `openMap(...).unusedBytes()`로 쓰지 않는 바이트 수를 확인할 수 있습니다.
+- **편집용 원본에 실행 Lua·WCT를 반영할 때는 일회성 스크립트 대신 `npm run sync:base`를 쓰세요.** playtest 프로필 Lua를 반영하고, 원본을 `dist/backups/<시각>-before-sync-base`에 백업한 뒤 나머지 37개 항목 보존과 정리 상태를 확인하고 저장합니다. World Editor가 원본을 열고 있으면 저장이 거부되니 닫고 다시 실행하세요. `npm run check:base`는 반영이 필요하거나 쓰지 않는 데이터가 있으면 실패합니다.
+- `npm test`는 반복 `replace()`·원본 반영 후 쓰지 않는 데이터가 0인지, 커밋된 원본 맵에 쓰지 않는 데이터가 없는지 검사합니다. `npm run check`류 명령도 입력 맵에 쓰지 않는 데이터가 있으면 일치하지 않는 것으로 보고합니다.
 
 ### 2026-10-15 2~5구역 도착 대화 추가
 

@@ -14,6 +14,7 @@ import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo
     removeGoldObjectData, removeGoldStrings, removeGoldMisc,
     prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
+import {syncBase} from './sync-base.mjs';
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = fengari;
 const talentCatalog = loadTalentCatalog();
 function suite(name, before, files, after) {
@@ -6383,8 +6384,15 @@ const mixedBytes = map.replace(new Map([['war3map.lua', Buffer.from(old + '\n-- 
     ['war3map.w3e', map.read('war3map.w3e')]]));
 const mixedTables = fixtureTables(mixedBytes);
 const terrainRow = fixtureBlockIndex(beforeTables, 'war3map.w3e') * 16;
-assert.deepEqual(mixedTables.blocks.subarray(terrainRow, terrainRow + 16), beforeTables.blocks.subarray(terrainRow, terrainRow + 16),
-    'An unchanged entry mixed with actual replacements must retain its complete block record');
+// replace() compacts, so an unchanged entry may move; everything but its offset must survive.
+assert.deepEqual(mixedTables.blocks.subarray(terrainRow + 4, terrainRow + 16), beforeTables.blocks.subarray(terrainRow + 4, terrainRow + 16),
+    'An unchanged entry mixed with actual replacements must retain its block lengths and flags');
+const terrainPayload = (bytes, tables) => {
+    const start = tables.offset + tables.blocks.readUInt32LE(terrainRow);
+    return bytes.subarray(start, start + tables.blocks.readUInt32LE(terrainRow + 4));
+};
+assert.deepEqual(terrainPayload(mixedBytes, mixedTables), terrainPayload(original, beforeTables),
+    'An unchanged entry mixed with actual replacements must retain its exact packed payload');
 const mixedCompactTables = fixtureTables(openMap(mixedBytes).compact());
 let encryptedFixtureIndex = -1;
 for (let p = 0; p < mixedTables.blocks.length; p += 16) {
@@ -6411,6 +6419,38 @@ if (encryptedFixtureIndex >= 0) {
 assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original);
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes);
 console.log('PASS MPQ no-op patching, compaction, prefix/locale/attributes, unnamed live blocks and encrypted FIX_KEY safety');
+{
+    // Rebuild the pre-compaction failure: orphaned payload bytes left between live data and the tables.
+    function withOrphan(bytes, junk) {
+        const tables = fixtureTables(bytes), dataEnd = tables.hashStart - tables.offset;
+        const result = Buffer.concat([bytes.subarray(0, tables.hashStart), junk, bytes.subarray(tables.hashStart)]);
+        result.writeUInt32LE(result.length - tables.offset, tables.offset + 8);
+        result.writeUInt32LE(dataEnd + junk.length, tables.offset + 16);
+        result.writeUInt32LE(tables.blockStart - tables.offset + junk.length, tables.offset + 20);
+        return result;
+    }
+    const clean = openMap(compactBytes), junk = Buffer.alloc(4099, 0x5a), dirty = withOrphan(compactBytes, junk);
+    assert.equal(clean.unusedBytes(), 0, 'A compacted archive reports no unused bytes');
+    assert.equal(openMap(dirty).unusedBytes(), junk.length, 'Orphaned payload bytes are reported exactly');
+    assert.deepEqual(openMap(dirty).compact(), compactBytes, 'Compaction removes orphaned payload bytes');
+    let patched = compactBytes;
+    for (const suffix of ['-- first', '-- second', '-- third']) {
+        patched = openMap(patched).replace(new Map([['war3map.lua', Buffer.from(map.read('war3map.lua').toString('utf8') + suffix)]]));
+        assert.equal(openMap(patched).unusedBytes(), 0, 'replace() must never leave orphaned payloads: ' + suffix);
+    }
+    const replacedSizes = ['-- a', '-- b'].map(suffix => openMap(compactBytes).replace(new Map([['war3map.lua',
+        Buffer.from(map.read('war3map.lua').toString('utf8') + suffix)]])).length);
+    assert(Math.abs(patched.length - replacedSizes[0]) < 64 && replacedSizes[0] === replacedSizes[1],
+        'Repeated patches keep the archive at a single-copy size');
+    const {bundle} = collectSources({profile: 'playtest'});
+    const synced = syncBase(dirty, bundle), syncedMap = openMap(synced.patched);
+    assert.equal(synced.unusedBefore, junk.length, 'Base sync reports the unused bytes it removes');
+    assert.equal(syncedMap.unusedBytes(), 0, 'Base sync always publishes a compacted archive');
+    assert.deepEqual(syncBase(synced.patched, bundle).patched, synced.patched, 'Base sync is idempotent');
+    assert.equal(syncBase(synced.patched, bundle).changed.length, 0, 'A synchronized base reports no stale entries');
+    assert.equal(openMap(baseMapPath).unusedBytes(), 0, 'The editor base map must not carry unused archive bytes (run npm run sync:base)');
+}
+console.log('PASS MPQ replace/base sync never accumulate unused archive bytes and the base map is compact');
 {
     let inflates = 0;
     const inflate = zlib.inflateSync;

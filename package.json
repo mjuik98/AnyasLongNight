@@ -9,7 +9,9 @@
     "build:release": "node build/build.mjs --release --compact",
     "check:release": "node build/build.mjs --check --release --compact",
     "build:development": "node build/build.mjs --profile development --compact",
-    "check:development": "node build/build.mjs --check --profile development --compact"
+    "check:development": "node build/build.mjs --check --profile development --compact",
+    "sync:base": "node build/sync-base.mjs",
+    "check:base": "node build/sync-base.mjs --check"
   },
   "devDependencies": {
     "fengari": "0.1.5",
