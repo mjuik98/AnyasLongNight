@@ -1337,13 +1337,12 @@ do
     end
     function SurvivorUI.ShowStageIntro(index, onReady, hero)
         SurvivorStory.SetStage(index)
-        local theme = SurvivorStage.Get(index)
-        local text = index == 1 and SurvivorStory.premise or theme.mission
-        local footer = index == 1 and ("우클릭 이동 · 무기는 자동 공격 · F10 메뉴\n" .. SurvivorStory.notice) or theme.hint
-        SurvivorUI.ShowNarrative(string.format("%s\n%d / 5 · %s", SurvivorStory.title, index, theme.name),
-            text, index == 1 and function()
-                SurvivorStory.ShowBriefing(hero, onReady)
-            end or onReady, footer, index == 1 and "장면 보기" or "수색 준비")
+        -- Later stages open on an arrival scene; its last button leads to the preparation panel,
+        -- which already repeats the mission and hint the old text card showed.
+        if index > 1 then return SurvivorStory.ShowArrival(index, hero, onReady) end
+        SurvivorUI.ShowNarrative(string.format("%s\n%d / 5 · %s", SurvivorStory.title, index, SurvivorStage.Get(index).name),
+            SurvivorStory.premise, function() SurvivorStory.ShowBriefing(hero, onReady) end,
+            "우클릭 이동 · 무기는 자동 공격 · F10 메뉴\n" .. SurvivorStory.notice, "장면 보기")
     end
     function SurvivorUI.ShowCombatPreparation(index, onReady, canStart)
         assert(type(onReady) == "function", "Combat preparation needs a start callback")
