@@ -7,44 +7,44 @@ do
         "power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride"}
     local catalog = {
         firebolt = {kind = "weapon", name = "잿불 화살", icon = icons .. "BTNFireBolt.blp",
-            text = "가까운 적을 추적합니다.\n지상·공중 공격."},
+            text = "추적 투사체 · 지상·공중"},
         flamefield = {kind = "weapon", name = "잿불 발자취", icon = icons .. "BTNWallOfFire.blp",
-            text = "발밑에 잿불 발자취를 남깁니다.\n지상 전용."},
+            text = "발밑 장판 · 지상"},
         chainlightning = {kind = "weapon", name = "연쇄 번개", icon = icons .. "BTNChainLightning.blp",
-            text = "적 사이로 번개가 튑니다.\n지상·공중 공격."},
+            text = "연쇄 공격 · 지상·공중"},
         orbitblade = {kind = "weapon", name = "순찰자의 칼날", icon = icons .. "BTNWhirlwind.blp",
-            text = "회전하는 칼날로 근처 적을 벱니다.\n지상 전용."},
+            text = "회전 칼날 · 지상"},
         monsoon = {kind = "weapon", name = "폭풍의 부름", icon = icons .. "BTNMonsoon.blp",
-            text = "하늘에서 낙뢰가 떨어집니다.\n지상·공중 범위 공격."},
+            text = "낙뢰 · 지상·공중"},
         frontslash = {kind = "weapon", name = "그림자 베기", icon = icons .. "BTNCleavingAttack.blp",
-            text = "바라보는 방향을 부채꼴로 벱니다.\n지상 전용."},
+            text = "전방 부채꼴 · 지상"},
         frostshard = {kind = "weapon", name = "서리 화살", icon = icons .. "BTNColdArrows.blp",
-            text = "적을 관통하고 둔화시킵니다.\n지상·공중 투사체."},
-        frostnova = {kind = "weapon", name = "서리 폭발", icon = icons .. "BTNGlacier.blp", text = "주변의 무작위 적 위치에서 냉기를 터뜨려 적을 둔화시킵니다.\n지상·공중 공격."},
-        blizzard = {kind = "weapon", name = "묘역의 눈보라", icon = icons .. "BTNBlizzard.blp", text = "적 위치에 눈보라를 남겨 피해를 주고 둔화시킵니다.\n지상·공중 공격."},
-        meteor = {kind = "weapon", name = "잿불 낙성", icon = icons .. "BTNInfernal.blp", text = "적 위치에 운석을 떨어뜨리고 불길을 남깁니다.\n지상·공중 공격."},
-        thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "앞으로 나아가 머무는 구체가 주변 적을 반복 타격합니다.\n지상·공중 공격."},
-        returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "지속시간 동안 왕복하며, 이동 구간마다 1회 타격합니다.\n지상 전용."},
+            text = "관통·둔화 투사체 · 지상·공중"},
+        frostnova = {kind = "weapon", name = "서리 폭발", icon = icons .. "BTNGlacier.blp", text = "무작위 적 위치에 냉기 폭발·둔화 · 지상·공중"},
+        blizzard = {kind = "weapon", name = "묘역의 눈보라", icon = icons .. "BTNBlizzard.blp", text = "적 위치에 눈보라·둔화 · 지상·공중"},
+        meteor = {kind = "weapon", name = "잿불 낙성", icon = icons .. "BTNInfernal.blp", text = "적 위치에 운석·잔불 · 지상·공중"},
+        thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "전진 후 머무는 지속 타격 구체 · 지상·공중"},
+        returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "왕복 칼날 · 구간별 1회 타격 · 지상"},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
-            text = "모든 무기의 피해가 증가합니다.", statName = "피해 증가", amount = 0.10},
+            text = "모든 무기 피해 증가", statName = "모든 무기 피해", amount = 0.10},
         haste = {kind = "trinket", name = "신속의 인장", icon = icons .. "BTNGlove.blp",
-            text = "모든 무기의 쿨다운이 짧아집니다.", statName = "무기 쿨다운 감소", amount = 0.10},
+            text = "모든 무기 쿨다운 감소", statName = "모든 무기 쿨다운", amount = 0.10},
         velocity = {kind = "trinket", name = "가속의 인장", icon = icons .. "BTNBootsOfSpeed.blp",
-            text = "투사체가 더 빠르게 날아갑니다. 쿨다운과 타격 간격은 그대로입니다.", statName = "투사체 속도 증가", amount = 0.20},
+            text = "투사체 속도 증가", statName = "투사체 속도", amount = 0.20},
         magnitude = {kind = "trinket", name = "확대의 인장", icon = icons .. "BTNOrbOfFire.blp",
-            text = "모든 무기의 타격 크기와 공격 범위가 커집니다.", statName = "무기 크기 증가", amount = 0.15},
+            text = "모든 무기 크기 증가", statName = "모든 무기 크기", amount = 0.15},
         reach = {kind = "trinket", name = "추적의 인장", icon = icons .. "BTNCrystalBall.blp",
-            text = "모든 무기의 탐색 거리와 공격 거리가 늘어납니다.", statName = "무기 사정거리 증가", amount = 0.15},
+            text = "모든 무기 사정거리 증가", statName = "모든 무기 사정거리", amount = 0.15},
         longevity = {kind = "trinket", name = "지속의 인장", icon = icons .. "BTNAnkh.blp",
-            text = "모든 무기의 지속시간과 연속 공격 성능이 증가합니다.", statName = "무기 지속 효과 증가", amount = 0.20},
+            text = "모든 무기 지속시간 증가", statName = "모든 무기 지속시간", amount = 0.20},
         multicast = {kind = "trinket", name = "잔향의 인장", icon = icons .. "BTNWand.blp",
-            text = "모든 무기가 약한 추가 공격을 함께 발동합니다. 추가 공격은 다시 늘어나지 않습니다."},
+            text = "모든 무기에 추가 공격 발동"},
         vitality = {kind = "trinket", name = "불굴의 인장", icon = icons .. "BTNPeriapt1.blp",
-            text = "최대 생명력이 증가합니다. 획득·강화해도 바로 회복되지는 않습니다.", statName = "최대 생명력", amount = 60, unit = ""},
+            text = "최대 생명력 증가", statName = "최대 생명력", amount = 60, unit = ""},
         renewal = {kind = "trinket", name = "회복의 인장", icon = icons .. "BTNRingSkull.blp",
-            text = "기본 회복에 더해 초당 생명력이 재생됩니다. 일시정지 중에는 회복되지 않습니다.", statName = "추가 생명력 재생", amount = 1, unit = "/초"},
+            text = "생명력 재생 증가", statName = "생명력 재생", amount = 1, unit = "/초"},
         stride = {kind = "trinket", name = "발걸음의 인장", icon = icons .. "BTNBoots.blp",
-            text = "영웅의 이동 속도가 증가합니다. 최종 이동 속도는 500을 넘지 않습니다.", statName = "이동 속도", amount = 12, unit = ""},
+            text = "이동 속도 증가", statName = "이동 속도", amount = 12, unit = ""},
         recovery = {kind = "recovery", name = "회복", icon = icons .. "BTNPotionGreenSmall.blp",
             text = "최대 생명력의 30%를 회복합니다."},
     }
@@ -154,44 +154,37 @@ do
             description = description .. string.format("\n%.2f초마다 피해 %.1f · 반경 %.0f\n%.1f초 지속 · 쿨다운 %.2f초",
                 stats.zonePulse, stats.zoneDamage, stats.zoneRadius, stats.zoneDuration, stats.zoneInterval)
         elseif id == "chainlightning" then
-            description = description .. string.format("\n첫 피해 %.1f · 최대 %d명 · 쿨다운 %.2f초\n탐색 %.0f / 연쇄 %.0f · 전이마다 피해 15%% 감소",
+            description = description .. string.format("\n첫 피해 %.1f · 최대 %d명 · 쿨다운 %.2f초\n탐색 %.0f / 연쇄 %.0f · 전이마다 피해 -15%%",
                 stats.chainDamage, stats.chainTargets, stats.chainInterval, stats.chainRange, stats.chainJumpRange)
         elseif id == "orbitblade" then
-            description = description .. string.format("\n피해 %.1f · 칼날 %d개 · 궤도 반경 %.0f\n한 바퀴 %.2f초 · 칼날마다 같은 적 타격 간격 %.2f초",
+            description = description .. string.format("\n피해 %.1f · 칼날 %d개 · 궤도 반경 %.0f\n회전 %.2f초 · 칼날별 동일 대상 간격 %.2f초",
                 stats.bladeDamage, stats.bladeCount, stats.bladeRadius, stats.bladePeriod, stats.bladeHitInterval)
-                .. string.format("\n새 칼날 쿨다운 %.2f초 · %.2f초 유지 · 중첩 가능", stats.bladeInterval, stats.bladeDuration)
+                .. string.format("\n생성 쿨다운 %.2f초 · 유지 %.2f초 · 중첩", stats.bladeInterval, stats.bladeDuration)
         elseif id == "monsoon" then
             description = description .. string.format("\n피해 %.1f · 낙뢰 %d회 · 쿨다운 %.2f초\n탐색 거리 %.0f · 타격 반경 %.0f",
                 stats.monsoonDamage, stats.monsoonCount, stats.monsoonInterval, stats.monsoonRange, stats.monsoonRadius)
         elseif id == "frontslash" then
             description = description .. string.format("\n피해 %.1f · 쿨다운 %.2f초\n전방 거리 %.0f · 각도 %.0f도",
                 stats.slashDamage, stats.slashInterval, stats.slashRange, stats.slashAngle)
-                .. string.format("\n추가 베기 판정 %.2f초 · 같은 적은 한 번 타격", stats.slashDuration)
+                .. string.format("\n판정 %.2f초 · 대상별 1회 타격", stats.slashDuration)
         elseif id == "frostshard" then
-            description = description .. string.format("\n피해 %.1f · 최대 %d명 관통 · 쿨다운 %.2f초\n이동 속도 %.0f%% 감소 · %.1f초 지속",
+            description = description .. string.format("\n피해 %.1f · 최대 %d명 관통 · 쿨다운 %.2f초\n둔화 -%.0f%% · %.1f초",
                 stats.frostDamage, stats.frostPierce, stats.frostInterval, stats.frostSlow * 100, stats.frostSlowDuration)
         elseif SurvivorConfig.extraWeapons[id] then
             local w = stats.extraWeapons[id]
             description = description .. string.format("\n피해 %.1f · 쿨다운 %.2f초\n범위 %.0f · 사정거리 %.0f · 지속 %.2f초", w.damage, w.interval, w.radius, w.range, w.duration)
-            if id == "meteor" then description = description .. "\n잔불은 충돌 피해의 20%씩 반복 타격"
-            elseif id == "returnblade" then description = description .. "\n귀환 후 남은 시간 동안 다시 발사 · 구간마다 같은 적 1회 타격" end
+            if id == "meteor" then description = description .. "\n잔불: 충돌 피해 20%/타격"
+            elseif id == "returnblade" then description = description .. "\n귀환 후 남은 시간 동안 재발사" end
         elseif id == "multicast" then
-            description = description .. string.format("\n발동당 추가 공격 +%d · 추가 공격 피해 %.0f%%\n다발 무기도 추가 공격은 한 발·한 칼날·한 낙뢰씩 생성",
+            description = string.format("추가 공격 +%d회\n추가 공격 피해 %.0f%%",
                 stats.multiCount, stats.multiDamage * 100)
         elseif id == "haste" then
-            description = description .. string.format("\n장신구 단독 쿨다운 감소 %.1f%%", (1 - 1 / (1 + level * entry.amount)) * 100)
-                .. "\n모든 무기에 적용 · 장비 효과와 무기별 최소 쿨다운은 별도 반영"
+            description = string.format("모든 무기 쿨다운 -%.1f%%", (1 - 1 / (1 + level * entry.amount)) * 100)
         elseif entry.kind == "trinket" then
-            description = description .. string.format("\n%s +%.0f%s", entry.statName,
+            description = string.format("%s +%.0f%s", entry.statName,
                 level * entry.amount * (entry.unit and 1 or 100), entry.unit or "%")
-            description = description .. (entry.unit and "\n영웅에게 적용" or id == "velocity" and "\n이동하는 투사체에 적용" or "\n모든 무기에 적용")
-            if id == "velocity" then
-                description = description .. "\n잿불 화살·서리 화살·폭풍 구슬·귀환 칼날\n순찰자의 칼날·잿불 발자취·폭풍의 부름·잿불 낙성\n즉시 공격에는 적용되지 않음"
-                if not SurvivorAugments.HasProjectileWeapon(build) then description = description .. "\n|cffffcc00현재 적용 무기 없음|r" end
-            elseif id == "magnitude" then
-                description = description .. "\n투사체·칼날: 충돌 크기 / 장판·낙뢰·베기: 타격 범위\n연쇄 번개: 전이 거리 증가"
-            elseif id == "longevity" then
-                description = description .. "\n투사체·장판·둔화·베기: 지속시간 증가\n번개·낙뢰: 연속 공격 수 증가(올림)\n순찰자의 칼날: 칼날 유지 시간 증가·독립 중첩"
+            if id == "velocity" and not SurvivorAugments.HasProjectileWeapon(build) then
+                description = description .. "\n|cffffcc00현재 적용 무기 없음|r"
             end
         end
         if id == "firebolt" or id == "frostshard" then
@@ -204,8 +197,7 @@ do
         if entry.kind == "weapon" and stats.multiCount > 0 then
             description = description .. string.format("\n다중: 추가 %d회 · 개별 피해 %.0f%%", stats.multiCount, stats.multiDamage * 100)
         end
-        if entry.flavor then description = description .. "\n\n|cffaaaaaa" .. entry.flavor .. "|r" end
-        return description .. "\n\n자동 적용 · 레벨업 선택으로 강화"
+        return description
     end
     local function EquipmentTotals(sources)
         local totals, ids = {}, {}
@@ -223,12 +215,13 @@ do
     end
     local function Bonus(build, scope, key)
         local values = build.equipmentTotals[scope]
-        return values and values[key] or 0
+        local talents = build.talentTotals and build.talentTotals[scope]
+        return (values and values[key] or 0) + (talents and talents[key] or 0)
     end
     local function Calculate(build)
         if not build.equipmentTotals then
             build = {levels = build.levels, evolutions = build.evolutions,
-                equipmentTotals = EquipmentTotals(build.equipmentBonuses)}
+                equipmentTotals = EquipmentTotals(build.equipmentBonuses), talentTotals = build.talentTotals}
         end
         local c, levels = SurvivorConfig, build.levels
         local fire, zone = levels.firebolt or 0, levels.flamefield or 0
@@ -238,13 +231,13 @@ do
         local speed = (levels.haste or 0) * catalog.haste.amount + Bonus(build, "all", "speedPct")
         local area = Bonus(build, "all", "areaPct")
         -- Cooldown affects every weapon; projectile speed changes flight only.
-        local weaponSize = math.min(3, math.max(0.1, 1 + (levels.magnitude or 0) * catalog.magnitude.amount))
-        local weaponRange = math.max(0.1, 1 + (levels.reach or 0) * catalog.reach.amount)
-        local weaponLife = math.max(0.1, 1 + (levels.longevity or 0) * catalog.longevity.amount)
+        local weaponSize = math.min(3, math.max(0.1, 1 + (levels.magnitude or 0) * catalog.magnitude.amount + Bonus(build, "all", "sizePct")))
+        local weaponRange = math.max(0.1, 1 + (levels.reach or 0) * catalog.reach.amount + Bonus(build, "all", "rangePct"))
+        local weaponLife = math.max(0.1, 1 + (levels.longevity or 0) * catalog.longevity.amount + Bonus(build, "all", "durationPct"))
         local projectileSpeed = math.max(0.1, 1 + (levels.velocity or 0) * catalog.velocity.amount + Bonus(build, "all", "projectileSpeedPct"))
-        local projectileSize = math.min(3, math.max(0.1, 1 + (levels.magnitude or 0) * catalog.magnitude.amount + Bonus(build, "all", "projectileSizePct")))
-        local projectileRange = math.max(0.1, 1 + (levels.reach or 0) * catalog.reach.amount + Bonus(build, "all", "projectileRangePct"))
-        local projectileLife = math.max(0.1, 1 + (levels.longevity or 0) * catalog.longevity.amount + Bonus(build, "all", "projectileDurationPct"))
+        local projectileSize = math.min(3, math.max(0.1, 1 + (levels.magnitude or 0) * catalog.magnitude.amount + Bonus(build, "all", "projectileSizePct") + Bonus(build, "all", "sizePct")))
+        local projectileRange = math.max(0.1, 1 + (levels.reach or 0) * catalog.reach.amount + Bonus(build, "all", "projectileRangePct") + Bonus(build, "all", "rangePct"))
+        local projectileLife = math.max(0.1, 1 + (levels.longevity or 0) * catalog.longevity.amount + Bonus(build, "all", "projectileDurationPct") + Bonus(build, "all", "durationPct"))
         local result = {
             multiCount = multiCounts[levels.multicast or 0] or 0, multiDamage = multiDamage[levels.multicast or 0] or 0,
             missileEnabled = fire > 0, zoneEnabled = zone > 0,
@@ -303,7 +296,7 @@ do
             frostSlowDuration = math.max(0.1, (c.frostSlowDuration + Bonus(build, "frostshard", "slowDuration")) * weaponLife),
             moveSpeed = math.min(500, math.max(100, c.moveSpeed + Bonus(build, "all", "moveSpeed") + (levels.stride or 0) * catalog.stride.amount)),
             equipmentLife = math.floor(Bonus(build, "all", "maxLife") + (levels.vitality or 0) * catalog.vitality.amount),
-            regeneration = c.heroRegeneration + (levels.renewal or 0) * catalog.renewal.amount,
+            regeneration = c.heroRegeneration + (levels.renewal or 0) * catalog.renewal.amount + Bonus(build, "all", "regeneration"),
             sets = {ember = Bonus(build, "set", "ember") >= 1, storm = Bonus(build, "set", "storm") >= 1,
                 frost = Bonus(build, "set", "frost") >= 1, blade = Bonus(build, "set", "blade") >= 1},
         }
@@ -339,13 +332,21 @@ do
         result.frostEvolution = build.evolutions and build.evolutions.frostshard
         return result
     end
+    function SurvivorAugments.ApplyHeroRegeneration(hero, stats)
+        -- Combat owns the pause flag; recalculation during a choice or equipment
+        -- transaction must not restart native healing behind the paused UI.
+        local rate = stats.nativeRegenerationPaused and 0 or stats.regeneration
+        assert(BlzSetUnitRealField(hero, UNIT_RF_HIT_POINTS_REGENERATION_RATE, rate),
+            "Could not update native hero regeneration")
+    end
     local function ApplyHeroStats(build, hero)
         if hero ~= nil then
             SetUnitMoveSpeed(hero, build.stats.moveSpeed)
+            SurvivorAugments.ApplyHeroRegeneration(hero, build.stats)
             local previous = build.appliedHero == hero and (build.appliedEquipmentLife or 0) or 0
             local nextBonus = build.stats.equipmentLife
             if previous ~= nextBonus then
-                -- Preserve native attribute growth and current HP. Swapping gear never heals.
+                -- Preserve the hero's current max HP and life when adjusting gear bonuses.
                 local life = GetWidgetLife(hero)
                 local maximum = math.max(1, BlzGetUnitMaxHP(hero) - previous + nextBonus)
                 BlzSetUnitMaxHP(hero, maximum)
@@ -363,7 +364,24 @@ do
         ApplyHeroStats(build, hero)
     end
     function SurvivorAugments.PreviewEquipment(build, sources)
-        return Calculate({levels = build.levels, equipmentBonuses = sources, evolutions = build.evolutions})
+        return Calculate({levels = build.levels, equipmentBonuses = sources, evolutions = build.evolutions, talentTotals = build.talentTotals})
+    end
+    function SurvivorAugments.SetTalents(build, choices, hero)
+        local selected, totals, changed = {}, {all = {}}, false
+        for tier, id in pairs(choices) do
+            assert(type(tier) == "number" and tier % 1 == 0 and SurvivorConfig.talents.tiers[tier], "Invalid talent tier")
+            local entry
+            for _, candidate in ipairs(SurvivorConfig.talents.tiers[tier]) do if candidate.id == id then entry = candidate end end
+            assert(entry, "Invalid talent choice")
+            selected[tier] = id
+            for key, value in pairs(entry.bonuses) do totals.all[key] = (totals.all[key] or 0) + value end
+            if not build.talentChoices or build.talentChoices[tier] ~= id then changed = true end
+        end
+        for tier in pairs(build.talentChoices or {}) do if not selected[tier] then changed = true end end
+        if not changed then return false end
+        build.talentChoices, build.talentTotals = selected, totals
+        SurvivorAugments.Recalculate(build, hero)
+        return true
     end
     function SurvivorAugments.NewBuild(startingWeapon, startingTrinket)
         assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= 5, "Growth tables support levels 1..5")
@@ -511,25 +529,23 @@ do
     function SurvivorAugments.Preview(id, build)
         if id == "recovery" then return "생명력 30% 회복\n무기·장신구 슬롯을 사용하지 않습니다." end
         local entry = catalog[id]
-        if entry.kind == "evolution" then return "추가 슬롯·장신구 조건 없음\n무기별 한 번 선택 · 변경 불가" end
+        if entry.kind == "evolution" then return "진화 선택 후 변경 불가" end
         if id == "multicast" then
             local level = SurvivorAugments.Level(build, id) + 1
             return Delta("추가 공격", build.stats.multiCount, multiCounts[level]) .. "\n"
                 .. Delta("추가 공격 피해", build.stats.multiDamage * 100, multiDamage[level] * 100, 0, "%")
-                .. "\n기본 공격의 피해는 유지됩니다."
         end
         if id == "haste" then
             local level = SurvivorAugments.Level(build, id)
-            return Delta(entry.statName, (1 - 1 / (1 + level * entry.amount)) * 100,
-                (1 - 1 / (1 + (level + 1) * entry.amount)) * 100, 1, "%")
-                .. "\n장신구 단독 기준 · 모든 무기에 적용"
+            return Delta(entry.statName, (1 / (1 + level * entry.amount) - 1) * 100,
+                (1 / (1 + (level + 1) * entry.amount) - 1) * 100, 1, "%")
         end
         if entry.kind == "trinket" then
             local amount = entry.amount * (entry.unit and 1 or 100)
             local before = SurvivorAugments.Level(build, id) * amount
             return Delta(entry.statName, before, before + amount, 0, entry.unit or "%")
                 .. (id == "velocity" and not SurvivorAugments.HasProjectileWeapon(build)
-                    and "\n|cffffcc00현재 적용 무기 없음 · 투사체 무기 획득 후 적용|r" or "")
+                    and "\n|cffffcc00현재 적용 무기 없음|r" or "")
         end
         local preview = {levels = {}, equipmentBonuses = build.equipmentBonuses, evolutions = build.evolutions}
         for key, value in pairs(build.levels) do preview.levels[key] = value end
@@ -550,10 +566,10 @@ do
                 .. Delta("지속", old.zoneDuration, new.zoneDuration, 1, "초")
         elseif id == "chainlightning" then
             return Delta("첫 피해", old.chainDamage, new.chainDamage, 1) .. "\n"
-                .. Delta("최대 대상", old.chainTargets, new.chainTargets) .. "\n같은 적에게 다시 튀지 않습니다."
+                .. Delta("최대 대상", old.chainTargets, new.chainTargets) .. "\n대상별 1회 타격"
         elseif id == "orbitblade" then
             return Delta("피해", old.bladeDamage, new.bladeDamage, 1) .. "\n"
-                .. Delta("칼날 수", old.bladeCount, new.bladeCount) .. "\n영웅을 따라 이동합니다."
+                .. Delta("칼날 수", old.bladeCount, new.bladeCount) .. "\n영웅과 함께 이동"
         elseif id == "monsoon" then
             return Delta("피해", old.monsoonDamage, new.monsoonDamage, 1) .. "\n"
                 .. Delta("낙뢰 수", old.monsoonCount, new.monsoonCount)

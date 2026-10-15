@@ -3,7 +3,7 @@
 -- UI visibility is local, so only synchronized transitions change simulation state.
 SurvivorInventoryPause = {}
 do
-    local frameNames = {"SimpleEquipmentInventoryPanel", "SimpleEquipmentPanel", "SimpleTalentsPanel"}
+    local frameNames = {"SimpleEquipmentInventoryPanel", "SimpleEquipmentPanel", "SimpleTalentsPanel", "SimpleStatDetailsPanel"}
     local frames = {}
     local timer, syncTrigger
     local generation, sentSequence, receivedSequence = 0, 0, 0
@@ -15,7 +15,7 @@ do
         return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
     end
     local function ReadLocalPanels()
-        local open, found = false, 0
+        local open, found, bagOpen, detailsOpen = false, 0, false, false
         for _, name in ipairs(frameNames) do
             -- Some client frames are created lazily on their first opening.
             local frame = frames[name]
@@ -26,10 +26,13 @@ do
             end
             if ValidFrame(frame) then
                 found = found + 1
-                if BlzFrameIsVisible(frame) then open = true end
+                if BlzFrameIsVisible(frame) then
+                    open = true
+                    if name == "SimpleStatDetailsPanel" or name == "SimpleTalentsPanel" then detailsOpen = true else bagOpen = true end
+                end
             end
         end
-        return open, found
+        return open, found, bagOpen, detailsOpen
     end
     local function Tick()
         local state = RunSession.GetState()
@@ -51,9 +54,9 @@ do
         -- The local renderer receives this revision instead of observing again.
         if revision == nil and SurvivorEquipment.UIRevision then revision = SurvivorEquipment.UIRevision() end
         if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
-            local open = ReadLocalPanels()
+            local open, _, bagOpen, detailsOpen = ReadLocalPanels()
             SurvivorUI.SetRestInventoryVisible(open)
-            SurvivorLootUI.SetInventoryVisible(open, revision)
+            SurvivorLootUI.SetInventoryVisible(bagOpen and not detailsOpen, revision, detailsOpen)
             if open ~= lastSentOpen then
                 sentSequence = sentSequence + 1
                 if BlzSendSyncData(prefix, generation .. ":" .. sentSequence .. ":" .. (open and "1" or "0")) then
@@ -86,13 +89,13 @@ do
             local ok, message = pcall(function()
                 -- Apply any last native gear transaction before resuming attacks.
                 SurvivorEquipment.Reconcile()
+                SurvivorNativeLoadout.Refresh() -- Apply the last native talent selection before resuming combat.
                 RunSession.SetInventoryOpen(value == "1")
                 -- Interrupt on the synchronized open event even if the bag closes
                 -- again before the preparation countdown's next timer tick.
                 if value == "1" and SurvivorUI.InterruptCombatPreparation then
                     SurvivorUI.InterruptCombatPreparation()
                 end
-                SurvivorNativeLoadout.Refresh()
             end)
             if not ok then RunSession.Fail(message) end
         end)
