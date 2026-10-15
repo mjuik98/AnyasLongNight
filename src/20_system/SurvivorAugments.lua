@@ -155,7 +155,7 @@ do
             local value = row[2]
             if type(value) == "string" or value > 0 then
                 if type(value) ~= "string" then value = StatNumber(value, row[3] or 0) .. (row[4] or "") end
-                lines[#lines + 1] = "|cffb0b0b0" .. row[1] .. ":|r " .. value
+                lines[#lines + 1] = "|cffffcc00" .. row[1] .. ":|r " .. value
             end
         end
     end

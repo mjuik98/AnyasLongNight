@@ -2383,7 +2383,7 @@ STRING 398
 STRING 399
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-추적 투사체|n|cffb0b0b0투사체 수:|r 1|n|cffb0b0b0피해:|r 40 (지상·공중)|n|cffb0b0b0거리:|r 1000|n|cffb0b0b0범위:|r 32|n|cffb0b0b0지속 시간:|r 5초|n|cffb0b0b0쿨다운:|r 0.8초|n|cffb0b0b0투사체 속도:|r 850
+추적 투사체|n|cffffcc00투사체 수:|r 1|n|cffffcc00피해:|r 40 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 400
@@ -2395,7 +2395,7 @@ STRING 400
 STRING 401
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-추적 투사체|n|cffb0b0b0투사체 수:|r 1|n|cffb0b0b0피해:|r 50 (지상·공중)|n|cffb0b0b0거리:|r 1000|n|cffb0b0b0범위:|r 32|n|cffb0b0b0지속 시간:|r 5초|n|cffb0b0b0쿨다운:|r 0.8초|n|cffb0b0b0투사체 속도:|r 850
+추적 투사체|n|cffffcc00투사체 수:|r 1|n|cffffcc00피해:|r 50 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 402
@@ -2407,7 +2407,7 @@ STRING 402
 STRING 403
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-추적 투사체|n|cffb0b0b0투사체 수:|r 2|n|cffb0b0b0피해:|r 60 (지상·공중)|n|cffb0b0b0거리:|r 1000|n|cffb0b0b0범위:|r 32|n|cffb0b0b0지속 시간:|r 5초|n|cffb0b0b0쿨다운:|r 0.8초|n|cffb0b0b0투사체 속도:|r 850
+추적 투사체|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 60 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 404
@@ -2419,7 +2419,7 @@ STRING 404
 STRING 405
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-추적 투사체|n|cffb0b0b0투사체 수:|r 2|n|cffb0b0b0피해:|r 75 (지상·공중)|n|cffb0b0b0거리:|r 1000|n|cffb0b0b0범위:|r 32|n|cffb0b0b0지속 시간:|r 5초|n|cffb0b0b0쿨다운:|r 0.8초|n|cffb0b0b0투사체 속도:|r 850
+추적 투사체|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 75 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 406
@@ -2431,7 +2431,7 @@ STRING 406
 STRING 407
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-추적 투사체|n|cffb0b0b0투사체 수:|r 3|n|cffb0b0b0피해:|r 90 (지상·공중)|n|cffb0b0b0거리:|r 1000|n|cffb0b0b0범위:|r 32|n|cffb0b0b0지속 시간:|r 5초|n|cffb0b0b0쿨다운:|r 0.8초|n|cffb0b0b0투사체 속도:|r 850
+추적 투사체|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 90 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 408
@@ -2449,7 +2449,7 @@ STRING 409
 STRING 410
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-발밑 장판|n|cffb0b0b0피해:|r 12 (지상)|n|cffb0b0b0범위:|r 230|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 4초|n|cffb0b0b0타격 간격:|r 0.5초
+발밑 장판|n|cffffcc00피해:|r 12 (지상)|n|cffffcc00범위:|r 230|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 411
@@ -2461,7 +2461,7 @@ STRING 411
 STRING 412
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-발밑 장판|n|cffb0b0b0피해:|r 15.6 (지상)|n|cffb0b0b0범위:|r 230|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 4초|n|cffb0b0b0타격 간격:|r 0.5초
+발밑 장판|n|cffffcc00피해:|r 15.6 (지상)|n|cffffcc00범위:|r 230|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 413
@@ -2473,7 +2473,7 @@ STRING 413
 STRING 414
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-발밑 장판|n|cffb0b0b0피해:|r 19.2 (지상)|n|cffb0b0b0범위:|r 265|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 4초|n|cffb0b0b0타격 간격:|r 0.5초
+발밑 장판|n|cffffcc00피해:|r 19.2 (지상)|n|cffffcc00범위:|r 265|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 415
@@ -2485,7 +2485,7 @@ STRING 415
 STRING 416
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-발밑 장판|n|cffb0b0b0피해:|r 24 (지상)|n|cffb0b0b0범위:|r 265|n|cffb0b0b0지속 시간:|r 4초|n|cffb0b0b0쿨다운:|r 4초|n|cffb0b0b0타격 간격:|r 0.5초
+발밑 장판|n|cffffcc00피해:|r 24 (지상)|n|cffffcc00범위:|r 265|n|cffffcc00지속 시간:|r 4초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 417
@@ -2497,7 +2497,7 @@ STRING 417
 STRING 418
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-발밑 장판|n|cffb0b0b0피해:|r 30 (지상)|n|cffb0b0b0범위:|r 299|n|cffb0b0b0지속 시간:|r 4초|n|cffb0b0b0쿨다운:|r 4초|n|cffb0b0b0타격 간격:|r 0.5초
+발밑 장판|n|cffffcc00피해:|r 30 (지상)|n|cffffcc00범위:|r 299|n|cffffcc00지속 시간:|r 4초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 419
@@ -2515,7 +2515,7 @@ STRING 420
 STRING 421
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-연쇄 공격|n|cffb0b0b0최대 대상:|r 3|n|cffb0b0b0피해:|r 45 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0쿨다운:|r 2.2초|n|cffb0b0b0연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+연쇄 공격|n|cffffcc00최대 대상:|r 3|n|cffffcc00피해:|r 45 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 422
@@ -2527,7 +2527,7 @@ STRING 422
 STRING 423
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-연쇄 공격|n|cffb0b0b0최대 대상:|r 4|n|cffb0b0b0피해:|r 58.5 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0쿨다운:|r 2.2초|n|cffb0b0b0연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+연쇄 공격|n|cffffcc00최대 대상:|r 4|n|cffffcc00피해:|r 58.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 424
@@ -2539,7 +2539,7 @@ STRING 424
 STRING 425
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-연쇄 공격|n|cffb0b0b0최대 대상:|r 5|n|cffb0b0b0피해:|r 72 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0쿨다운:|r 2.2초|n|cffb0b0b0연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+연쇄 공격|n|cffffcc00최대 대상:|r 5|n|cffffcc00피해:|r 72 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 426
@@ -2551,7 +2551,7 @@ STRING 426
 STRING 427
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-연쇄 공격|n|cffb0b0b0최대 대상:|r 6|n|cffb0b0b0피해:|r 85.5 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0쿨다운:|r 2.2초|n|cffb0b0b0연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+연쇄 공격|n|cffffcc00최대 대상:|r 6|n|cffffcc00피해:|r 85.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 428
@@ -2563,7 +2563,7 @@ STRING 428
 STRING 429
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-연쇄 공격|n|cffb0b0b0최대 대상:|r 7|n|cffb0b0b0피해:|r 103.5 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0쿨다운:|r 2.2초|n|cffb0b0b0연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+연쇄 공격|n|cffffcc00최대 대상:|r 7|n|cffffcc00피해:|r 103.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 430
@@ -2581,7 +2581,7 @@ STRING 431
 STRING 432
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-회전 칼날|n|cffb0b0b0투사체 수:|r 2|n|cffb0b0b0피해:|r 30 (지상)|n|cffb0b0b0범위:|r 180|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 5초|n|cffb0b0b0타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+회전 칼날|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 30 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 433
@@ -2593,7 +2593,7 @@ STRING 433
 STRING 434
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-회전 칼날|n|cffb0b0b0투사체 수:|r 2|n|cffb0b0b0피해:|r 39 (지상)|n|cffb0b0b0범위:|r 180|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 5초|n|cffb0b0b0타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+회전 칼날|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 39 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 435
@@ -2605,7 +2605,7 @@ STRING 435
 STRING 436
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-회전 칼날|n|cffb0b0b0투사체 수:|r 3|n|cffb0b0b0피해:|r 48 (지상)|n|cffb0b0b0범위:|r 180|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 5초|n|cffb0b0b0타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+회전 칼날|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 48 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 437
@@ -2617,7 +2617,7 @@ STRING 437
 STRING 438
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-회전 칼날|n|cffb0b0b0투사체 수:|r 3|n|cffb0b0b0피해:|r 60 (지상)|n|cffb0b0b0범위:|r 180|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 5초|n|cffb0b0b0타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+회전 칼날|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 60 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 439
@@ -2629,7 +2629,7 @@ STRING 439
 STRING 440
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-회전 칼날|n|cffb0b0b0투사체 수:|r 4|n|cffb0b0b0피해:|r 75 (지상)|n|cffb0b0b0범위:|r 180|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 5초|n|cffb0b0b0타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+회전 칼날|n|cffffcc00투사체 수:|r 4|n|cffffcc00피해:|r 75 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 441
@@ -2647,7 +2647,7 @@ STRING 442
 STRING 443
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-낙뢰|n|cffb0b0b0낙뢰 수:|r 1|n|cffb0b0b0피해:|r 55 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 150|n|cffb0b0b0쿨다운:|r 3.2초
+낙뢰|n|cffffcc00낙뢰 수:|r 1|n|cffffcc00피해:|r 55 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 444
@@ -2659,7 +2659,7 @@ STRING 444
 STRING 445
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-낙뢰|n|cffb0b0b0낙뢰 수:|r 1|n|cffb0b0b0피해:|r 71.5 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 150|n|cffb0b0b0쿨다운:|r 3.2초
+낙뢰|n|cffffcc00낙뢰 수:|r 1|n|cffffcc00피해:|r 71.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 446
@@ -2671,7 +2671,7 @@ STRING 446
 STRING 447
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-낙뢰|n|cffb0b0b0낙뢰 수:|r 2|n|cffb0b0b0피해:|r 88 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 150|n|cffb0b0b0쿨다운:|r 3.2초
+낙뢰|n|cffffcc00낙뢰 수:|r 2|n|cffffcc00피해:|r 88 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 448
@@ -2683,7 +2683,7 @@ STRING 448
 STRING 449
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-낙뢰|n|cffb0b0b0낙뢰 수:|r 2|n|cffb0b0b0피해:|r 104.5 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 150|n|cffb0b0b0쿨다운:|r 3.2초
+낙뢰|n|cffffcc00낙뢰 수:|r 2|n|cffffcc00피해:|r 104.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 450
@@ -2695,7 +2695,7 @@ STRING 450
 STRING 451
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-낙뢰|n|cffb0b0b0낙뢰 수:|r 3|n|cffb0b0b0피해:|r 126.5 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 150|n|cffb0b0b0쿨다운:|r 3.2초
+낙뢰|n|cffffcc00낙뢰 수:|r 3|n|cffffcc00피해:|r 126.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 452
@@ -2713,7 +2713,7 @@ STRING 453
 STRING 454
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-전방 부채꼴|n|cffb0b0b0피해:|r 65 (지상)|n|cffb0b0b0거리:|r 320|n|cffb0b0b0쿨다운:|r 1.8초|n|cffb0b0b0각도:|r 100도|n※ 대상별 1회 타격
+전방 부채꼴|n|cffffcc00피해:|r 65 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 100도|n※ 대상별 1회 타격
 }
 
 STRING 455
@@ -2725,7 +2725,7 @@ STRING 455
 STRING 456
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-전방 부채꼴|n|cffb0b0b0피해:|r 84.5 (지상)|n|cffb0b0b0거리:|r 320|n|cffb0b0b0쿨다운:|r 1.8초|n|cffb0b0b0각도:|r 110도|n※ 대상별 1회 타격
+전방 부채꼴|n|cffffcc00피해:|r 84.5 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 110도|n※ 대상별 1회 타격
 }
 
 STRING 457
@@ -2737,7 +2737,7 @@ STRING 457
 STRING 458
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-전방 부채꼴|n|cffb0b0b0피해:|r 104 (지상)|n|cffb0b0b0거리:|r 320|n|cffb0b0b0쿨다운:|r 1.8초|n|cffb0b0b0각도:|r 120도|n※ 대상별 1회 타격
+전방 부채꼴|n|cffffcc00피해:|r 104 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 120도|n※ 대상별 1회 타격
 }
 
 STRING 459
@@ -2749,7 +2749,7 @@ STRING 459
 STRING 460
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-전방 부채꼴|n|cffb0b0b0피해:|r 130 (지상)|n|cffb0b0b0거리:|r 320|n|cffb0b0b0쿨다운:|r 1.8초|n|cffb0b0b0각도:|r 130도|n※ 대상별 1회 타격
+전방 부채꼴|n|cffffcc00피해:|r 130 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 130도|n※ 대상별 1회 타격
 }
 
 STRING 461
@@ -2761,7 +2761,7 @@ STRING 461
 STRING 462
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-전방 부채꼴|n|cffb0b0b0피해:|r 162.5 (지상)|n|cffb0b0b0거리:|r 320|n|cffb0b0b0쿨다운:|r 1.8초|n|cffb0b0b0각도:|r 140도|n※ 대상별 1회 타격
+전방 부채꼴|n|cffffcc00피해:|r 162.5 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 140도|n※ 대상별 1회 타격
 }
 
 STRING 463
@@ -2779,7 +2779,7 @@ STRING 464
 STRING 465
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-관통·둔화 투사체|n|cffb0b0b0최대 관통:|r 2|n|cffb0b0b0피해:|r 30 (지상·공중)|n|cffb0b0b0거리:|r 900|n|cffb0b0b0범위:|r 45|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 1.6초|n|cffb0b0b0투사체 속도:|r 650|n|cffb0b0b0둔화:|r -30% · 2초
+관통·둔화 투사체|n|cffffcc00최대 관통:|r 2|n|cffffcc00피해:|r 30 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 466
@@ -2791,7 +2791,7 @@ STRING 466
 STRING 467
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-관통·둔화 투사체|n|cffb0b0b0최대 관통:|r 3|n|cffb0b0b0피해:|r 39 (지상·공중)|n|cffb0b0b0거리:|r 900|n|cffb0b0b0범위:|r 45|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 1.6초|n|cffb0b0b0투사체 속도:|r 650|n|cffb0b0b0둔화:|r -30% · 2초
+관통·둔화 투사체|n|cffffcc00최대 관통:|r 3|n|cffffcc00피해:|r 39 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 468
@@ -2803,7 +2803,7 @@ STRING 468
 STRING 469
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-관통·둔화 투사체|n|cffb0b0b0최대 관통:|r 3|n|cffb0b0b0피해:|r 48 (지상·공중)|n|cffb0b0b0거리:|r 900|n|cffb0b0b0범위:|r 45|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 1.6초|n|cffb0b0b0투사체 속도:|r 650|n|cffb0b0b0둔화:|r -30% · 2초
+관통·둔화 투사체|n|cffffcc00최대 관통:|r 3|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 470
@@ -2815,7 +2815,7 @@ STRING 470
 STRING 471
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-관통·둔화 투사체|n|cffb0b0b0최대 관통:|r 4|n|cffb0b0b0피해:|r 60 (지상·공중)|n|cffb0b0b0거리:|r 900|n|cffb0b0b0범위:|r 45|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 1.6초|n|cffb0b0b0투사체 속도:|r 650|n|cffb0b0b0둔화:|r -30% · 2초
+관통·둔화 투사체|n|cffffcc00최대 관통:|r 4|n|cffffcc00피해:|r 60 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 472
@@ -2827,7 +2827,7 @@ STRING 472
 STRING 473
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-관통·둔화 투사체|n|cffb0b0b0최대 관통:|r 5|n|cffb0b0b0피해:|r 75 (지상·공중)|n|cffb0b0b0거리:|r 900|n|cffb0b0b0범위:|r 45|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 1.6초|n|cffb0b0b0투사체 속도:|r 650|n|cffb0b0b0둔화:|r -30% · 2초
+관통·둔화 투사체|n|cffffcc00최대 관통:|r 5|n|cffffcc00피해:|r 75 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 474
@@ -2845,7 +2845,7 @@ STRING 475
 STRING 476
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-무작위 적 위치에 냉기 폭발·둔화|n|cffb0b0b0피해:|r 38 (지상·공중)|n|cffb0b0b0거리:|r 280|n|cffb0b0b0범위:|r 280|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 4초
+무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 38 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 477
@@ -2857,7 +2857,7 @@ STRING 477
 STRING 478
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-무작위 적 위치에 냉기 폭발·둔화|n|cffb0b0b0피해:|r 51.3 (지상·공중)|n|cffb0b0b0거리:|r 280|n|cffb0b0b0범위:|r 280|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 4초
+무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 51.3 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 479
@@ -2869,7 +2869,7 @@ STRING 479
 STRING 480
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-무작위 적 위치에 냉기 폭발·둔화|n|cffb0b0b0피해:|r 64.6 (지상·공중)|n|cffb0b0b0거리:|r 280|n|cffb0b0b0범위:|r 280|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 4초
+무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 64.6 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 481
@@ -2881,7 +2881,7 @@ STRING 481
 STRING 482
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-무작위 적 위치에 냉기 폭발·둔화|n|cffb0b0b0피해:|r 77.9 (지상·공중)|n|cffb0b0b0거리:|r 280|n|cffb0b0b0범위:|r 280|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 4초
+무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 77.9 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 483
@@ -2893,7 +2893,7 @@ STRING 483
 STRING 484
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-무작위 적 위치에 냉기 폭발·둔화|n|cffb0b0b0피해:|r 91.2 (지상·공중)|n|cffb0b0b0거리:|r 280|n|cffb0b0b0범위:|r 280|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 4초
+무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 91.2 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 485
@@ -2911,7 +2911,7 @@ STRING 486
 STRING 487
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 눈보라·둔화|n|cffb0b0b0피해:|r 20 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0범위:|r 240|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 6초
+적 위치에 눈보라·둔화|n|cffffcc00피해:|r 20 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 488
@@ -2923,7 +2923,7 @@ STRING 488
 STRING 489
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 눈보라·둔화|n|cffb0b0b0피해:|r 27 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0범위:|r 240|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 6초
+적 위치에 눈보라·둔화|n|cffffcc00피해:|r 27 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 490
@@ -2935,7 +2935,7 @@ STRING 490
 STRING 491
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 눈보라·둔화|n|cffb0b0b0피해:|r 34 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0범위:|r 240|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 6초
+적 위치에 눈보라·둔화|n|cffffcc00피해:|r 34 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 492
@@ -2947,7 +2947,7 @@ STRING 492
 STRING 493
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 눈보라·둔화|n|cffb0b0b0피해:|r 41 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0범위:|r 240|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 6초
+적 위치에 눈보라·둔화|n|cffffcc00피해:|r 41 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 494
@@ -2959,7 +2959,7 @@ STRING 494
 STRING 495
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 눈보라·둔화|n|cffb0b0b0피해:|r 48 (지상·공중)|n|cffb0b0b0거리:|r 750|n|cffb0b0b0범위:|r 240|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 6초
+적 위치에 눈보라·둔화|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 496
@@ -2977,7 +2977,7 @@ STRING 497
 STRING 498
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 운석·잔불|n|cffb0b0b0피해:|r 110 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 220|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+적 위치에 운석·잔불|n|cffffcc00피해:|r 110 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
 }
 
 STRING 499
@@ -2989,7 +2989,7 @@ STRING 499
 STRING 500
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 운석·잔불|n|cffb0b0b0피해:|r 148.5 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 220|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+적 위치에 운석·잔불|n|cffffcc00피해:|r 148.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
 }
 
 STRING 501
@@ -3001,7 +3001,7 @@ STRING 501
 STRING 502
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 운석·잔불|n|cffb0b0b0피해:|r 187 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 220|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+적 위치에 운석·잔불|n|cffffcc00피해:|r 187 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
 }
 
 STRING 503
@@ -3013,7 +3013,7 @@ STRING 503
 STRING 504
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 운석·잔불|n|cffb0b0b0피해:|r 225.5 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 220|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+적 위치에 운석·잔불|n|cffffcc00피해:|r 225.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
 }
 
 STRING 505
@@ -3025,7 +3025,7 @@ STRING 505
 STRING 506
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-적 위치에 운석·잔불|n|cffb0b0b0피해:|r 264 (지상·공중)|n|cffb0b0b0거리:|r 800|n|cffb0b0b0범위:|r 220|n|cffb0b0b0지속 시간:|r 2초|n|cffb0b0b0쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+적 위치에 운석·잔불|n|cffffcc00피해:|r 264 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
 }
 
 STRING 507
@@ -3043,7 +3043,7 @@ STRING 508
 STRING 509
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-전진 후 머무는 지속 타격 구체|n|cffb0b0b0피해:|r 20 (지상·공중)|n|cffb0b0b0거리:|r 850|n|cffb0b0b0범위:|r 150|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 3초
+전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 20 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
 }
 
 STRING 510
@@ -3055,7 +3055,7 @@ STRING 510
 STRING 511
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-전진 후 머무는 지속 타격 구체|n|cffb0b0b0피해:|r 27 (지상·공중)|n|cffb0b0b0거리:|r 850|n|cffb0b0b0범위:|r 150|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 3초
+전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 27 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
 }
 
 STRING 512
@@ -3067,7 +3067,7 @@ STRING 512
 STRING 513
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-전진 후 머무는 지속 타격 구체|n|cffb0b0b0피해:|r 34 (지상·공중)|n|cffb0b0b0거리:|r 850|n|cffb0b0b0범위:|r 150|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 3초
+전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 34 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
 }
 
 STRING 514
@@ -3079,7 +3079,7 @@ STRING 514
 STRING 515
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-전진 후 머무는 지속 타격 구체|n|cffb0b0b0피해:|r 41 (지상·공중)|n|cffb0b0b0거리:|r 850|n|cffb0b0b0범위:|r 150|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 3초
+전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 41 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
 }
 
 STRING 516
@@ -3091,7 +3091,7 @@ STRING 516
 STRING 517
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-전진 후 머무는 지속 타격 구체|n|cffb0b0b0피해:|r 48 (지상·공중)|n|cffb0b0b0거리:|r 850|n|cffb0b0b0범위:|r 150|n|cffb0b0b0지속 시간:|r 2.5초|n|cffb0b0b0쿨다운:|r 3초
+전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
 }
 
 STRING 518
@@ -3109,7 +3109,7 @@ STRING 519
 STRING 520
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-왕복 칼날 · 구간별 1회 타격|n|cffb0b0b0피해:|r 42 (지상)|n|cffb0b0b0거리:|r 650|n|cffb0b0b0범위:|r 60|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 42 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 521
@@ -3121,7 +3121,7 @@ STRING 521
 STRING 522
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-왕복 칼날 · 구간별 1회 타격|n|cffb0b0b0피해:|r 56.7 (지상)|n|cffb0b0b0거리:|r 650|n|cffb0b0b0범위:|r 60|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 56.7 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 523
@@ -3133,7 +3133,7 @@ STRING 523
 STRING 524
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-왕복 칼날 · 구간별 1회 타격|n|cffb0b0b0피해:|r 71.4 (지상)|n|cffb0b0b0거리:|r 650|n|cffb0b0b0범위:|r 60|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 71.4 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 525
@@ -3145,7 +3145,7 @@ STRING 525
 STRING 526
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-왕복 칼날 · 구간별 1회 타격|n|cffb0b0b0피해:|r 86.1 (지상)|n|cffb0b0b0거리:|r 650|n|cffb0b0b0범위:|r 60|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 86.1 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 527
@@ -3157,6 +3157,6 @@ STRING 527
 STRING 528
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-왕복 칼날 · 구간별 1회 타격|n|cffb0b0b0피해:|r 100.8 (지상)|n|cffb0b0b0거리:|r 650|n|cffb0b0b0범위:|r 60|n|cffb0b0b0지속 시간:|r 3초|n|cffb0b0b0쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 100.8 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
