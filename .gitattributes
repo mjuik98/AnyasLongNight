@@ -1,0 +1,2 @@
+# Keep archive game constants byte-identical across Windows and Unix checkouts.
+/assets/war3mapMisc.txt text eol=lf
