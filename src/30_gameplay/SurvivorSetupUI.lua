@@ -51,7 +51,7 @@ do
         SurvivorUI.ClearDamageBoard()
         BlzFrameSetVisible(root, true)
         BlzFrameSetVisible(shade, true)
-        BlzFrameSetAlpha(shade, 210)
+        BlzFrameSetAlpha(shade, 255)
     end
     local function RenderOptions()
         local pages = math.ceil(#entries / 6)
@@ -83,7 +83,7 @@ do
                 BlzFrameSetText(card.name, (id == selectedId and "|cff80ff80[선택됨] " or "|cffffcc00") .. entry.name .. "|r")
                 local text = entry.text
                 if category == "DIFFICULTY" then
-                    text = string.format("등장 %.0f%% · 체력 %.0f%% · 공격 %.0f%%\n공격속도 %.0f%% · 이동속도 %.0f%%",
+                    text = string.format("등장 %.0f%% · 생명력 %.0f%% · 공격력 %.0f%%\n공격 속도 %.0f%% · 이동 속도 %.0f%%",
                         entry.spawn * 100, entry.life * 100, entry.damage * 100, entry.attackSpeed * 100, entry.moveSpeed * 100)
                 elseif category == "TRINKET" then
                     -- Universal modifier only; never a single weapon-specific example.
@@ -100,8 +100,10 @@ do
         if parent == nil or parent == 0 or GetHandleId(parent) == 0 then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
         shade = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupShade", parent, "", 0)
         BlzFrameSetAbsPoint(shade, FRAMEPOINT_CENTER, 0.4, 0.3)
-        BlzFrameSetSize(shade, 1.6, 0.6)
-        BlzFrameSetTexture(shade, "UI\\Widgets\\ToolTips\\Human\\human-tooltip-background.blp", 0, true)
+        -- Cover the world at ultrawide ratios while leaving every setup control
+        -- above this disabled, opaque backdrop. Hide owns both frame siblings.
+        BlzFrameSetSize(shade, 2.4, 0.6)
+        BlzFrameSetTexture(shade, "HeroSurvivorUI\\Black.tga", 0, true)
         BlzFrameSetEnable(shade, false)
         BlzFrameSetLevel(shade, 10)
         root = BlzCreateFrameByType("FRAME", "HeroSurvivorSetupRoot", parent, "", 0)

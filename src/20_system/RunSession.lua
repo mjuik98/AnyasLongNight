@@ -9,6 +9,7 @@ do
     function RunSession.GetState() return state end
     function RunSession.GetElapsed() return elapsed end
     function RunSession.IsRunning() return state == "RUNNING" end
+    function RunSession.IsInventoryOpen() return inventoryOpen end
 
     function RunSession.Finish(reason)
         if state == "FINISHED" or state == "READY" then return false end

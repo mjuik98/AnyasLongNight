@@ -16,7 +16,7 @@ SurvivorConfig = {
         hard = {name = "어려움", spawn = 1.1, life = 1.60, damage = 1.60, attackSpeed = 1.25, moveSpeed = 1.10,
             text = "강인한 적과 빠른 공격을 상대하는 난이도", icon = [[ReplaceableTextures\CommandButtons\BTNInfernal.blp]]},
     },
-    spawnTimeRates = {1, 1.30, 1.65, 2.05},
+    spawnTimeRates = {1, 1.60, 2.40, 3.40},
     -- Combat minutes only; each newly spawned enemy keeps its creation-time stats.
     enemyTimeLife = {1, 1.12, 1.28, 1.48}, enemyTimeDamage = {1, 1.08, 1.16, 1.25},
     enemyTimeAttackSpeed = {1, 1.03, 1.06, 1.10}, enemyTimeMoveSpeed = {1, 1.02, 1.04, 1.06},
@@ -69,21 +69,21 @@ SurvivorConfig = {
     frostInterval = 1.6, frostDamage = 30, frostSpeed = 650, frostRange = 900,
     frostLifetime = 2.0, frostHitRadius = 45, frostSlow = 0.30, frostSlowDuration = 2.0,
     -- Per-stage multipliers are explicit so balancing does not change weapon rules.
-    stageLife = {1, 2.1, 3.6, 5.6, 8.0}, stageDamage = {1, 1.25, 1.5, 1.8, 2.1},
+    stageLife = {1, 2.6, 5.0, 8.5, 13.0}, stageDamage = {1, 1.25, 1.5, 1.8, 2.1},
     stageSpawnRates = {1, 1.35, 1.75, 2.2, 2.7}, stageXP = {1, 1.15, 1.3, 1.45, 1.6},
     stageAttackSpeed = {1, 1.04, 1.08, 1.12, 1.16}, stageMoveSpeed = {1, 1.025, 1.05, 1.075, 1.10},
-    stageBossLife = {1, 2.0, 3.3, 5.0, 7.0},
+    stageBossLife = {1, 2.5, 4.5, 7.5, 11.0},
     -- Compositions change encounter roles without introducing unverified rawcodes.
     encounters = {
         {name = "침묵의 묘역", ranged = 15, flying = 0, rangedStart = 45, flyingStart = 90,
             meleeSpeed = 1, meleeLife = 1, meleeName = "묘역 배회자", rangedName = "썩은 활잡이", flyingName = "묘역 가고일", bossName = "시체 수집자", pattern = "target"},
-        {name = "불타는 통로", ranged = 45, flying = 10, rangedStart = 15, flyingStart = 90,
+        {name = "불타는 보급로", ranged = 45, flying = 10, rangedStart = 15, flyingStart = 90,
             meleeSpeed = 1.15, meleeLife = 0.85, meleeName = "잿더미 구울", rangedName = "불씨 술사", flyingName = "잿빛 가고일", bossName = "불타는 도살자", pattern = "dash"},
-        {name = "서리 낀 폐허", ranged = 15, flying = 45, rangedStart = 20, flyingStart = 10,
+        {name = "서리 낀 납골당", ranged = 15, flying = 45, rangedStart = 20, flyingStart = 10,
             meleeSpeed = 1, meleeLife = 1, meleeName = "서리 망령", rangedName = "냉기 강령술사", flyingName = "서리날개 가고일", bossName = "납골당 파수꾼", pattern = "wave"},
-        {name = "망령의 포위망", ranged = 30, flying = 20, rangedStart = 10, flyingStart = 30,
+        {name = "폐허의 검문소", ranged = 30, flying = 20, rangedStart = 10, flyingStart = 30,
             meleeSpeed = 0.85, meleeLife = 1.6, meleeName = "해골 추적병", rangedName = "저주의 사수", flyingName = "비명 밴시", bossName = "추적대장", pattern = "cross"},
-        {name = "수색의 끝", ranged = 35, flying = 30, rangedStart = 0, flyingStart = 0,
+        {name = "지하로 가는 길", ranged = 35, flying = 30, rangedStart = 0, flyingStart = 0,
             meleeSpeed = 1.1, meleeLife = 1.2, meleeName = "사슬 근위병", rangedName = "지배의 강령술사", flyingName = "속박된 망령", bossName = "사슬의 감시자", pattern = "cycle"},
     },
     extraWeapons = {

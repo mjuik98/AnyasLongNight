@@ -75,7 +75,7 @@ do
         BlzFrameSetSize(panel, 0.28, 0.322)
         BlzFrameSetPoint(panel, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_BOTTOMLEFT, 0, -0.003)
         local label = Text(panel, "HSLootHelp", 0.258, 0.04, 0.011, -0.008)
-        BlzFrameSetText(label, "가방 장비 클릭: 보관 잠금 / 해제\n장착·잠금 장비는 삭제하지 않습니다")
+        BlzFrameSetText(label, "가방 장비 클릭: 보관 잠금 / 해제\n장착·잠금 장비는 삭제되지 않습니다.")
         BlzFrameSetScale(label, 0.85)
         for i = 1, 6 do
             local row = {}

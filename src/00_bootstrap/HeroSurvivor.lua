@@ -23,6 +23,7 @@ do
     local gearOffers
     local eventOffers
     local stageTransition, nextHazard = false, 35
+    local runSerial = 0
     local firstEvolution, peakEnemies, peakVisuals = nil, 0, 0
 
     local function RefreshDamageBoard()
@@ -74,6 +75,7 @@ do
         return ok, result
     end
     local function CleanupRun(errors)
+        runSerial = runSerial + 1 -- Invalidate preparation callbacks before native cleanup.
         Attempt(errors, "progression", ClearProgression)
         Attempt(errors, "hide UI", SurvivorUI.HidePanel)
         Attempt(errors, "story", SurvivorStory.Cleanup)
@@ -326,6 +328,48 @@ do
             SurvivorNativeLoadout.Refresh()
         end
     end
+    local function ShowStageIntroduction(startingWeapon, startingTrinket)
+        local expectedHero, expectedStage, expectedRun = hero, stage, runSerial
+        local prepared, resumed = false, false
+        local function SameTransition()
+            return not resumed and runSerial == expectedRun and hero == expectedHero and stage == expectedStage
+                and stageTransition and RunSession.GetState() == "STAGE_CLEAR"
+                and expectedHero ~= nil and GetUnitTypeId(expectedHero) ~= 0 and UnitAlive(expectedHero)
+        end
+        local function CanStart()
+            return SameTransition() and not RunSession.IsInventoryOpen()
+        end
+        SurvivorUI.ShowStageIntro(expectedStage, function()
+            if prepared or not SameTransition() then return end
+            prepared = true -- An old intro completion cannot replace a live preparation/countdown.
+            local difficulty = SurvivorConfig.difficulties[selectedDifficulty].name
+            local loadout
+            if startingWeapon then
+                loadout = "난이도: " .. difficulty .. "\n시작 무기: " .. SurvivorAugments.Get(startingWeapon).name
+                    .. "\n시작 장신구: " .. SurvivorAugments.Get(startingTrinket).name
+            else
+                loadout = string.format("난이도: %s · 안야 Lv.%d\n생명력 %.0f/%.0f · 무기 %d/%d · 장신구 %d/%d",
+                    difficulty, GetHeroLevel(expectedHero), GetWidgetLife(expectedHero), BlzGetUnitMaxHP(expectedHero),
+                    #build.weapons, SurvivorConfig.weaponSlots, #build.trinkets, SurvivorConfig.trinketSlots)
+            end
+            SurvivorUI.ShowCombatPreparation(expectedStage,
+                {record = SurvivorStory.PreparationNote(expectedStage), loadout = loadout}, function()
+                    if not CanStart() then return false end
+                    resumed = true
+                    stageTransition = false -- Consume once, only after the preparation countdown completes.
+                    if not RunSession.EndStageClear() or not RunSession.IsRunning() then return false end
+                    if startingWeapon then
+                        for _ = 1, 3 do SurvivorCombat.Spawn() end
+                        SurvivorCombat.CastWeapon(startingWeapon)
+                        SurvivorUI.Notify(SurvivorConfig.encounters[expectedStage].name)
+                    else
+                        SurvivorUI.Notify(SurvivorConfig.encounters[expectedStage].name .. " · 생명력 회복")
+                    end
+                    RefreshDamageBoard()
+                    return true
+                end, CanStart)
+        end, expectedHero)
+    end
     function HeroSurvivor.NextStage()
         if RunSession.GetState() ~= "STAGE_CLEAR" or stageTransition or gearOffers or stage >= SurvivorConfig.stages then return false end
         stageTransition, nextHazard = true, 35
@@ -340,16 +384,11 @@ do
         nextElite, bossStarted = SurvivorConfig.eliteInterval, false
         missileClock, zoneClock, chainClock, monsoonClock, slashClock, frostClock = 0, 0, 0, 0, 0, 0
         bladeClock, extraClocks, spawnBudget, enemyClock, hudClock = 0, {}, 0, 0, 0
-        SurvivorUI.ShowStageIntro(stage, function()
-            stageTransition = false
-            RunSession.EndStageClear()
-            RefreshDamageBoard()
-            SurvivorUI.Notify(
-                SurvivorConfig.encounters[stage].name .. " · 생명력 회복")
-        end, hero)
+        ShowStageIntroduction()
         return true
     end
     local function Start(startingWeapon, startingTrinket)
+        runSerial = runSerial + 1
         stageTransition, nextHazard = false, 35
         gearOffers = nil
         RunSession.Finish("restarted")
@@ -447,16 +486,7 @@ do
         end
         stageTransition = true
         RunSession.BeginStageClear()
-        SurvivorUI.ShowStageIntro(1, function()
-            stageTransition = false
-            RunSession.EndStageClear()
-            if RunSession.IsRunning() then
-                for _ = 1, 3 do SurvivorCombat.Spawn() end
-                SurvivorCombat.CastWeapon(startingWeapon)
-                SurvivorUI.Notify(SurvivorConfig.encounters[1].name)
-            end
-            RefreshDamageBoard()
-        end, hero)
+        ShowStageIntroduction(startingWeapon, startingTrinket)
         SurvivorNativeLoadout.Refresh()
     end
     local function CanSetup()

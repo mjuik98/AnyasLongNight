@@ -23,7 +23,7 @@ do
         {name = "수색대의 전령", action = "이동하는 전령을 추격해 처치", mode = "courier", count = 3,
             beats = {"지원을 요청하러 가던 전령이었군. 이 명령서는 더는 전해지지 않겠어."},
             advantage = "추적대장의 첫 지원병 호출 차단", insight = "명령서는 내 손에 있어. 첫 지원 요청은 전해지지 않을 거야.",
-            finding = "찢어진 지원 요청서에 ‘이탈자’와 ‘회수’라는 말이 남아 있었다. 이름은 없었다. 명령서는 전달되지 않았다.",
+            finding = "전령의 명령서에 ‘이탈자’와 ‘회수’라는 말이 남아 있었다. 이름은 없었다. 지원 요청은 전달되지 않았다.",
             reply = "저들에게는 회수할 물건일 뿐이겠지. 나는 그가 누구인지 직접 묻겠어.",
             relic = "수색대의 압수품", temptation = "봉인된 압수품에 감시의 마력이 남아 있다. 손을 대면 경보가 울릴 것이다."},
         {name = "끊어진 사슬", action = "봉인 세 곳에서 각각 누적 2초 해제", mode = "seals", count = 3, seconds = 2,
@@ -233,7 +233,7 @@ do
             lines[#lines + 1] = "|cffeb82f5위험: " .. chapter.relic .. "|r · " .. Locate(risk)
             lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, 180 - (RunSession.GetElapsed() - started))), stage <= 2 and "희귀 이상" or "영웅")
             lines[#lines + 1] = "수락 후 30초: 적 피해 +25% · 출현량 +35%"
-            lines[#lines + 1] = "장소를 벗어나도 도전은 유지됩니다."
+            lines[#lines + 1] = "장소를 벗어나도 도전은 계속됩니다."
         elseif SurvivorExpedition.RiskActive() then
             lines[#lines + 1] = string.format("|cffeb82f5봉인 경보 %d초|r · 적 피해 +25%% / 출현량 +35%%", math.ceil(math.max(0, risk.untilTime - RunSession.GetElapsed())))
         end
