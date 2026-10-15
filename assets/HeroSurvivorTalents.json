@@ -1,0 +1,38 @@
+{
+  "controller": "HsTL",
+  "base": "ATua",
+  "pointItem": "ttal",
+  "controllerText": "특성 포인트는 수색 준비에서 획득합니다.",
+  "interface": {
+    "title": "장비 · 특성 · 능력치",
+    "defaultText": "사용 가능 특성 포인트 · 남은 포인트 보관 가능|n전투 중 생명력 재생 · 정지 중 0",
+    "format": "사용 가능 특성 포인트: %d · 획득 %d/5|n%s|n전투 중 생명력 재생: 초당 %.2f · 정지 중 0"
+  },
+  "tiers": [
+    [
+      {"id":"Ht1A","name":"예리한 잿불","icon":"ReplaceableTextures\\CommandButtons\\BTNSearingArrows.blp","text":"모든 무기 피해 +12%","bonuses":{"damagePct":0.12}},
+      {"id":"Ht1B","name":"신속한 시위","icon":"ReplaceableTextures\\CommandButtons\\BTNGlove.blp","text":"모든 무기 쿨다운 -9.1%","bonuses":{"speedPct":0.10}},
+      {"id":"Ht1C","name":"굳센 맹세","icon":"ReplaceableTextures\\CommandButtons\\BTNPeriapt1.blp","text":"최대 생명력 +100","bonuses":{"maxLife":100}}
+    ],
+    [
+      {"id":"Ht2A","name":"확장된 사선","icon":"ReplaceableTextures\\CommandButtons\\BTNOrbOfFire.blp","text":"모든 무기 크기 +12%","bonuses":{"sizePct":0.12}},
+      {"id":"Ht2B","name":"길잡이의 시야","icon":"ReplaceableTextures\\CommandButtons\\BTNCrystalBall.blp","text":"모든 무기 사정거리 +12%","bonuses":{"rangePct":0.12}},
+      {"id":"Ht2C","name":"남겨진 잔향","icon":"ReplaceableTextures\\CommandButtons\\BTNAnkh.blp","text":"모든 무기 지속시간 +12%","bonuses":{"durationPct":0.12}}
+    ],
+    [
+      {"id":"Ht3A","name":"끈질긴 추격","icon":"ReplaceableTextures\\CommandButtons\\BTNSearingArrows.blp","text":"모든 무기 피해 +18%","bonuses":{"damagePct":0.18}},
+      {"id":"Ht3B","name":"흔들림 없는 사격","icon":"ReplaceableTextures\\CommandButtons\\BTNGlove.blp","text":"모든 무기 쿨다운 -13.0%","bonuses":{"speedPct":0.15}},
+      {"id":"Ht3C","name":"쓰러지지 않는 의지","icon":"ReplaceableTextures\\CommandButtons\\BTNPeriapt1.blp","text":"최대 생명력 +150","bonuses":{"maxLife":150}}
+    ],
+    [
+      {"id":"Ht4A","name":"넓게 뻗는 사선","icon":"ReplaceableTextures\\CommandButtons\\BTNOrbOfFire.blp","text":"모든 무기 크기 +18%","bonuses":{"sizePct":0.18}},
+      {"id":"Ht4B","name":"먼 흔적을 보는 눈","icon":"ReplaceableTextures\\CommandButtons\\BTNCrystalBall.blp","text":"모든 무기 사정거리 +15%","bonuses":{"rangePct":0.15}},
+      {"id":"Ht4C","name":"길게 남는 잔향","icon":"ReplaceableTextures\\CommandButtons\\BTNAnkh.blp","text":"모든 무기 지속시간 +15%","bonuses":{"durationPct":0.15}}
+    ],
+    [
+      {"id":"Ht5A","name":"새벽을 가르는 화살","icon":"ReplaceableTextures\\CommandButtons\\BTNSearingArrows.blp","text":"모든 무기 피해 +25%","bonuses":{"damagePct":0.25}},
+      {"id":"Ht5B","name":"긴 밤의 숙련","icon":"ReplaceableTextures\\CommandButtons\\BTNGlove.blp","text":"모든 무기 쿨다운 -16.7%","bonuses":{"speedPct":0.20}},
+      {"id":"Ht5C","name":"마지막 파수꾼","icon":"ReplaceableTextures\\CommandButtons\\BTNPeriapt1.blp","text":"최대 생명력 +200","bonuses":{"maxLife":200}}
+    ]
+  ]
+}

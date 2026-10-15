@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import luaparse from 'luaparse';
+import fengari from 'fengari';
 import {openMap} from './mpq.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -12,6 +13,92 @@ export const baseMapPath = path.join(root, 'AnyasLongNight.w3x');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const firstMarker = '-- HeroSurvivor Lua prototype. Import at map script scope before main().';
 const lastMarker = '-- ===== END src/00_bootstrap/HeroSurvivor.lua =====';
+export function loadTalentCatalog(snapshots = new Map()) {
+    const name = path.join(root, 'assets/HeroSurvivorTalents.json'), bytes = fs.readFileSync(name);
+    if (snapshots.has(name)) assert.deepEqual(snapshots.get(name), bytes, 'Talent catalog changed during preparation');
+    else snapshots.set(name, bytes);
+    const data = JSON.parse(bytes);
+    assert(data.controller === 'HsTL' && data.base === 'ATua' && data.pointItem === 'ttal');
+    assert(typeof data.controllerText === 'string' && data.controllerText.length > 0);
+    assert(data.interface && ['title','defaultText','format'].every(key=>typeof data.interface[key]==='string'&&data.interface[key].length>0));
+    assert(data.tiers.length === 5, 'The run grants five native talent points');
+    const ids = new Set([data.controller]);
+    const keys = new Set(['damagePct','speedPct','maxLife','moveSpeed','regeneration','sizePct','rangePct','durationPct']);
+    for (const tier of data.tiers) {
+        assert(tier.length === 3, 'Native talent tiers need exactly three choices');
+        for (const entry of tier) {
+            assert(/^Ht[1-5][ABC]$/.test(entry.id) && !ids.has(entry.id), 'Duplicate or invalid talent ID'); ids.add(entry.id);
+            assert(entry.name && entry.text && /^ReplaceableTextures\\CommandButtons\\\w+\.blp$/.test(entry.icon));
+            assert(Object.keys(entry.bonuses).length > 0);
+            for (const [key,value] of Object.entries(entry.bonuses)) assert(keys.has(key) && Number.isFinite(value) && value > 0);
+        }
+    }
+    return data;
+}
+export function talentLua(data) {
+    const literal = value => typeof value === 'string' ? JSON.stringify(value)
+        : typeof value === 'number' ? String(value)
+        : Array.isArray(value) ? '{' + value.map(literal).join(',') + '}'
+        : '{' + Object.entries(value).map(([key,item]) => '[' + JSON.stringify(key) + ']=' + literal(item)).join(',') + '}';
+    return 'HERO_SURVIVOR_TALENTS = ' + literal(data);
+}
+// Evaluate only pure catalog/description code. No Warcraft gameplay natives run.
+// Runtime descriptions, native object tooltips and editor strings share one source.
+export function loadItemTooltipCatalog(snapshots = new Map()) {
+    return loadRuntimeTooltipCatalog(snapshots,false);
+}
+export function loadWeaponTooltipCatalog(snapshots = new Map()) {
+    return loadRuntimeTooltipCatalog(snapshots,true);
+}
+function loadRuntimeTooltipCatalog(snapshots, weapons) {
+    const {lua,lauxlib,lualib,to_luastring,to_jsstring} = fengari;
+    const state = lauxlib.luaL_newstate(), catalog = new Map();
+    lualib.luaL_openlibs(state);
+    try {
+        lua.lua_pushjsfunction(state, current => {
+            const values = [1,2,3].map(index => to_jsstring(lua.lua_tostring(current,index)));
+            assert((weapons ? /^HsW[1-9ABC]:[1-5]$/ : /^H(?:sT[1-9A]|[seitabnchv]\d{2})$/).test(values[0]) && !catalog.has(values[0]));
+            catalog.set(values[0], {name:values[1],description:values[2].replaceAll('\n','|n')});
+            return 0;
+        });
+        lua.lua_setglobal(state,to_luastring('EmitItemTooltip'));
+        const chunks = [['catalog natives','function FourCC(value)return value end\nALICE_Config={MIN_INTERVAL=.02}'],
+            ['talents',talentLua(loadTalentCatalog(snapshots))]];
+        for (const name of ['src/00_bootstrap/SurvivorConfig.lua','src/20_system/SurvivorAugments.lua',
+            ...(weapons ? [] : ['src/20_system/SurvivorEquipment.lua'])]) {
+            const absolute = path.join(root,name), bytes = fs.readFileSync(absolute);
+            if(snapshots.has(absolute))assert.deepEqual(snapshots.get(absolute),bytes,'Tooltip source changed: '+name);
+            else snapshots.set(absolute,bytes);
+            chunks.push([name,bytes.toString('utf8')]);
+        }
+        chunks.push(['descriptions',weapons ? String.raw`
+local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC'}
+for id,raw in pairs(ids)do
+    local build=SurvivorAugments.NewBuild(id)
+    for level=1,5 do
+        build.levels[id]=level;SurvivorAugments.Recalculate(build)
+        local name=SurvivorAugments.Get(id).name..' · '..(level==5 and 'MAX' or 'Lv.'..level)
+        EmitItemTooltip(raw..':'..level,name,SurvivorAugments.OwnedTooltip(id,build))
+    end
+end
+` : String.raw`
+local ids={power='HsT1',haste='HsT2',reach='HsT3',velocity='HsT4',magnitude='HsT5',longevity='HsT6',multicast='HsT7',vitality='HsT8',renewal='HsT9',stride='HsTA'}
+for id,raw in pairs(ids)do
+    EmitItemTooltip(raw,SurvivorAugments.Get(id).name,SurvivorAugments.OwnedTooltip(id,SurvivorAugments.NewBuild('firebolt',id)))
+end
+for _,entry in ipairs(SurvivorEquipment.Catalog())do
+    EmitItemTooltip(entry.id,SurvivorEquipment.Name(entry.id),SurvivorEquipment.Describe(entry.id,{}))
+end
+`]);
+        for(const [label,source] of chunks) {
+            let status=lauxlib.luaL_loadbuffer(state,to_luastring(source),null,to_luastring(label));
+            if(status===lua.LUA_OK)status=lua.lua_pcall(state,0,0,0);
+            assert.equal(status,lua.LUA_OK,'Cannot generate item tooltips: '+(status===lua.LUA_OK?'':to_jsstring(lua.lua_tostring(state,-1))));
+        }
+        assert.equal(catalog.size,weapons ? 60 : 92,'Unexpected runtime tooltip catalog size');
+        return catalog;
+    } finally { lua.lua_close(state); }
+}
 export function collectSources({profile = 'playtest'} = {}) {
     assert(['development', 'playtest', 'release'].includes(profile), 'Invalid build profile');
     const orderPath = path.join(root, 'build/source-order.json');
@@ -21,7 +108,8 @@ export function collectSources({profile = 'playtest'} = {}) {
     assert.equal(order.at(-1), 'src/00_bootstrap/HeroSurvivor.lua');
     const snapshots = new Map([[orderPath, orderBytes]]);
     const chunks = [firstMarker, `HERO_SURVIVOR_PROFILE = "${profile}"`,
-        '-- Native objects/constants: assets/war3map.w3a, assets/war3map.w3t, assets/war3map.w3u, assets/war3mapMisc.txt.'];
+        '-- Native objects/constants: assets/war3map.w3a, assets/war3map.w3t, assets/war3map.w3u, assets/war3mapMisc.txt.',
+        talentLua(loadTalentCatalog(snapshots))];
     for (const name of order) {
         assert(/^src\/[\w/]+\.lua$/.test(name), 'Invalid source path: ' + name);
         const absolute = path.join(root, name), bytes = fs.readFileSync(absolute);
@@ -33,6 +121,37 @@ export function collectSources({profile = 'playtest'} = {}) {
     const bundle = chunks.join('\n');
     luaparse.parse(bundle, {luaVersion: '5.3'});
     return {bundle, snapshots, count: order.length, profile};
+}
+export function prepareUIResources(map, snapshots = new Map()) {
+    const name = 'HeroSurvivorUI\\Transparent.tga';
+    const asset = path.join(root, 'assets/war3mapImported/HeroSurvivorUI/Transparent.tga');
+    const bytes = fs.readFileSync(asset);
+    assert.equal(bytes.length, 18 + 8 * 8 * 4, 'Unexpected transparent UI texture size');
+    assert.equal(bytes[0], 0); assert.equal(bytes[1], 0); assert.equal(bytes[2], 2);
+    assert.equal(bytes.readUInt16LE(12), 8); assert.equal(bytes.readUInt16LE(14), 8);
+    assert.equal(bytes[16], 32); assert.equal(bytes[17] & 15, 8);
+    for (let i = 21; i < bytes.length; i += 4) assert.equal(bytes[i], 0, 'UI container texture must be fully transparent');
+    snapshots.set(asset, bytes);
+    const imports = map.read('war3map.imp');
+    assert(imports && imports.length >= 8 && imports.readUInt32LE(0) === 1, 'Invalid map import table');
+    const count = imports.readUInt32LE(4);
+    let p = 8, present = false;
+    for (let i = 0; i < count; i++) {
+        assert(p < imports.length, 'Truncated map import table');
+        const flag = imports[p++], end = imports.indexOf(0, p);
+        assert([5, 8, 10, 13].includes(flag) && end >= p, 'Invalid map import entry');
+        const entry = imports.toString('utf8', p, end);
+        const actual = flag === 10 || flag === 13 ? entry : 'war3mapImported\\' + entry;
+        if (actual.replaceAll('/', '\\').toLowerCase() === name.toLowerCase()) present = true;
+        p = end + 1;
+    }
+    assert.equal(p, imports.length, 'Trailing map import data');
+    let updated = imports;
+    if (!present) {
+        const header = Buffer.from(imports.subarray(0, 8)); header.writeUInt32LE(count + 1, 4);
+        updated = Buffer.concat([header, imports.subarray(8), Buffer.from([13]), Buffer.from(name + '\0')]);
+    }
+    return new Map([[name, bytes], ['war3map.imp', updated]]);
 }
 export function replaceBundle(script, bundle) {
     const first = script.indexOf(firstMarker), last = script.indexOf(lastMarker);
@@ -113,6 +232,258 @@ export function serializeObjectData(data) {
 }
 export const parseUnits = bytes => parseObjectData(bytes, 'unit');
 export const serializeUnits = data => serializeObjectData({...data, kind: 'unit'});
+export function installInterfaceTooltip(bytes,catalog) {
+    const data=parseObjectData(bytes,'ability');
+    assert.deepEqual(serializeObjectData(data),bytes,'Ability reader must round-trip losslessly');
+    assert(!data.tables[1].some(row=>row.newId==='ASpc'),'ASpc collides with a custom ability');
+    const matches=data.tables[0].filter(row=>row.oldId==='ASpc');assert(matches.length<=1,'Duplicate ASpc override');
+    let row=matches[0];
+    if(!row){row={oldId:'ASpc',newId:'\0\0\0\0',extra:data.version===3?[0]:[],fields:[]};data.tables[0].push(row);}
+    for(const [id,value]of [['atp1',catalog.interface.title],['aub1',catalog.interface.defaultText]]) {
+        const fields=row.fields.filter(field=>field.id===id&&field.level===1&&field.column===0);
+        assert(fields.length<=1,'Duplicate ASpc tooltip: '+id);
+        if(!fields.length){delete row.raw;row.fields.push({id,type:3,level:1,column:0,value,endId:'ASpc'});}
+        else {assert.equal(fields[0].type,3);if(fields[0].value!==value){delete row.raw;delete fields[0].raw;fields[0].value=value;}}
+    }
+    return serializeObjectData(data);
+}
+function prepareInterfaceTooltip(map,snapshots,preparedAssets=new Map()) {
+    const catalog=loadTalentCatalog(snapshots),entries=new Map(),assets=new Map();
+    for(const name of ['war3map.w3a','war3mapSkin.w3a']) {
+        const asset=path.join(root,'assets',name),source=fs.readFileSync(asset);
+        const output=installInterfaceTooltip(map.read(name),catalog);
+        const assetOutput=installInterfaceTooltip(preparedAssets.get(asset)??source,catalog);
+        assert.deepEqual(output,assetOutput,'ASpc tooltip assets diverge: '+name);
+        if(snapshots.has(asset))assert.deepEqual(snapshots.get(asset),source,'ASpc asset changed');else snapshots.set(asset,source);
+        entries.set(name,output);assets.set(asset,assetOutput);
+    }
+    return {entries,assets};
+}
+// WC3 3.0.0.24268 AbilityMetaData.slk: repeat=4, data=1 (DataA), not DataD.
+// AS01 = engine health regeneration, AS0F = native magic resistance.
+// Weapon modifiers remain Lua-owned; native attack speed/amplification would misreport them.
+export function installStatDetails(bytes, skin = false) {
+    const data = parseObjectData(bytes, 'ability');
+    assert.deepEqual(serializeObjectData(data), bytes, 'Ability reader must round-trip losslessly');
+    assert(!data.tables[1].some(row => row.newId === 'ASde'), 'ASde collides with a custom ability');
+    const rows = data.tables[0].filter(row => row.oldId === 'ASde');
+    assert(rows.length <= 1, 'Duplicate ASde ability overrides');
+    let row = rows[0];
+    if (skin && !row?.fields.some(field => field.id === 'Asdf')) return bytes;
+    if (!row) {
+        row = {oldId: 'ASde', newId: '\0\0\0\0', extra: data.version === 3 ? [0] : [], fields: []};
+        data.tables[0].push(row);
+    }
+    const fields = row.fields.filter(field => field.id === 'Asdf');
+    assert(fields.length <= 1, 'Duplicate ASde supported-stat fields');
+    let field = fields[0];
+    if (field) {
+        assert(field.type === 3 && field.level === 1 && [1,4].includes(field.column), 'Unexpected ASde supported-stat field layout');
+        if (field.value === 'AS01,AS0F' && field.column === 1) return bytes;
+        delete field.raw;
+        field.column = 1;
+        field.value = 'AS01,AS0F';
+    } else {
+        field = {id: 'Asdf', type: 3, level: 1, column: 1, value: 'AS01,AS0F', endId: 'ASde'};
+        row.fields.push(field);
+    }
+    delete row.raw;
+    return serializeObjectData(data);
+}
+export function prepareStatDetails(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const entries = new Map(), assets = new Map();
+    for (const [name, skin] of [['war3map.w3a', false], ['war3mapSkin.w3a', true]]) {
+        const bytes = map.read(name), assetPath = path.join(root, 'assets', name), source = fs.readFileSync(assetPath);
+        const output = installStatDetails(bytes, skin);
+        const assetOutput = installStatDetails(preparedAssets.get(assetPath) ?? source, skin);
+        assert.deepEqual(assetOutput, output, 'Asset and test map stat-details data diverge: ' + name);
+        if (snapshots.has(assetPath)) assert.deepEqual(source, snapshots.get(assetPath), 'Asset changed during preparation');
+        else snapshots.set(assetPath, source);
+        entries.set(name, output); assets.set(assetPath, assetOutput);
+    }
+    return {entries, assets};
+}
+export function installNativeTalents(bytes, skin, catalog) {
+    const data = parseObjectData(bytes, 'ability');
+    assert.deepEqual(serializeObjectData(data), bytes, 'Ability reader must round-trip losslessly');
+    const ensure = (id, base) => {
+        assert(!data.tables[0].some(row => row.oldId === id), 'Talent ID collides with a native override: ' + id);
+        const matches = data.tables[1].filter(row => row.newId === id);
+        assert(matches.length <= 1, 'Duplicate talent object: ' + id);
+        if (matches.length) {assert.equal(matches[0].oldId,base,'Talent base collision: '+id);return matches[0];}
+        const row = {oldId:base,newId:id,extra:data.version===3?[0]:[],fields:[]};
+        data.tables[1].push(row);return row;
+    };
+    const set = (row,id,type,value,level=0,column=0) => {
+        const matches = row.fields.filter(field => field.id===id && field.level===level && field.column===column);
+        assert(matches.length<=1,'Duplicate talent field: '+row.newId+'/'+id);
+        if (matches.length) {
+            const field=matches[0];assert.equal(field.type,type,'Talent field type collision: '+id);
+            if(field.value===value)return;
+            delete field.raw;field.value=value;
+        } else row.fields.push({id,type,level,column,value,endId:row.newId});
+        delete row.raw;
+    };
+    const controller=ensure(catalog.controller,catalog.base);
+    if (skin) {
+        set(controller,'anam',3,'긴 밤의 특성');
+        for(let level=1;level<=catalog.tiers.length;level++) {
+            set(controller,'atp1',3,'긴 밤의 특성 · '+level+'단계',level);
+        }
+    } else {
+        set(controller,'aher',0,0);set(controller,'alev',0,catalog.tiers.length);
+        // Metadata: aabi replaces BuffID for code ATal. repeat=4, data=0.
+        for(let i=0;i<catalog.tiers.length;i++)set(controller,'aabi',3,catalog.tiers[i].map(entry=>entry.id).join(','),i+1,0);
+    }
+    for(let level=1;level<=catalog.tiers.length;level++)set(controller,'aub1',3,catalog.controllerText,level);
+    for(let tier=0;tier<catalog.tiers.length;tier++)for(const entry of catalog.tiers[tier]) {
+        const row=ensure(entry.id,'Aamk');
+        if(skin) {
+            set(row,'anam',3,entry.name);set(row,'aart',3,entry.icon);
+            set(row,'abpx',0,0);set(row,'abpy',0,-11);
+            set(row,'atp1',3,entry.name,1);
+        } else {
+            set(row,'aher',0,0);set(row,'alev',0,1);
+            for(const [id,column]of [['Iagi',1],['Iint',2],['Istr',3]])set(row,id,0,0,1,column);
+        }
+        // Both readers resolve the same description, regardless of skin fallback.
+        set(row,'aub1',3,entry.text,1);
+    }
+    return serializeObjectData(data);
+}
+export function prepareNativeTalents(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const catalog=loadTalentCatalog(snapshots), entries=new Map(),assets=new Map();
+    for(const [name,skin]of [['war3map.w3a',false],['war3mapSkin.w3a',true]]) {
+        const asset=path.join(root,'assets',name),source=fs.readFileSync(asset);
+        const output=installNativeTalents(map.read(name),skin,catalog);
+        const assetOutput=installNativeTalents(preparedAssets.get(asset)??source,skin,catalog);
+        assert.deepEqual(output,assetOutput,'Asset and test map talents diverge: '+name);
+        if(snapshots.has(asset))assert.deepEqual(source,snapshots.get(asset),'Asset changed during preparation');
+        else snapshots.set(asset,source);
+        entries.set(name,output);assets.set(asset,assetOutput);
+    }
+    return {entries,assets};
+}
+export function cleanWeaponTooltipEntries(entries, catalog) {
+    assert.equal(catalog.size,60,'Expected twelve five-level weapons');
+    const output=new Map(entries),strings=stringTable(entries.get('war3map.wts'));
+    const skins=parseObjectData(entries.get('war3mapSkin.w3a'),'ability'),expectedStrings=new Map(),otherReferences=new Set();
+    for(const name of ['war3map.w3a','war3mapSkin.w3a']) {
+        const data=parseObjectData(entries.get(name),'ability');
+        const rows=data.tables[1].filter(row=>/^HsW[1-9ABC]$/.test(row.newId));
+        assert.equal(rows.length,12,'Missing native weapon objects in '+name);
+        for(const row of rows) {
+            assert.equal(row.oldId,'Aamk','Weapon base collision: '+row.newId);
+            const skin=skins.tables[1].find(value=>value.newId===row.newId&&value.oldId===row.oldId);
+            assert(skin,'Missing weapon skin: '+row.newId);
+            const setText=(id,level,expected)=>{
+                const sourceFields=skin.fields.filter(field=>field.id===id&&field.level===level&&field.column===0);
+                const fields=row.fields.filter(field=>field.id===id&&field.level===level&&field.column===0);
+                assert(sourceFields.length<=1&&fields.length<=1,'Duplicate weapon text: '+row.newId+'/'+id);
+                const value=sourceFields[0]?.value??expected;
+                assert(typeof value==='string'&&(!sourceFields.length||sourceFields[0].type===3));
+                const reference=value.match(/^TRIGSTR_(\d+)$/);
+                const text=reference?value:expected;
+                if(reference) {
+                    const key=Number(reference[1]);assert(strings.has(key),'Missing weapon string: '+key);
+                    assert(!expectedStrings.has(key)||expectedStrings.get(key)===expected,'Conflicting weapon string: '+key);
+                    expectedStrings.set(key,expected);
+                }
+                if(!fields.length) {
+                    delete row.raw;row.fields.push({id,type:3,level,column:0,value:text,endId:row.newId});
+                } else {
+                    assert.equal(fields[0].type,3);
+                    if(fields[0].value!==text){delete row.raw;delete fields[0].raw;fields[0].value=text;}
+                }
+            };
+            setText('anam',0,catalog.get(row.newId+':1').name.replace(/ · Lv\.1$/,''));
+            for(let level=1;level<=5;level++) {
+                const expected=catalog.get(row.newId+':'+level);assert(expected);
+                setText('atp1',level,expected.name);setText('aub1',level,expected.description);
+            }
+        }
+        for(const row of data.tables.flat())for(const field of row.fields) {
+            if(field.type!==3)continue;
+            const reference=field.value.match(/^TRIGSTR_(\d+)$/);
+            if(reference&&!(/^HsW[1-9ABC]$/.test(row.newId)&&['anam','atp1','aub1'].includes(field.id)))otherReferences.add(Number(reference[1]));
+        }
+        output.set(name,serializeObjectData(data));
+    }
+    for(const [id,text]of expectedStrings)assert(!otherReferences.has(id)||strings.get(id)===text,'Weapon text is shared with unrelated data: '+id);
+    const cleaned=Buffer.from(entries.get('war3map.wts').toString('utf8').replace(/^((?:\uFEFF)?STRING[ \t]+(\d+)[ \t]*\r?\n(?:\/\/[^\r\n]*\r?\n|[ \t]*\r?\n)*\{[ \t]*\r?\n)([\s\S]*?)(\r?\n\})/gm,
+        (whole,header,id,text,end)=>expectedStrings.has(Number(id))?header+expectedStrings.get(Number(id))+end:whole));
+    const after=stringTable(cleaned);assert.equal(after.size,strings.size);
+    for(const [id,text]of strings)assert.equal(after.get(id),expectedStrings.get(id)??text,'Weapon string readback differs: '+id);
+    output.set('war3map.wts',cleaned);
+    return output;
+}
+export function prepareWeaponTooltips(map,snapshots=new Map(),preparedAssets=new Map()) {
+    const names=['war3map.w3a','war3mapSkin.w3a','war3map.wts'],catalog=loadWeaponTooltipCatalog(snapshots);
+    const entries=cleanWeaponTooltipEntries(new Map(names.map(name=>[name,map.read(name)])),catalog);
+    const sources=new Map(names.map(name=>[name,fs.readFileSync(path.join(root,'assets',name))]));
+    const outputs=cleanWeaponTooltipEntries(new Map(names.map(name=>[name,preparedAssets.get(path.join(root,'assets',name))??sources.get(name)])),catalog);
+    const assets=new Map();
+    for(const name of names) {
+        const asset=path.join(root,'assets',name),source=sources.get(name);
+        if(!name.endsWith('.wts'))assert.deepEqual(entries.get(name),outputs.get(name),'Weapon tooltip assets diverge: '+name);
+        if(snapshots.has(asset))assert.deepEqual(snapshots.get(asset),source,'Weapon tooltip asset changed: '+name);
+        else snapshots.set(asset,source);
+        assets.set(asset,outputs.get(name));
+    }
+    return {entries,assets};
+}
+export function installHeroRegeneration(bytes, skin = false) {
+    const data = parseUnits(bytes);
+    assert.deepEqual(serializeUnits(data), bytes, 'Unit reader must round-trip losslessly');
+    assert(!data.tables[1].some(row => row.newId === 'Uany'), 'Native Anya collides with a custom unit');
+    const rows = data.tables[0].filter(row => row.oldId === 'Uany');
+    assert(rows.length <= 1, 'Duplicate Anya unit overrides');
+    let row = rows[0];
+    if (skin && !row) return bytes;
+    if (!row) {
+        row = {oldId: 'Uany', newId: '\0\0\0\0', extra: data.version === 3 ? [0] : [], fields: []};
+        data.tables[0].push(row);
+    }
+    // Always regenerate on any terrain/time. The runtime supplies the complete
+    // current rate (including 0 while paused); do not add an inherited base rate.
+    for (const [id, type, value] of [['uhrt', 0, 1], ['uhpr', 1, 0]]) {
+        const fields = row.fields.filter(field => field.id === id);
+        assert(fields.length <= 1, 'Duplicate Anya regeneration field: ' + id);
+        const field = fields[0];
+        if (skin && !field) continue;
+        if (field) {
+            assert(id === 'uhrt' ? field.type === 0 : [1, 2].includes(field.type), 'Unexpected Anya regeneration type: ' + id);
+            if (field.value === value) continue;
+            delete field.raw; field.value = value;
+        } else row.fields.push({id, type, level: 0, column: 0, value, endId: 'Uany'});
+        delete row.raw;
+    }
+    return serializeUnits(data);
+}
+export function validateStrengthRegeneration(bytes) {
+    let section = '', values = [];
+    for (const line of bytes.toString('utf8').split(/\r?\n/)) {
+        const header = line.match(/^\s*\[([^\]]+)\]/);
+        if (header) section = header[1].toLowerCase();
+        const field = section === 'misc' && line.match(/^\s*StrRegenBonus\s*=\s*([^;\r\n]*)/i);
+        if (field) values.push(field[1].trim() === '' ? NaN : Number(field[1].trim()));
+    }
+    assert(values.length === 1 && values[0] === 0, 'Native hero regeneration requires exactly one StrRegenBonus=0');
+}
+export function prepareHeroRegeneration(map, snapshots = new Map(), preparedAssets = new Map()) {
+    validateStrengthRegeneration(map.read('war3mapMisc.txt'));
+    const entries = new Map(), assets = new Map();
+    for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
+        const bytes = map.read(name), assetPath = path.join(root, 'assets', name), source = fs.readFileSync(assetPath);
+        const output = installHeroRegeneration(bytes, skin);
+        const assetOutput = installHeroRegeneration(preparedAssets.get(assetPath) ?? source, skin);
+        assert.deepEqual(assetOutput, output, 'Asset and test map hero regeneration diverge: ' + name);
+        if (snapshots.has(assetPath)) assert.deepEqual(source, snapshots.get(assetPath), 'Asset changed during preparation');
+        else snapshots.set(assetPath, source);
+        entries.set(name, output); assets.set(assetPath, assetOutput);
+    }
+    return {entries, assets};
+}
 export const portraitUnits = [
     {id: 'hsPA', name: '안야', model: 'Units\\Forsaken\\HeroAnya\\HeroAnya.mdl',
         legacyModel: 'Units\\Creeps\\BansheeRanger\\BansheeRanger.mdl',
@@ -244,6 +615,128 @@ export const goldObjectSpecs = {
 export function stripGoldTooltipText(text) {
     return text.replace(/판매가 \d+ 골드 · 일괄 정리는 판매 없이 삭제/g, '가방 정리 시 장비가 삭제됩니다.')
         .replace(/버리기\s*\/\s*판매\s*불가/g, '버리기 불가');
+}
+export function cleanItemTooltipText(text) {
+    const removed = new Set([
+        '자동 적용 · 레벨업 선택으로 강화', '레벨업 장신구 · 버리기 불가 · 숫자는 강화 레벨',
+        '레벨 업 장신구 · 버리기 불가 · 숫자는 강화 레벨', '레벨 업으로 획득·강화',
+        '가방 정리 시 장비가 삭제됩니다.', '자동 공격 스킬을 새로 부여하지 않습니다.',
+        '보유 중인 해당 무기에만 적용', '기본 능력치는 각각 적용 · 동일 장비의 세트 개수는 1개',
+        '세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음', '확장 인벤토리에서 장착 시 적용',
+        '동일 이름은 1개로 계산 · 세트 추가 공격은 재발동하지 않음',
+    ]);
+    const segments = text.split(/(?<=\|n)|(?<=\n)/);
+    const kept = segments.filter(segment => !removed.has(segment.replace(/\|c[0-9a-f]{8}|\|r/gi, '')
+        .replace(/(?:\|n|\r?\n)$/, '').trim()));
+    const cleaned = kept.length === segments.length ? text : kept.join('').replace(/(?:\|n|\r?\n)+$/, '');
+    // Old native trinkets describe their level-one bonus in a longer template.
+    // Retain that numeric value and flavor, using the same compact runtime labels.
+    const lines = cleaned.split(/\|n|\r?\n/), step = lines.find(line => /^강화 단계마다 /.test(line));
+    let summary;
+    if (step) {
+        summary = step.replace(/^강화 단계마다 /, '').replace(/ \(최대 \+\d+%\)$/, '')
+            .replace(/^피해 증가 /, '모든 무기 피해 ')
+            .replace(/^무기 크기 증가 /, '모든 무기 크기 ')
+            .replace(/^무기 사정거리 증가 /, '모든 무기 사정거리 ')
+            .replace(/^무기 지속 효과 증가 /, '모든 무기 지속시간 ')
+            .replace(/^추가 생명력 재생 /, '생명력 재생 ');
+    } else {
+        const cooldown = cleaned.match(/장신구 단독 쿨다운 감소: Lv\.1 ([\d.]+)%/);
+        const multicast = cleaned.match(/Lv\.1: 추가 (\d+)회 · 추가 공격 피해 (\d+)%/);
+        if (cooldown) summary = '모든 무기 쿨다운 -' + cooldown[1] + '%';
+        else if (multicast) summary = '추가 공격 +' + multicast[1] + '회|n추가 공격 피해 ' + multicast[2] + '%';
+    }
+    if (!summary) return cleaned;
+    const separator = cleaned.includes('|n') ? '|n' : cleaned.includes('\r\n') ? '\r\n' : '\n';
+    const flavor = lines.filter(line => /^\|cffaaaaaa.*\|r$/i.test(line));
+    return summary.replaceAll('|n', separator) + (flavor.length ? separator + separator + flavor.join(separator) : '');
+}
+function cleanTrinketTooltipText(text) {
+    return cleanItemTooltipText(text).split(/(?<=\|n)|(?<=\n)/)
+        .filter(segment => !/^\|cffaaaaaa/i.test(segment.trim())).join('').replace(/(?:\|n|\r?\n)+$/, '');
+}
+// Clean only our item descriptions, including referenced editor strings. Other
+// object fields, mechanics and unrelated authored strings retain their original bytes.
+export function cleanItemTooltipEntries(entries, catalog = null) {
+    const output = new Map(entries), targets = new Set(), trinketTargets = new Set(), regularTargets = new Set(), otherReferences = new Set();
+    const canonicalStrings = new Map();
+    const skinItems = parseObjectData(entries.get('war3mapSkin.w3t'), 'item');
+    for (const name of ['war3map.w3t', 'war3mapSkin.w3t']) {
+        const bytes = entries.get(name), data = parseObjectData(bytes, 'item');
+        // The main data must resolve the same text even when a reader skips skins.
+        for (const row of data.tables.flat().filter(row => /^H(?:sT[1-9A]|[seitabnchv]\d{2})$/.test(row.newId))) {
+            const skin = skinItems.tables.flat().find(value => value.newId === row.newId && value.oldId === row.oldId);
+            assert(skin, 'Missing owned item skin: ' + row.newId);
+            for (const id of ['utub','ides']) {
+                const sources = skin.fields.filter(field => field.id === id), fields = row.fields.filter(field => field.id === id);
+                assert(sources.length === 1 && sources[0].type === 3 && fields.length <= 1, 'Invalid item description: ' + row.newId + '/' + id);
+                if (!fields.length) {
+                    delete row.raw;
+                    row.fields.push({id,type:3,level:0,column:0,value:sources[0].value,endId:row.newId});
+                } else if (fields[0].value !== sources[0].value) {
+                    assert.equal(fields[0].type,3);delete row.raw;delete fields[0].raw;fields[0].value=sources[0].value;
+                }
+            }
+        }
+        for (const row of data.tables.flat()) for (const field of row.fields) {
+            if (field.type !== 3) continue;
+            const item = catalog?.get(row.newId);
+            const descriptionField = ['utub','ides'].includes(field.id);
+            const owned = /^H(?:sT[1-9A]|[seitabnchv]\d{2})$/.test(row.newId)
+                && (descriptionField || item && ['unam','utip'].includes(field.id));
+            const expected = owned && item ? (descriptionField ? item.description : item.name) : undefined;
+            const trinket = /^HsT[1-9A]$/.test(row.newId);
+            const reference = field.value.match(/^TRIGSTR_(\d+)$/);
+            if (reference) {
+                const id = Number(reference[1]);
+                (owned ? targets : otherReferences).add(id);
+                if (owned) (trinket ? trinketTargets : regularTargets).add(id);
+                if(expected!==undefined) {
+                    assert(!canonicalStrings.has(id) || canonicalStrings.get(id)===expected,'Conflicting item tooltip reference: '+id);
+                    canonicalStrings.set(id,expected);
+                }
+            }
+            else if (owned) {
+                const cleaned = expected ?? (trinket ? cleanTrinketTooltipText(field.value) : cleanItemTooltipText(field.value));
+                if (cleaned !== field.value) { delete row.raw; delete field.raw; field.value = cleaned; }
+            }
+        }
+        output.set(name, serializeObjectData(data));
+    }
+    const bytes = entries.get('war3map.wts'), strings = stringTable(bytes);
+    const transform = (id, value) => canonicalStrings.get(id)
+        ?? (trinketTargets.has(id) ? cleanTrinketTooltipText(value) : cleanItemTooltipText(value));
+    for (const id of targets) {
+        assert(strings.has(id), 'Missing item tooltip string: ' + id);
+        assert(!otherReferences.has(id) || transform(id,strings.get(id)) === strings.get(id),
+            'Item tooltip string is shared with unrelated data: ' + id);
+        assert(!trinketTargets.has(id) || !regularTargets.has(id), 'Trinket description is shared with gear: ' + id);
+    }
+    const text = bytes.toString('utf8').replace(/^((?:\uFEFF)?STRING[ \t]+(\d+)[ \t]*\r?\n(?:\/\/[^\r\n]*\r?\n|[ \t]*\r?\n)*\{[ \t]*\r?\n)([\s\S]*?)(\r?\n\})/gm,
+        (whole, header, id, value, end) => targets.has(Number(id)) ? header + transform(Number(id),value) + end : whole);
+    const cleaned = Buffer.from(text), after = stringTable(cleaned);
+    assert.equal(after.size, strings.size, 'Tooltip cleanup changed map string count');
+    for (const [id,value] of strings) assert.equal(after.get(id), targets.has(id) ? transform(id,value) : value,
+        'Item tooltip string readback differs: ' + id);
+    output.set('war3map.wts', cleaned);
+    return output;
+}
+export function prepareItemTooltipCleanup(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const names = ['war3map.w3t', 'war3mapSkin.w3t', 'war3map.wts'];
+    const catalog = loadItemTooltipCatalog(snapshots);
+    const entries = cleanItemTooltipEntries(new Map(names.map(name => [name, map.read(name)])),catalog);
+    const sources = new Map(names.map(name => [name, fs.readFileSync(path.join(root, 'assets', name))]));
+    const cleanedAssets = cleanItemTooltipEntries(new Map(names.map(name =>
+        [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])),catalog);
+    const assets = new Map();
+    for (const name of names) {
+        const assetPath = path.join(root, 'assets', name), source = sources.get(name);
+        if (!name.endsWith('.wts')) assert.deepEqual(entries.get(name), cleanedAssets.get(name), 'Item tooltip assets diverge: ' + name);
+        if (snapshots.has(assetPath)) assert.deepEqual(snapshots.get(assetPath), source, 'Item tooltip asset changed during preparation');
+        else snapshots.set(assetPath, source);
+        assets.set(assetPath, cleanedAssets.get(name));
+    }
+    return {entries, assets};
 }
 export function removeGoldObjectData(bytes, kind, {skin = false} = {}) {
     const before = parseObjectData(bytes, kind), data = parseObjectData(bytes, kind);
@@ -545,6 +1038,15 @@ export function refreshBase(before, base, bundle) {
     const baseStringBytes = source.read('war3map.wts');
     const baseStrings = stringTable(baseStringBytes), testStrings = stringTable(test.read('war3map.wts'));
     const retainedStrings = new Map();
+    const trinketStrings = new Set();
+    for (const name of ['war3map.w3t','war3mapSkin.w3t']) {
+        for (const row of parseObjectData(test.read(name),'item').tables.flat().filter(row => /^HsT[1-9A]$/.test(row.newId))) {
+            for (const field of row.fields.filter(field => ['utub','ides'].includes(field.id))) {
+                const match = field.value.match(/^TRIGSTR_(\d+)$/);
+                if (match) trinketStrings.add(Number(match[1]));
+            }
+        }
+    }
     for (const name of ['war3map.w3a', 'war3map.w3t', 'war3map.w3u', 'war3mapSkin.w3a',
         'war3mapSkin.w3t', 'war3mapSkin.w3u']) {
         for (const match of (test.read(name)?.toString('utf8') ?? '').matchAll(/TRIGSTR_(\d+)/g)) {
@@ -557,9 +1059,10 @@ export function refreshBase(before, base, bundle) {
                 retainedStrings.set(id, testStrings.get(id));
                 continue;
             }
-            // A removed sale sentence is an owned gameplay change. Geography refresh
-            // still copies the original WTS; --remove-gold reapplies it before publication.
-            assert(stripGoldTooltipText(baseStrings.get(id)) === stripGoldTooltipText(testStrings.get(id)),
+            // Removed sale/help sentences are owned gameplay changes. Geography refresh
+            // copies the original WTS; the build cleans item tooltips before publication.
+            const clean = trinketStrings.has(id) ? cleanTrinketTooltipText : cleanItemTooltipText;
+            assert(clean(stripGoldTooltipText(baseStrings.get(id))) === clean(stripGoldTooltipText(testStrings.get(id))),
                 'Base map string conflicts with preserved gameplay data: ' + name + ' TRIGSTR_' + id);
         }
     }
@@ -679,7 +1182,7 @@ export function publishTransaction(entries, {io = fs, stamp = new Date().toISOSt
 function main() {
     const args = process.argv.slice(2);
     let check = false, refresh = false, portraits = false, compact = false, removeGold = false, experience = false, basePath = baseMapPath;
-    let input = path.join(root, 'dist/HeroSurvivor-playtest.w3x'), output = input;
+    let input = path.join(root, 'dist/AnyasLongNight-playtest.w3x'), output = input;
     let profile = 'playtest', outputExplicit = false, inputExplicit = false;
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--check') check = true;
@@ -701,9 +1204,11 @@ function main() {
             else { output = path.resolve(value); outputExplicit = true; }
         } else throw new Error('Unknown option: ' + args[i]);
     }
-    if (!outputExplicit && profile !== 'playtest') output = path.join(root, 'dist', 'HeroSurvivor-' + profile + '.w3x');
+    if (!outputExplicit && profile !== 'playtest') output = profile === 'release'
+        ? path.join(root, 'dist', 'submission', 'AnyasLongNight.w3x')
+        : path.join(root, 'dist', 'AnyasLongNight-' + profile + '.w3x');
     if (check && !inputExplicit) input = output;
-    const bundlePath = path.join(root, 'dist', profile === 'playtest' ? 'HeroSurvivor.lua' : 'HeroSurvivor-' + profile + '.lua');
+    const bundlePath = path.join(root, 'dist', profile === 'playtest' ? 'AnyasLongNight.lua' : 'AnyasLongNight-' + profile + '.lua');
     const relative = path.relative(path.join(root, 'dist'), output);
     assert(relative && !relative.startsWith('..') && !path.isAbsolute(relative) && output.endsWith('.w3x'), 'Output must be a .w3x inside dist');
     if (refresh) assert.notEqual(output.toLowerCase(), basePath.toLowerCase(), 'Output must never overwrite the base map');
@@ -730,7 +1235,22 @@ function main() {
         'Map experience curve differs from assets; run build with --experience-curve');
     const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots, portraitObjects?.assets) : null;
     if (goldRemoval) patched = openMap(patched).replace(goldRemoval.entries);
-    const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? [])]);
+    const itemTooltips = prepareItemTooltipCleanup(openMap(patched), snapshots, goldRemoval?.assets);
+    patched = openMap(patched).replace(itemTooltips.entries);
+    const uiResources = prepareUIResources(openMap(patched), snapshots);
+    patched = openMap(patched).replace(uiResources);
+    const interfaceTooltip = prepareInterfaceTooltip(openMap(patched),snapshots,goldRemoval?.assets);
+    patched = openMap(patched).replace(interfaceTooltip.entries);
+    const statDetails = prepareStatDetails(openMap(patched), snapshots, interfaceTooltip.assets);
+    patched = openMap(patched).replace(statDetails.entries);
+    const regeneration = prepareHeroRegeneration(openMap(patched), snapshots, goldRemoval?.assets ?? portraitObjects?.assets);
+    patched = openMap(patched).replace(regeneration.entries);
+    const talents = prepareNativeTalents(openMap(patched), snapshots, statDetails.assets);
+    patched = openMap(patched).replace(talents.entries);
+    const weaponTooltips = prepareWeaponTooltips(openMap(patched),snapshots,new Map([...itemTooltips.assets,...talents.assets]));
+    patched = openMap(patched).replace(weaponTooltips.entries);
+    const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []),
+        ...itemTooltips.assets, ...interfaceTooltip.assets, ...statDetails.assets, ...regeneration.assets, ...talents.assets, ...weaponTooltips.assets]);
     const compactStats = compact ? {beforeBytes: patched.length} : null;
     if (compact) {
         patched = openMap(patched).compact();
@@ -742,6 +1262,8 @@ function main() {
     validateGoldRemoval(preparedMap);
     const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
         ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []),
+        ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(),
+        ...(map.read('(listfile)').equals(preparedMap.read('(listfile)')) ? [] : ['(listfile)']),
         ...(experience ? ['war3mapMisc.txt'] : [])])];
     const preserved = verifyPreserved(original, patched, changedEntries);
     assert.equal(preparedMap.read('war3map.lua').toString('utf8'), script);

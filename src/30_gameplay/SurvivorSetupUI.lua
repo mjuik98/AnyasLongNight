@@ -106,7 +106,9 @@ do
         BlzFrameSetTexture(shade, "HeroSurvivorUI\\Black.tga", 0, true)
         BlzFrameSetEnable(shade, false)
         BlzFrameSetLevel(shade, 10)
-        root = BlzCreateFrameByType("FRAME", "HeroSurvivorSetupRoot", parent, "", 0)
+        -- Layout groups carry no mouse surface; only their actual buttons take input.
+        root = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupRoot", parent, "", 0)
+        BlzFrameSetTexture(root, "HeroSurvivorUI\\Transparent.tga", 0, true)
         BlzFrameSetAbsPoint(root, FRAMEPOINT_TOP, 0.4, 0.57)
         BlzFrameSetSize(root, 0.66, 0.40)
         BlzFrameSetLevel(root, 11)
@@ -120,7 +122,8 @@ do
         -- previously pulled the footer over the start button and last option row.
         footer = Text(root, "HeroSurvivorSetupFooter", 0.59, 0.018, 0, -0.350)
         BlzFrameSetLevel(footer, 3)
-        menu = BlzCreateFrameByType("FRAME", "HeroSurvivorSetupMenu", root, "", 0)
+        menu = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupMenu", root, "", 0)
+        BlzFrameSetTexture(menu, "HeroSurvivorUI\\Transparent.tga", 0, true)
         BlzFrameSetAllPoints(menu, root)
         BlzFrameSetLevel(menu, 2)
         local notice = Text(menu, "HeroSurvivorSetupNotice", 0.59, 0.018, 0, -0.051)
@@ -148,7 +151,8 @@ do
             SurvivorSetupUI.Hide()
             startCallback()
         end)
-        options = BlzCreateFrameByType("FRAME", "HeroSurvivorSetupOptions", root, "", 0)
+        options = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupOptions", root, "", 0)
+        BlzFrameSetTexture(options, "HeroSurvivorUI\\Transparent.tga", 0, true)
         BlzFrameSetAllPoints(options, root)
         BlzFrameSetLevel(options, 2)
         for i = 1, 6 do

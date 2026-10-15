@@ -6,6 +6,7 @@ do
     local rows, triggers = {}, {}
     local familyIndex, familyButton = 1, nil
     local page, expanded, inventoryOpen, preview = 1, false, false, nil
+    local nativeDetailsVisible = false
     local rendered, lastRevision, bagList, bagCount, bagCapacity = {}, nil, {}, 0, 0
     local expeditionView
     function SurvivorLootUI.IsExpanded() return expanded end
@@ -29,6 +30,10 @@ do
         BlzFrameSetEnable(frame, false)
         return frame
     end
+    local function ModalVisible()
+        return nativeDetailsVisible or SurvivorUI.IsNarrativeVisible()
+            or (SurvivorUI.IsChoiceVisible and SurvivorUI.IsChoiceVisible())
+    end
     local function Button(parent, context, width, x, y, text, action)
         local frame = BlzCreateFrame("ScriptDialogButton", parent, 0, context)
         BlzFrameSetSize(frame, width, 0.026)
@@ -42,7 +47,7 @@ do
             BlzFrameSetEnable(frame, false); BlzFrameSetEnable(frame, true)
             if rendered[frame] then rendered[frame].enabled = nil end
             local state = RunSession.GetState()
-            if SurvivorUI.IsNarrativeVisible() then return end
+            if ModalVisible() then return end
             if state ~= "RUNNING" and state ~= "INVENTORY" and state ~= "STAGE_CLEAR" then return end
             local ok, message = pcall(action)
             if not ok then RunSession.Fail(message) end
@@ -52,14 +57,16 @@ do
     end
     local function CanManage()
         local state = RunSession.GetState()
-        return not SurvivorUI.IsNarrativeVisible() and inventoryOpen and (state == "INVENTORY" or state == "STAGE_CLEAR")
+        return not ModalVisible() and inventoryOpen and (state == "INVENTORY" or state == "STAGE_CLEAR")
     end
     function SurvivorLootUI.Init()
         if root then return end
         local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
         if not ValidFrame(parent) then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
         assert(ValidFrame(parent), "Missing game UI parent for loot controls")
-        root = BlzCreateFrameByType("FRAME", "HSLootRoot", parent, "", 0)
+        -- Do not leave a transparent input region when the manage button is hidden.
+        root = BlzCreateFrameByType("BACKDROP", "HSLootRoot", parent, "", 0)
+        BlzFrameSetTexture(root, "HeroSurvivorUI\\Transparent.tga", 0, true)
         BlzFrameSetSize(root, 0.28, 0.026)
         BlzFrameSetAbsPoint(root, FRAMEPOINT_TOPLEFT, 0.02, 0.55)
         BlzFrameSetLevel(root, 12)
@@ -119,7 +126,7 @@ do
     function SurvivorLootUI.Refresh(observedRevision)
         if not root then return end
         local state = RunSession.GetState()
-        local active = not SurvivorUI.IsNarrativeVisible() and (state == "RUNNING" or state == "INVENTORY" or state == "STAGE_CLEAR")
+        local active = not ModalVisible() and (state == "RUNNING" or state == "INVENTORY" or state == "STAGE_CLEAR")
         local manage = CanManage()
         local view = tostring(active) .. ":" .. tostring(manage) .. ":" .. tostring(expanded) .. ":" .. tostring(inventoryOpen)
         if expeditionView ~= view then
@@ -171,13 +178,15 @@ do
             Set(confirm, "enabled", #preview.items > 0)
         end
     end
-    function SurvivorLootUI.SetInventoryVisible(open, observedRevision)
+    function SurvivorLootUI.SetInventoryVisible(open, observedRevision, detailsOpen)
         inventoryOpen = open
+        nativeDetailsVisible = detailsOpen == true
         if not open then expanded, preview = false, nil end
         SurvivorLootUI.Refresh(observedRevision)
     end
     function SurvivorLootUI.Reset()
         page, expanded, inventoryOpen, preview = 1, false, false, nil
+        nativeDetailsVisible = false
         familyIndex = 1
         lastPending = nil
         rendered, lastRevision, bagList, expeditionView = {}, nil, nil, nil

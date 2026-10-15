@@ -249,6 +249,7 @@ do
             return
         end
         local stageElapsed = elapsed - stageStarted
+        local timing = SurvivorConfig.StageTiming(stage)
         boardClock = boardClock + dt
         if boardClock >= 0.5 then
             boardClock = 0
@@ -256,10 +257,10 @@ do
             peakEnemies, peakVisuals = math.max(peakEnemies, enemies), math.max(peakVisuals, visuals)
             RefreshDamageBoard()
         end
-        if stageElapsed >= SurvivorConfig.duration then RunSession.Finish("timeout"); return end
+        if stageElapsed >= timing.duration then RunSession.Finish("timeout"); return end
         SurvivorExpedition.Step(dt, elapsed)
         if not RunSession.IsRunning() then return end -- A risk reward owns the choice modal.
-        if stage == 2 and not bossStarted and stageElapsed < SurvivorConfig.bossStart and stageElapsed >= nextHazard then
+        if stage == 2 and not bossStarted and stageElapsed < timing.bossStart and stageElapsed >= nextHazard then
             nextHazard = stageElapsed + 22
             SurvivorCombat.WarnLava()
         end
@@ -269,8 +270,7 @@ do
             BeginChoice()
             return
         end
-        SurvivorCombat.Regenerate(dt)
-        if not bossStarted and stageElapsed >= SurvivorConfig.bossStart then
+        if not bossStarted and stageElapsed >= timing.bossStart then
             bossStarted = SurvivorCombat.SpawnBoss()
             if bossStarted then bossEngagedAt = elapsed end
         end
@@ -317,7 +317,7 @@ do
         if enemyClock >= 0.5 then
             enemyClock = 0
             SurvivorCombat.UpdateEnemies(elapsed)
-            if not bossStarted and stageElapsed < SurvivorConfig.bossStart and stageElapsed >= nextElite then
+            if not bossStarted and stageElapsed < timing.bossStart and stageElapsed >= nextElite then
                 nextElite = (math.floor(stageElapsed / SurvivorConfig.eliteInterval) + 1) * SurvivorConfig.eliteInterval
                 SurvivorCombat.Spawn(true)
             end
@@ -342,6 +342,7 @@ do
         SurvivorUI.ShowStageIntro(expectedStage, function()
             if prepared or not SameTransition() then return end
             prepared = true -- An old intro completion cannot replace a live preparation/countdown.
+            SurvivorNativeLoadout.GrantStageTalent(expectedStage)
             SurvivorUI.ShowCombatPreparation(expectedStage, function()
                     if not CanStart() then return false end
                     resumed = true
@@ -366,6 +367,7 @@ do
         stageStartKills = kills
         SurvivorEquipment.SetStage(stage)
         SurvivorEquipment.Reconcile()
+        SurvivorNativeLoadout.Refresh()
         SurvivorCombat.BeginStage(stage, stageStarted)
         SurvivorStage.Apply(stage)
         SurvivorExpedition.BeginStage(hero, stage, stageStarted, ExpeditionReward)
@@ -399,8 +401,11 @@ do
         local x, y = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
         assert(not IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY), "Map center must be walkable")
         build = SurvivorAugments.NewBuild(startingWeapon, startingTrinket)
-        assert(SurvivorConfig.bossStart > 0 and SurvivorConfig.bossStart < SurvivorConfig.duration,
-            "Boss must spawn before the run deadline")
+        for index = 1, SurvivorConfig.stages do
+            local timing = SurvivorConfig.StageTiming(index)
+            assert(timing.bossStart > 0 and timing.bossStart < timing.duration,
+                "Boss must spawn before the stage deadline")
+        end
         stats, offers = build.stats, nil
         SurvivorStage.Init(arena)
         SurvivorStage.Apply(1)

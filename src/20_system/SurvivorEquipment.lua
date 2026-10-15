@@ -13,62 +13,62 @@ do
             description = "이동 속도 +10", bonuses = {all = {moveSpeed = 10}}},
         {id = "Hs03", base = "ciri", slot = "Chest", name = "잿불 수호의 로브", set = "ember",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
-            description = "최대 생명력 +150 (장착 시 회복 없음)", bonuses = {all = {maxLife = 150}}},
+            description = "최대 생명력 +150", bonuses = {all = {maxLife = 150}}},
         {id = "Hs04", base = "cnob", slot = "Head", name = "잿불 추적자의 관", set = "ember",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmutPurple.blp",
-            description = "잿불 화살 발사 수 +1 · 해당 무기 보유 시 적용",
+            description = "잿불 화살 발사 수 +1",
             bonuses = {firebolt = {extraProjectiles = 1}}},
         {id = "Hs05", base = "gcel", slot = "Gloves", name = "불길 직조의 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
-            description = "잿불 발자취 지속 +1초 / 반경 +20%p · 해당 무기 보유 시 적용",
+            description = "잿불 발자취 지속 +1초 / 반경 +20%p",
             bonuses = {flamefield = {duration = 1, areaPct = 0.20}}},
         {id = "Hs06", base = "cnob", slot = "Head", name = "폭풍 부름의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
-            description = "폭풍의 부름 횟수 +1 / 피해 +15%p · 해당 무기 보유 시 적용",
+            description = "폭풍의 부름 횟수 +1 / 피해 +15%p",
             bonuses = {monsoon = {extraStrikes = 1, damagePct = 0.15}}},
         {id = "Hs07", base = "gcel", slot = "Gloves", name = "검무사의 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGauntletsOfOgrePower.blp",
-            description = "그림자 베기 각도 +30도 / 거리 +20%p · 해당 무기 보유 시 적용",
+            description = "그림자 베기 각도 +30도 / 거리 +20%p",
             bonuses = {frontslash = {angle = 30, areaPct = 0.20}}},
         {id = "Hs08", base = "ciri", slot = "Chest", name = "서리술사의 로브",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
-            description = "서리 화살 관통 대상 +1 / 둔화 지속 +1초 · 해당 무기 보유 시 적용",
+            description = "서리 화살 관통 대상 +1 / 둔화 지속 +1초",
             bonuses = {frostshard = {extraPierce = 1, slowDuration = 1}}},
         {id = "Hs09", base = "cnob", slot = "Head", name = "서리심장의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNCirclet.blp",
-            description = "서리 폭발 범위 +20% / 둔화 지속 +1초 · 해당 무기 보유 시 적용",
+            description = "서리 폭발 범위 +20% / 둔화 지속 +1초",
             bonuses = {frostnova = {areaPct = 0.20, duration = 1}}},
         {id = "Hs10", base = "ciri", slot = "Chest", name = "눈보라 기록관의 외투",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
-            description = "묘역의 눈보라 피해 +15% / 지속 +1초 · 해당 무기 보유 시 적용",
+            description = "묘역의 눈보라 피해 +15% / 지속 +1초",
             bonuses = {blizzard = {damagePct = 0.15, duration = 1}}},
         {id = "Hs11", base = "gcel", slot = "Gloves", name = "낙성을 부르는 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
-            description = "잿불 낙성과 잔불 피해 +25% · 해당 무기 보유 시 적용",
+            description = "잿불 낙성과 잔불 피해 +25%",
             bonuses = {meteor = {damagePct = 0.25}}},
         {id = "Hs12", base = "cnob", slot = "Head", name = "폭풍 구슬의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
-            description = "폭풍 구슬 범위 +20% / 최대 지속 +0.5초 · 해당 무기 보유 시 적용",
+            description = "폭풍 구슬 범위 +20% / 최대 지속 +0.5초",
             bonuses = {thunderorb = {areaPct = 0.20, duration = 0.5}}},
         {id = "Hs13", base = "bspd", slot = "Boots", name = "귀환 검객의 장화",
             icon = "ReplaceableTextures\\CommandButtons\\BTNBootsOfSpeed.blp",
-            description = "귀환 칼날 피해 +20% / 타격 크기 +15% · 해당 무기 보유 시 적용",
+            description = "귀환 칼날 피해 +20% / 타격 크기 +15%",
             bonuses = {returnblade = {damagePct = 0.20, areaPct = 0.15}}},
         {id = "Hs14", base = "penr", slot = "Trinket", name = "빛바랜 목걸이",
             icon = "ReplaceableTextures\\CommandButtons\\BTNPendantOfEnergy.blp",
-            description = "최대 생명력 +50 (장착 시 회복 없음)", bonuses = {all = {maxLife = 50}}},
+            description = "최대 생명력 +50", bonuses = {all = {maxLife = 50}}},
         {id = "Hs15", base = "ram3", slot = "Ring", name = "병사의 반지",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRingLionHead.blp",
             description = "모든 무기 피해 +4%", bonuses = {all = {damagePct = 0.04}}},
         {id = "Hs16", base = "rlif", slot = "Ring", name = "정찰병의 반지",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRingSkull.blp",
-            description = "모든 무기 쿨다운 3.8% 감소 (단독 기준)", bonuses = {all = {speedPct = 0.04}}},
+            description = "모든 무기 쿨다운 3.8% 감소", bonuses = {all = {speedPct = 0.04}}},
         {id = "Hs17", base = "ofro", slot = "Primary", name = "순찰자의 발톱",
             icon = "ReplaceableTextures\\CommandButtons\\BTNClawsOfAttack.blp",
             description = "모든 무기 피해 +8%", bonuses = {all = {damagePct = 0.08}}},
         {id = "Hs18", base = "lhst", slot = "Offhand", name = "해진 주문서",
             icon = "ReplaceableTextures\\CommandButtons\\BTNBookOfTheDead.blp",
-            description = "모든 무기 쿨다운 4.8% 감소 (단독 기준)", bonuses = {all = {speedPct = 0.05}}},
+            description = "모든 무기 쿨다운 4.8% 감소", bonuses = {all = {speedPct = 0.05}}},
     }
     local rarities = {
         common = {name = "일반", color = "|cffffffff"},
@@ -77,57 +77,57 @@ do
     }
     local setOrder = {"ember", "storm", "frost", "blade", "ashguide", "duskstorm", "silentcrypt", "nightwatch"}
     local sets = {
-        ember = {name = "잿불지기의 유품", prefix = "잿불지기의", flavor = "불길 속에서도 길과 피난처를 지켰던 이들의 유품.", code = "He", weapons = {"firebolt", "flamefield", "meteor"},
+        ember = {name = "스트라솔름 수비대의 유품", prefix = "스트라솔름 수비대의", flavor = "정화의 불길 속에서도 피난처를 지키던 수비대의 유품.", code = "He", weapons = {"firebolt", "flamefield", "meteor"},
             existing = {Head = "Hs04", Chest = "Hs03", Gloves = "Hs05"},
             tiers = {{count = 2, text = "화염 계열 피해 +15%p", bonuses = {}},
                 {count = 4, text = "잿불 발자취 종료 시 장판 피해 200%로 폭발 (지상)", bonuses = {set = {ember = 1}}}}},
-        storm = {name = "폭풍 파수꾼의 장구", prefix = "폭풍 파수꾼의", flavor = "마지막 성벽을 떠나지 않았던 파수꾼의 장구.", code = "Ht", weapons = {"chainlightning", "monsoon", "thunderorb"},
+        storm = {name = "성벽 파수꾼의 장구", prefix = "성벽 파수꾼의", flavor = "로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.", code = "Ht", weapons = {"chainlightning", "monsoon", "thunderorb"},
             existing = {Head = "Hs06"},
-            tiers = {{count = 2, text = "번개 계열 쿨다운 13.0% 감소 (단독 기준)", bonuses = {}},
+            tiers = {{count = 2, text = "번개 계열 쿨다운 13.0% 감소", bonuses = {}},
                 {count = 4, text = "번개 6회 적중마다 추가 낙뢰: 해당 타격 피해 100% (재사용 2초)", bonuses = {set = {storm = 1}}}}},
-        frost = {name = "서리 기록관의 유물", prefix = "서리 기록관의", flavor = "얼어붙은 기록 속에 사라진 이들의 이름이 남아 있다.", code = "Hi", weapons = {"frostshard", "frostnova", "blizzard"},
+        frost = {name = "납골당 기록관의 유물", prefix = "납골당 기록관의", flavor = "스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.", code = "Hi", weapons = {"frostshard", "frostnova", "blizzard"},
             existing = {Head = "Hs09", Chest = "Hs08"},
             tiers = {{count = 2, text = "냉기 계열 둔화 지속 +1초", bonuses = {}},
                 {count = 4, text = "둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가", bonuses = {set = {frost = 1}}}}},
-        blade = {name = "그림자 순찰자의 장구", prefix = "그림자 순찰자의", flavor = "돌아오는 길까지 살피던 순찰자의 장구.", code = "Hb", weapons = {"orbitblade", "frontslash", "returnblade"},
+        blade = {name = "하수구 순찰병의 장구", prefix = "하수구 순찰병의", flavor = "수도 아래 물길까지 살피던 경비대 순찰병의 장구.", code = "Hb", weapons = {"orbitblade", "frontslash", "returnblade"},
             existing = {Gloves = "Hs07", Boots = "Hs13"},
             tiers = {{count = 2, text = "칼날 계열 피해 +15%p", bonuses = {}},
                 {count = 4, text = "칼날 적중 시 원형 검격: 해당 타격 피해 150% (지상·재사용 8초)", bonuses = {set = {blade = 1}}}}},
-        ashguide = {name = "잿길 인도자의 유산", prefix = "잿길 인도자의", short = "잿길", code = "Ha",
-            flavor = "꺼지지 않는 불씨로 길 잃은 이들을 이끌었던 자의 유산.",
+        ashguide = {name = "스트라솔름 인도자의 유산", prefix = "스트라솔름 인도자의", short = "인도자", code = "Ha",
+            flavor = "불타는 스트라솔름에서 꺼지지 않는 불씨로 피난민을 이끌었던 자의 유산.",
             weapons = {"firebolt", "flamefield", "meteor"}, existing = {}, firstBonus = {damagePct = 0.20},
             tiers = {{count = 3, text = "화염 계열 피해 +20%p", bonuses = {}},
                 {count = 5, text = "잿불 화살 +2발|n잿불 발자취 지속 +2초 · 잿불 낙성 타격 범위 +30%p",
                     bonuses = {firebolt = {extraProjectiles = 2}, flamefield = {duration = 2}, meteor = {areaPct = 0.30}}}}},
-        duskstorm = {name = "황혼 뇌우의 유산", prefix = "황혼 뇌우의", short = "뇌우", code = "Hn",
-            flavor = "침묵한 성벽 위로 마지막까지 응답했던 뇌우의 흔적.",
+        duskstorm = {name = "로데론 왕궁의 유산", prefix = "로데론 왕궁의", short = "왕궁", code = "Hn",
+            flavor = "무너진 왕궁 첨탑 위로 마지막까지 응답했던 뇌우의 흔적.",
             weapons = {"chainlightning", "monsoon", "thunderorb"}, existing = {}, firstBonus = {damagePct = 0.20},
             tiers = {{count = 3, text = "번개 계열 피해 +20%p", bonuses = {}},
                 {count = 5, text = "연쇄 번개 탐색·전이 거리 +35%p|n폭풍의 부름 +2회 · 폭풍 구슬 지속 +2초",
                     bonuses = {chainlightning = {areaPct = 0.35}, monsoon = {extraStrikes = 2}, thunderorb = {duration = 2}}}}},
-        silentcrypt = {name = "침묵 묘역의 기억", prefix = "침묵 묘역의", short = "묘역", code = "Hc",
+        silentcrypt = {name = "스트라솔름 묘지의 기억", prefix = "스트라솔름 묘지의", short = "묘지", code = "Hc",
             flavor = "이름 없는 묘비 아래에서도 사라지지 않은 기억.",
             weapons = {"frostshard", "frostnova", "blizzard"}, existing = {}, firstBonus = {speedPct = 0.20},
-            tiers = {{count = 3, text = "냉기 계열 쿨다운 16.7% 감소 (단독 기준)", bonuses = {}},
+            tiers = {{count = 3, text = "냉기 계열 쿨다운 16.7% 감소", bonuses = {}},
                 {count = 5, text = "서리 화살 관통 +2명|n서리 폭발 범위 +35%p · 묘역의 눈보라 지속 +2초",
                     bonuses = {frostshard = {extraPierce = 2}, frostnova = {areaPct = 0.35}, blizzard = {duration = 2}}}}},
         nightwatch = {name = "긴 밤 파수꾼의 맹세", prefix = "긴 밤 파수꾼의", short = "긴 밤", code = "Hv",
             flavor = "긴 수색의 끝에서 돌아올 이를 기다리던 파수꾼의 맹세.",
             weapons = {"orbitblade", "frontslash", "returnblade"}, existing = {}, firstBonus = {speedPct = 0.20},
-            tiers = {{count = 3, text = "칼날 계열 쿨다운 16.7% 감소 (단독 기준)", bonuses = {}},
+            tiers = {{count = 3, text = "칼날 계열 쿨다운 16.7% 감소", bonuses = {}},
                 {count = 5, text = "순찰자의 칼날 피해 +35%p|n그림자 베기 각도 +45도 · 귀환 칼날 지속 +2초",
                     bonuses = {orbitblade = {damagePct = 0.35}, frontslash = {angle = 45}, returnblade = {duration = 2}}}}},
     }
     -- Nine simultaneous slots: each set has two distinct rings and seven other pieces.
     local parts = {
-        {key = "Head", slot = "Head", base = "cnob", name = "두건", icon = "BTNHelmutPurple.blp", rarity = "rare", stat = "maxLife", value = 100, text = "최대 생명력 +100 (장착 시 회복 없음)"},
-        {key = "Chest", slot = "Chest", base = "ciri", name = "외투", icon = "BTNRobeOfTheMagi.blp", rarity = "rare", stat = "maxLife", value = 150, text = "최대 생명력 +150 (장착 시 회복 없음)"},
-        {key = "Gloves", slot = "Gloves", base = "gcel", name = "장갑", icon = "BTNGlove.blp", rarity = "rare", stat = "speedPct", value = 0.08, text = "모든 무기 쿨다운 7.4% 감소 (단독 기준)"},
+        {key = "Head", slot = "Head", base = "cnob", name = "두건", icon = "BTNHelmutPurple.blp", rarity = "rare", stat = "maxLife", value = 100, text = "최대 생명력 +100"},
+        {key = "Chest", slot = "Chest", base = "ciri", name = "외투", icon = "BTNRobeOfTheMagi.blp", rarity = "rare", stat = "maxLife", value = 150, text = "최대 생명력 +150"},
+        {key = "Gloves", slot = "Gloves", base = "gcel", name = "장갑", icon = "BTNGlove.blp", rarity = "rare", stat = "speedPct", value = 0.08, text = "모든 무기 쿨다운 7.4% 감소"},
         {key = "Boots", slot = "Boots", base = "bspd", name = "장화", icon = "BTNBootsOfSpeed.blp", rarity = "rare", stat = "moveSpeed", value = 20, text = "이동 속도 +20"},
         {key = "Ring1", slot = "Ring", base = "ram3", name = "서약", icon = "BTNRingLionHead.blp", rarity = "rare", stat = "damagePct", value = 0.10, text = "모든 무기 피해 +10%"},
         {key = "Ring2", slot = "Ring", base = "rlif", name = "결의", icon = "BTNRingSkull.blp", rarity = "epic", stat = "damagePct", value = 0.20, specialized = true, text = "소속 세트 계열 무기 피해 +20%p"},
         {key = "Primary", slot = "Primary", base = "ofro", name = "발톱", icon = "BTNClawsOfAttack.blp", rarity = "epic", stat = "damagePct", value = 0.25, specialized = true, text = "소속 세트 계열 무기 피해 +25%p"},
-        {key = "Offhand", slot = "Offhand", base = "lhst", name = "봉인서", icon = "BTNBookOfTheDead.blp", rarity = "epic", stat = "speedPct", value = 0.15, specialized = true, text = "소속 세트 계열 무기 쿨다운 13.0% 감소 (단독 기준)"},
+        {key = "Offhand", slot = "Offhand", base = "lhst", name = "봉인서", icon = "BTNBookOfTheDead.blp", rarity = "epic", stat = "speedPct", value = 0.15, specialized = true, text = "소속 세트 계열 무기 쿨다운 13.0% 감소"},
         {key = "Trinket", slot = "Trinket", base = "penr", name = "부적", icon = "BTNPendantOfEnergy.blp", rarity = "epic", stat = "damagePct", value = 0.10, specialized = true, text = "최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p"},
     }
     local existingById = {}
@@ -400,12 +400,6 @@ do
         equipped = equipped or {}
         local rarity = rarities[entry.rarity]
         local lines = {rarity.color .. rarity.name .. " 장비|r", "|cffffcc00장착 부위: " .. slotNames[entry.slot] .. "|r", entry.description}
-        lines[#lines + 1] = "가방 정리 시 장비가 삭제됩니다."
-        if entry.slot == "Trinket" then
-            lines[#lines + 1] = "|cffaaaaaa레벨업으로 얻는 인장과 별도의 장비입니다.|r"
-        elseif entry.slot == "Primary" then
-            lines[#lines + 1] = "|cffaaaaaa자동 공격 스킬을 새로 부여하지 않습니다.|r"
-        end
         local set = sets[entry.set]
         if set then
             local count = 0
@@ -420,11 +414,7 @@ do
                 lines[#lines + 1] = (active and "|cff80ff80" or "|cff888888")
                     .. string.format("(%d) %s · %s|r", tier.count, tier.text, active and "활성" or "비활성")
             end
-            lines[#lines + 1] = "|cffaaaaaa보유 중인 해당 무기에만 적용|r"
-            lines[#lines + 1] = "|cffaaaaaa기본 능력치는 각각 적용 · 동일 장비의 세트 개수는 1개|r"
-            lines[#lines + 1] = "|cffaaaaaa세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음|r"
         end
-        lines[#lines + 1] = "|cffaaaaaa확장 인벤토리에서 장착 시 적용|r"
         if entry.flavor then lines[#lines + 1] = "|cffaaaaaa" .. entry.flavor .. "|r" end
         return table.concat(lines, "|n")
     end

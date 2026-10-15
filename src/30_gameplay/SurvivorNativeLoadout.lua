@@ -1,5 +1,5 @@
--- Presentation only: owned weapons are passive command-card abilities; trinkets
--- are non-usable inventory indicators. SurvivorAugments alone computes their effects.
+-- Weapons/trinkets are passive indicators. Native talents grant hidden marker
+-- abilities; SurvivorAugments computes their effects from a complete snapshot.
 -- Matching object definitions live in assets/war3map.w3a and assets/war3map.w3t.
 -- Indicator item objects have iprn=0/idrp=0: excluded from random loot and death drops.
 SurvivorNativeLoadout = {}
@@ -11,8 +11,64 @@ do
         vitality = "HsT8", renewal = "HsT9", stride = "HsTA"}
     local weaponPositions = {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {2, 1}, {3, 1}}
     local hero, build
+    local ownsStatDetails = false
+    local originalInterfaceText
     local items, textCache = {}, {}
     local descriptions, titles, descriptionRevision = {}, {}, nil
+    local talentEarned, talentGranted, talentSpent, refreshSerial, talentRetry = 0, 0, 0, 0, 0
+    local talentChoices, pointItems = {}, {}
+    local ownsTalentController, campaignTalentLevel = false, 0
+    local deliveringTalent = false
+
+    function SurvivorNativeLoadout.TalentStatus()
+        return talentGranted - talentSpent, talentEarned, talentEarned - talentGranted
+    end
+    local function DeliverTalentPoint()
+        for item in pairs(pointItems) do if GetItemTypeId(item) == 0 then pointItems[item] = nil end end
+        if deliveringTalent or talentGranted >= talentEarned or refreshSerial < talentRetry or IsUnitPaused(hero) then return end
+        talentRetry = refreshSerial + 20 -- Retry rejected pickups without a new timer or a busy item loop.
+        local item = CreateItem(FourCC(SurvivorConfig.talents.pointItem), GetUnitX(hero), GetUnitY(hero))
+        if item == nil then return end
+        pointItems[item] = true -- Own the handle before native pickup callbacks can fail.
+        local owner = hero
+        deliveringTalent = true
+        local ok, accepted = pcall(UnitAddItem, hero, item)
+        deliveringTalent = false
+        if not ok then error(accepted) end
+        if hero ~= owner then return end
+        if accepted then
+            talentGranted = talentGranted + 1
+            if GetItemTypeId(item) == 0 then pointItems[item] = nil end
+        else pointItems[item] = nil; RemoveItem(item) end
+    end
+    local function ReconcileTalents()
+        local changed = false
+        for tier = 1, talentGranted do
+            if talentChoices[tier] == nil then
+                local selected
+                for _, entry in ipairs(SurvivorConfig.talents.tiers[tier]) do
+                    if GetUnitAbilityLevel(hero, FourCC(entry.id)) > 0 then
+                        assert(selected == nil, "Multiple native talents selected in one tier")
+                        selected = entry.id
+                    end
+                end
+                if selected then
+                    talentChoices[tier], talentSpent, changed = selected, talentSpent + 1, true
+                    UnitMakeAbilityPermanent(hero, true, FourCC(selected))
+                end
+            end
+        end
+        if changed then SurvivorAugments.SetTalents(build, talentChoices, hero) end
+        return changed
+    end
+    function SurvivorNativeLoadout.GrantStageTalent(index)
+        assert(hero ~= nil and GetUnitTypeId(hero) ~= 0, "Talent points need a live loadout")
+        if index <= talentEarned then return false end
+        assert(index == talentEarned + 1 and index <= #SurvivorConfig.talents.tiers, "Invalid talent point stage")
+        talentEarned, talentRetry = index, 0
+        SurvivorNativeLoadout.Refresh()
+        return true
+    end
 
     local function Description(id)
         if descriptions[id] == nil then
@@ -28,6 +84,17 @@ do
             if build.evolutions[id] then titles[id] = SurvivorAugments.Get(build.evolutions[id]).name .. " · 진화" end
         end
         return titles[id]
+    end
+    local function UpdateTrinketText(item, id)
+        local level = SurvivorAugments.Level(build, id)
+        local title, description = Title(id, level), Description(id)
+        if textCache[id] == title .. description then return end
+        BlzSetItemName(item, title)
+        BlzSetItemTooltip(item, title)
+        BlzSetItemExtendedTooltip(item, description)
+        BlzSetItemDescription(item, description)
+        SetItemCharges(item, level)
+        textCache[id] = title .. description
     end
 
     local function ReadMainSlots(main)
@@ -72,6 +139,8 @@ do
         SetItemDroppable(item, false)
         SetItemPawnable(item, false)
         SetItemDropOnDeath(item, false)
+        -- Native pickup/UI observers must see the concise current-level text.
+        UpdateTrinketText(item, id)
         local added = UnitAddItem(hero, item)
         -- Native insertion can choose another slot or reject the main inventory.
         -- Refresh only after a transaction; unchanged indicators share the first scan.
@@ -86,8 +155,22 @@ do
     function SurvivorNativeLoadout.Refresh()
         if hero == nil or GetUnitTypeId(hero) == 0 then return end
         SurvivorMetrics.Count("loadout.refreshes")
+        refreshSerial = refreshSerial + 1
+        DeliverTalentPoint()
+        local talentsChanged = ReconcileTalents()
         if descriptionRevision ~= build.revision then
             descriptions, titles, descriptionRevision = {}, {}, build.revision
+        end
+        local available, earned, pending = SurvivorNativeLoadout.TalentStatus()
+        local interfaceState = build.stats.regeneration .. ":" .. available .. ":" .. earned .. ":" .. pending
+        if textCache.interface ~= interfaceState then
+            textCache.interface = interfaceState
+            local entry = FourCC("ASpc")
+            local presentation = SurvivorConfig.talents.interface
+            BlzSetAbilityTooltip(entry, presentation.title, 0)
+            BlzSetAbilityExtendedTooltip(entry, string.format(
+                presentation.format,
+                available, earned, pending > 0 and ("포인트 전달 대기: " .. pending .. "개") or "남은 포인트 보관 가능", build.stats.regeneration), 0)
         end
         local passive = FourCC("HsAE")
         if GetUnitAbilityLevel(hero, passive) == 0 then
@@ -101,7 +184,7 @@ do
         if textCache.escape ~= state .. shield then
             textCache.escape = state .. shield
             BlzSetAbilityTooltip(passive, "그림자 탈출 · " .. state, 0)
-            BlzSetAbilityExtendedTooltip(passive, "안야의 자동 생존 능력 · 스테이지당 1회|n치명적인 피해를 무효화하고 생명력을 최소 30%로 보장합니다.|n이후 2.5초 동안 피해를 받지 않습니다. 이 틈에 이동해 포위망을 벗어나세요.|n|n성장 선택·인벤토리·스토리 중에는 보호 시간이 줄지 않습니다.|n다음 스테이지에서 재충전 · 직접 누를 필요 없음|n|n현재: " .. state .. shield, 0)
+            BlzSetAbilityExtendedTooltip(passive, "안야의 자동 생존 능력 · 스테이지당 1회|n치명적인 피해를 무효화하고 생명력을 최소 30%로 보장합니다.|n주변 적이 적은 방향으로 최대 400 거리 순간 이동하고, 2.5초 동안 무적 상태가 됩니다.|n이동 가능한 경로가 없으면 제자리에서 보호받습니다.|n|n성장 선택·인벤토리·스토리 중에는 보호 시간이 줄지 않습니다.|n다음 스테이지에서 재충전 · 직접 누를 필요 없음|n|n현재: " .. state .. shield, 0)
         end
         for slot, id in ipairs(build.weapons) do
             local code = weapons[id]
@@ -131,37 +214,69 @@ do
             assert(trinkets[id] ~= nil, "Missing native trinket presentation: " .. id)
             local item, changed = EnsureTrinket(id, main)
             inventoryChanged = inventoryChanged or changed
-            if item then
-                local level = SurvivorAugments.Level(build, id)
-                local title = Title(id, level)
-                local description = Description(id)
-                    .. "|n|n레벨업 장신구 · 버리기 불가 · 숫자는 강화 레벨"
-                if textCache[id] ~= title .. description then
-                    BlzSetItemName(item, title)
-                    BlzSetItemTooltip(item, title)
-                    BlzSetItemExtendedTooltip(item, description)
-                    BlzSetItemDescription(item, description)
-                    SetItemCharges(item, level)
-                    textCache[id] = title .. description
-                end
-            end
+            if item then UpdateTrinketText(item, id) end
         end
-        return inventoryChanged
+        return inventoryChanged or talentsChanged
     end
     function SurvivorNativeLoadout.Init(unit, runBuild)
         assert(hero == nil, "Clean native loadout before initialization")
         hero, build = unit, runBuild
         assert(UnitInventorySize(hero) >= SurvivorConfig.trinketSlots, "Trinkets need the classic hero inventory")
+        -- ASde joins the existing ASpc equipment interface; no extra command slot
+        -- or custom input surface. build/build.mjs limits its native stat list.
+        local details = FourCC("ASde")
+        originalInterfaceText = {BlzGetAbilityTooltip(FourCC("ASpc"), 0) or "",
+            BlzGetAbilityExtendedTooltip(FourCC("ASpc"), 0) or ""}
+        ownsStatDetails = GetUnitAbilityLevel(hero, details) == 0
+        if ownsStatDetails then assert(UnitAddAbility(hero, details), "Missing native stat details ASde") end
+        UnitMakeAbilityPermanent(hero, true, details)
+        local talents = SurvivorConfig.talents
+        for level = 1, #talents.tiers do
+            BlzSetAbilityExtendedTooltip(FourCC(talents.controller), talents.controllerText, level - 1)
+        end
+        -- Initialize the native tooltip cache before the talent panel can read it.
+        -- Use only the catalog effect; never restore an older description/footer.
+        for _, tier in ipairs(talents.tiers) do
+            for _, entry in ipairs(tier) do BlzSetAbilityExtendedTooltip(FourCC(entry.id), entry.text, 0) end
+        end
+        campaignTalentLevel = GetUnitAbilityLevel(hero, FourCC(talents.base))
+        if campaignTalentLevel > 0 then UnitRemoveAbility(hero, FourCC(talents.base)) end
+        ownsTalentController = GetUnitAbilityLevel(hero, FourCC(talents.controller)) == 0
+        if ownsTalentController then assert(UnitAddAbility(hero, FourCC(talents.controller)), "Missing native talent controller") end
+        UnitMakeAbilityPermanent(hero, true, FourCC(talents.controller))
         SurvivorNativeLoadout.Refresh()
     end
     function SurvivorNativeLoadout.Cleanup()
+        for item in pairs(pointItems) do pointItems[item] = nil; if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end
         for id, item in pairs(items) do items[id] = nil; RemoveItem(item) end
         if hero ~= nil and GetUnitTypeId(hero) ~= 0 then
+            local talents = SurvivorConfig.talents
+            if ownsTalentController then UnitRemoveAbility(hero, FourCC(talents.controller)) end
+            for _, tier in ipairs(talents.tiers) do
+                for _, entry in ipairs(tier) do UnitRemoveAbility(hero, FourCC(entry.id)) end
+            end
+            if campaignTalentLevel > 0 then
+                UnitAddAbility(hero, FourCC(talents.base))
+                SetUnitAbilityLevel(hero, FourCC(talents.base), campaignTalentLevel)
+            end
+            if ownsStatDetails then UnitRemoveAbility(hero, FourCC("ASde")) end
             UnitRemoveAbility(hero, FourCC("HsAE"))
             for _, code in pairs(weapons) do UnitRemoveAbility(hero, FourCC(code)) end
         end
         hero, build = nil, nil
+        ownsStatDetails = false
+        ownsTalentController, campaignTalentLevel = false, 0
+        deliveringTalent = false
+        talentEarned, talentGranted, talentSpent, refreshSerial, talentRetry = 0, 0, 0, 0, 0
+        talentChoices, pointItems = {}, {}
         items, textCache = {}, {}
         descriptions, titles, descriptionRevision = {}, {}, nil
+        local previous = originalInterfaceText
+        originalInterfaceText = nil
+        if previous then
+            local okTitle, titleError = pcall(BlzSetAbilityTooltip, FourCC("ASpc"), previous[1], 0)
+            local okText, textError = pcall(BlzSetAbilityExtendedTooltip, FourCC("ASpc"), previous[2], 0)
+            if not okTitle or not okText then error(tostring(titleError or textError)) end
+        end
     end
 end

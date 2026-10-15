@@ -7,15 +7,20 @@ import zlib from 'node:zlib';
 import fengari from 'fengari';
 import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo, mapInfo,
     parseUnits, serializeUnits, installPortraitUnits, portraitUnits, validatePortraitObjects, publishTransaction, editorBundle,
-    parseObjectData, serializeObjectData, removeGoldObjectData, removeGoldStrings, removeGoldMisc,
-    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, root, baseMapPath} from './build.mjs';
+    parseObjectData, serializeObjectData, installStatDetails, prepareStatDetails, installInterfaceTooltip, installHeroRegeneration,
+    prepareHeroRegeneration, validateStrengthRegeneration, loadTalentCatalog, talentLua, installNativeTalents,
+    prepareNativeTalents, loadItemTooltipCatalog, loadWeaponTooltipCatalog, cleanWeaponTooltipEntries,
+    cleanItemTooltipText, cleanItemTooltipEntries, prepareItemTooltipCleanup,
+    removeGoldObjectData, removeGoldStrings, removeGoldMisc,
+    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = fengari;
+const talentCatalog = loadTalentCatalog();
 function suite(name, before, files, after) {
     const L = lauxlib.luaL_newstate();
     lualib.luaL_openlibs(L);
     try {
-        for (const [label, source] of [['mocks', before], ...files.map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]), ['assertions', after]]) {
+        for (const [label, source] of [['talents',talentLua(talentCatalog)],['mocks', before], ...files.map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]), ['assertions', after]]) {
             let status = lauxlib.luaL_loadbuffer(L, to_luastring(source), null, to_luastring(label));
             if (status === lua.LUA_OK) status = lua.lua_pcall(L, 0, 0, 0);
             if (status !== lua.LUA_OK) throw new Error(name + ': ' + to_jsstring(lua.lua_tostring(L, -1)));
@@ -32,6 +37,7 @@ ALICE_Initialized = true
 bj_DEGTORAD, bj_RADTODEG = math.pi / 180, 180 / math.pi
 UNIT_TYPE_FLYING, EVENT_PLAYER_UNIT_DEATH, EVENT_PLAYER_UNIT_DAMAGED = "flying", "death", "damage"
 UNIT_STATE_MANA, UNIT_STATE_MAX_MANA = "mana", "maxMana"
+UNIT_RF_HIT_POINTS_REGENERATION_RATE = 'uhpr'
 function FourCC(x) return x end
 function Player(x) return x end
 function CreateUnit(owner, id, x, y, facing)
@@ -52,6 +58,10 @@ function GetWidgetLife(u) return u.life end
 function SetWidgetLife(u,v) u.life=v end
 function BlzGetUnitMaxHP(u) return u.maxLife end
 function BlzSetUnitMaxHP(u,v) u.maxLife=v end
+function BlzSetUnitRealField(u,field,value)
+    assert(not u.removed);u.realFields=u.realFields or {};u.realFields[field]=value;return true
+end
+function BlzGetUnitRealField(u,field)return u.realFields and u.realFields[field] or 0 end
 function GetHandleId(u) return u.handle end
 function GetOwningPlayer(u) return u.owner end
 function GetUnitName(u) return u.id end
@@ -116,9 +126,11 @@ function GetUnitAbilityLevel(u,id) return u.abilities[id] or 0 end
 function UnitAddAbility(u,id) u.abilities[id]=1; return true end
 function UnitRemoveAbility(u,id) u.abilities[id]=nil end
 function SetUnitAbilityLevel(u,id,level) u.abilities[id]=level end
-function BlzSetAbilityTooltip(id,text) end
-abilityWrites=0
-function BlzSetAbilityExtendedTooltip(id,text) abilityWrites=abilityWrites+1 end
+abilityWrites,abilityTooltips,abilityExtendedTooltips=0,{},{}
+function BlzGetAbilityTooltip(id)return abilityTooltips[id] or ('native '..id)end
+function BlzGetAbilityExtendedTooltip(id)return abilityExtendedTooltips[id] or ('native details '..id)end
+function BlzSetAbilityTooltip(id,text)abilityTooltips[id]=text end
+function BlzSetAbilityExtendedTooltip(id,text)abilityWrites=abilityWrites+1;abilityExtendedTooltips[id]=text end
 function UnitInventorySize() return 6 end
 function UnitItemInSlot(u,i) return u.inventory[i+1] end
 function GetItemTypeId(i) return i and not i.removed and i.id or 0 end
@@ -126,6 +138,7 @@ function CreateItem(id,x,y) return {id=id,x=x,y=y} end
 function RemoveItem(i) i.removed=true end
 function SetItemCharges(i,v) i.charges=v end
 function UnitAddItem(u,item)
+    if item.id=='ttal'then u.talentPoints=(u.talentPoints or 0)+1;RemoveItem(item);return true end
     for i=1,6 do if not u.inventory[i] or u.inventory[i].removed then u.inventory[i]=item; return true end end
     return false
 end
@@ -167,6 +180,63 @@ const config = 'src/00_bootstrap/SurvivorConfig.lua';
 const metrics = 'src/20_system/SurvivorMetrics.lua';
 const augments = 'src/20_system/SurvivorAugments.lua';
 const combat = 'src/30_gameplay/SurvivorCombat.lua';
+
+suite('each stage spawns its boss at the configured minute and times out one minute later', mocks + String.raw`
+OnInit={final=function()end}
+function GetHeroLevel()return 1 end
+function GetHeroSkillPoints()return 0 end
+RunSession.Finish=function(reason)finishedReason=reason;state='FINISHED'end
+RunSession.BeginStageClear=function()state='STAGE_CLEAR';return true end
+SurvivorExpedition.Step=function()end
+SurvivorEquipment={Step=function()end}
+SurvivorNativeLoadout={Refresh=function()end}
+bossSpawns,regularSpawns=0,0
+SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 0,0,0 end,
+    SpawnBoss=function()bossSpawns=bossSpawns+1;return true end,
+    Spawn=function()regularSpawns=regularSpawns+1;return true end,
+    UpdateWeapons=function()end,UpdateEnemies=function()end,WarnLava=function()end}
+`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
+local step=Local(HeroSurvivor.BeginRun,'Step')
+SetLocal(step,'hero',CreateUnit(0,'hero',0,0,0))
+SetLocal(step,'stats',{extraWeapons={}})
+SetLocal(step,'selectedDifficulty','normal')
+SetLocal(step,'RefreshDamageBoard',function()end)
+for index,expected in ipairs({{120,180},{180,240},{240,300},{240,300},{240,300}})do
+    local timing=SurvivorConfig.StageTiming(index)
+    assert(timing.bossStart==expected[1] and timing.duration==expected[2])
+    SetLocal(step,'stage',index);SetLocal(step,'stageStarted',1000)
+    SetLocal(step,'bossStarted',false);SetLocal(step,'nextElite',45)
+    state,finishedReason,bossSpawns='RUNNING',nil,0
+    now=1000+expected[1]-.02;step(.02,now)
+    assert(bossSpawns==0 and SurvivorConfig.SpawnRate('normal',index,expected[1]-.02)>0)
+    now=1000+expected[1];step(.02,now)
+    assert(bossSpawns==1 and SurvivorConfig.SpawnRate('normal',index,expected[1])==0)
+    local spawns=regularSpawns
+    now=1000+expected[2]-.02;step(.02,now)
+    assert(not finishedReason and bossSpawns==1 and regularSpawns==spawns,
+        'The boss minute permits combat while regular and elite spawning remain stopped')
+    now=1000+expected[2];step(.02,now)
+    assert(finishedReason=='timeout','Each deadline is relative to the current stage start')
+end
+local wave=Local(HeroSurvivor.BeginRun,'SpawnWave')
+local oldStageRates,oldMinuteRates={1,1.35,1.75,2.2,2.7},{1,1.6,2.4,3.4}
+for difficulty,weight in pairs({easy=.8,normal=1,hard=1.1})do
+    SetLocal(wave,'selectedDifficulty',difficulty)
+    for index,stageWeight in ipairs(oldStageRates)do
+        SetLocal(wave,'stage',index);SetLocal(wave,'bossStarted',false)
+        for minute,timeWeight in ipairs(oldMinuteRates)do
+            local elapsed=(minute-1)*60
+            if elapsed<SurvivorConfig.StageTiming(index).bossStart then
+                SetLocal(wave,'spawnBudget',0);regularSpawns=0
+                for tick=1,500 do wave(.02,elapsed+(tick-1)*.02)end
+                local expected=10*weight*stageWeight*timeWeight*1.5
+                assert(math.abs(regularSpawns-expected)<1.00001,
+                    'Actual wave accumulation must deliver 1.5 times the old rate across every difficulty, stage and minute')
+            end
+        end
+    end
+end
+`);
 
 suite('growth offers preserve guarantees, evolution priority, exclusion fallbacks and exhausted recovery', mocks,
     [config,augments], String.raw`
@@ -315,6 +385,114 @@ end
 SurvivorCombat.Cleanup()
 hero,build,units=NewCombat('returnblade');EnemyAt(units,100,0,false);SurvivorCombat.CastExtra('returnblade')
 assert(actors[1].visual.alpha==140,'Unrelated blade weapons keep their existing visibility policy')
+SurvivorCombat.Cleanup()
+`);
+
+suite('chain lightning adds one attached impact per hit, preserves damage and cleans paused or expired visuals', mocks + String.raw`
+function AddLightningEx(kind,visible,x,y,z,tx,ty,tz)return {kind=kind,x=x,y=y,z=z,tx=tx,ty=ty,tz=tz}end
+function AddSpecialEffectTarget(model,unit,point)return {model=model,unit=unit,point=point}end
+function BlzSetSpecialEffectZ(effect,z)assert(not effect.unit,'Attached effects must use native attachment height');effect.z=z end
+function BlzSetSpecialEffectScale(effect,value)effect.scale=value end
+function BlzSetSpecialEffectAlpha(effect,value)effect.alpha=value end
+`, [config, metrics, augments, combat], String.raw`
+local hero,build,units=NewCombat('chainlightning')
+build.stats.chainTargets=4
+local targets={EnemyAt(units,100,0,false),EnemyAt(units,200,0,true),EnemyAt(units,300,0,false)}
+EnemyAt(units,2000,0,false);targets[1].life=10
+SurvivorCombat.CastChainLightning()
+assert(#hits==3 and #actors==6,'One beam and one impact for each distinct target in reach')
+local impacts,beams={},{}
+for _,actor in ipairs(actors)do
+    if actor.identifier=='hsChainHit'then impacts[#impacts+1]=actor else beams[#beams+1]=actor end
+end
+for i,target in ipairs(targets)do
+    assert(hits[i].unit==target and math.abs(hits[i].damage-build.stats.chainDamage*SurvivorConfig.chainFalloff^(i-1))<.00001)
+    assert(impacts[i].visual.unit==target and impacts[i].visual.point=='chest'
+        and impacts[i].visual.model==SurvivorConfig.chainHitModel and impacts[i].visual.scale>1
+        and impacts[i].visual.alpha==255,'Ground, flying and lethally hit units all receive a bright native attachment')
+end
+local impact=impacts[2];local life=impact.life
+state='CHOOSING';impact.selfInteractions(impact);assert(impact.life==life)
+state='RUNNING';SetLocal(SurvivorCombat.UpdateWeapons,'warningUntil',10)
+SurvivorCombat.UpdateWeapons(.02)
+for _,entry in ipairs(impacts)do assert(entry.visual.alpha==110)end
+now=11;SurvivorCombat.UpdateWeapons(.02)
+for _,entry in ipairs(impacts)do
+    assert(entry.visual.alpha==255)
+    local visual=entry.visual
+    for _=1,30 do if not entry.cleaned then entry.selfInteractions(entry)end end
+    assert(entry.cleaned and visual.destroyed and entry.target==nil,'Expiration releases effects and target references')
+end
+SurvivorCombat.Cleanup()
+for _,entry in ipairs(beams)do assert(entry.cleaned and entry.lightning==nil)end
+`);
+
+suite('shadow escape blinks through walkable routes, protects once per stage and releases native invulnerability', mocks + String.raw`
+PATHING_TYPE_WALKABILITY='walk'
+function IsTerrainPathable()return false end
+function BlzIsUnitInvulnerable(u)return u.invulnerable==true end
+function SetUnitInvulnerable(u,value)u.invulnerable=value end
+function BlzSetEventDamage(value)eventDamage=value end
+function GetEventDamage()return eventDamage end
+function GetEventDamageSource()return eventSource end
+function GetTriggerUnit()return eventTarget end
+function Receive(hero,source,damage)
+    eventTarget,eventSource,eventDamage=hero,source,damage
+    Local(SurvivorCombat.Init,'damageTrigger').action()
+    return eventDamage
+end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+hero.maxLife,hero.life=1000,100
+local source=EnemyAt(units,100,0,false)
+EnemyAt(units,-400,0,false)
+assert(Receive(hero,source,20)==20 and hero.x==0 and not hero.invulnerable and SurvivorCombat.EscapeStatus())
+assert(Receive(hero,source,100)==0 and hero.life==300 and hero.invulnerable)
+assert(hero.x<0 and math.abs(hero.y)>100 and math.abs(hero.x^2+hero.y^2-400^2)<.001,
+    'Prefer an open diagonal over blinking directly into an enemy')
+local ready,remaining,uses=SurvivorCombat.EscapeStatus()
+assert(not ready and remaining==2.5 and uses==1 and SurvivorCombat.StageEscapeUses(1)==1)
+assert(#actors==2 and actors[1].visual.model==SurvivorConfig.escapeDepartureModel
+    and actors[2].visual.model==SurvivorConfig.escapeArrivalModel
+    and actors[1].x==0 and actors[2].x==hero.x and actors[2].y==hero.y)
+local shell=Local(SurvivorCombat.Init,'escapeEffect')
+local x,y=hero.x,hero.y
+assert(Receive(hero,source,1000)==0 and hero.life==300 and hero.x==x and hero.y==y and #actors==2)
+state='CHOOSING';SurvivorCombat.UpdateWeapons(10)
+assert(hero.invulnerable and select(2,SurvivorCombat.EscapeStatus())==2.5 and not shell.destroyed)
+state='RUNNING';now=2.49;SurvivorCombat.UpdateWeapons(.02);assert(hero.invulnerable)
+now=2.5;SurvivorCombat.UpdateWeapons(.02)
+assert(not hero.invulnerable and shell.destroyed and select(2,SurvivorCombat.EscapeStatus())==0)
+assert(Receive(hero,source,400)==400 and select(3,SurvivorCombat.EscapeStatus())==1,
+    'The spent escape cannot trigger again in the same stage')
+SurvivorCombat.BeginStage(2,now);assert(SurvivorCombat.EscapeStatus())
+hero.life=100;assert(Receive(hero,nil,100)==0 and hero.invulnerable and SurvivorCombat.StageEscapeUses(2)==1)
+SurvivorCombat.BeginStage(3,now);assert(not hero.invulnerable and SurvivorCombat.EscapeStatus())
+SurvivorCombat.Cleanup()
+
+hero,build,units=NewCombat('firebolt');hero.maxLife,hero.life=1000,100
+source=EnemyAt(units,100,0,false)
+-- Both distant endpoints are clear; only the route to the left crosses a wall.
+IsTerrainPathable=function(x,y)return math.abs(y)>32.001 or (x < -48 and x > -80)end
+assert(Receive(hero,source,100)==0 and hero.x>0 and math.abs(hero.y)<.001,
+    'Do not blink across an impassable strip into an otherwise clear landing')
+SurvivorCombat.Cleanup();assert(not hero.invulnerable)
+
+hero,build,units=NewCombat('firebolt');hero.maxLife,hero.life=1000,100
+SetLocal(SurvivorCombat.Init,'bounds',{minX=-64,maxX=64,minY=-64,maxY=64})
+IsTerrainPathable=function()return false end
+assert(Receive(hero,nil,100)==0 and hero.x==0 and hero.y==0 and hero.invulnerable
+    and lastMessage:find('제자리 보호'),'No in-bounds landing still grants full protection')
+state='STAGE_CLEAR';SurvivorCombat.ClearBattlefieldAsync(function()end)
+assert(not hero.invulnerable,'Stage clearing releases protection before removing actors')
+SurvivorCombat.Cleanup()
+
+hero,build,units=NewCombat('firebolt');hero.maxLife,hero.life=1000,100
+IsTerrainPathable=function()return true end
+hero.invulnerable=true
+Receive(hero,nil,100)
+assert(hero.x==0 and hero.y==0)
+SurvivorCombat.ClearBattlefield();assert(hero.invulnerable,'Do not remove pre-existing invulnerability')
 SurvivorCombat.Cleanup()
 `);
 
@@ -585,6 +763,27 @@ SurvivorCombat.UpdateEnemies(.5);assert(units[shielded].shieldSource==nil)
 SurvivorCombat.Cleanup()
 `);
 
+suite('meteor impact replaces the flame column while preserving impact damage and lingering pulses', mocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('meteor')
+local target=EnemyAt(units,100,0,false)
+SurvivorCombat.CastWeapon('meteor')
+local meteor=actors[#actors]
+assert(meteor.identifier=='hsMeteor' and meteor.visual.model==SurvivorConfig.meteorModel)
+local w=meteor.profile
+meteor.life=.001;meteor.selfInteractions(meteor)
+local zone=actors[#actors]
+assert(meteor.cleaned and zone.weapon=='meteor'
+    and zone.visual.model==[[Objects\Spawnmodels\Other\NeutralBuildingExplosion\NeutralBuildingExplosion.mdl]])
+assert(zone.life==w.duration and zone.damage==w.damage*.2 and zone.radius==w.radius)
+assert(#hits==1 and hits[1].damage==w.damage,'Landing still deals its full impact damage')
+zone.selfInteractions(zone)
+assert(#hits==2 and hits[2].damage==w.damage*.2,'The impact effect retains the lingering damage callback')
+Local(meteor.selfInteractions,'NewZone')('flamefield',0,0,w,w.damage)
+assert(actors[#actors].visual.model==SurvivorConfig.zoneModel,'Other flame zones retain their own effect')
+SurvivorCombat.Cleanup()
+`);
+
 suite('multicast snapshots contain only the selected weapon and retain cast-time values', mocks + String.raw`
 function AddLightningEx()return {}end
 function GetRandomInt()return 1 end
@@ -656,6 +855,115 @@ SurvivorNativeLoadout.Cleanup();SurvivorCombat.Cleanup()
 print("  400 unchanged refreshes: 0 repeated description builds")
 `);
 
+suite('trinket pickup, upgrades, recreation and restart use only concise current-level descriptions', mocks + String.raw`
+SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
+function BlzSetItemName(item,text)item.name=text end
+function BlzSetItemTooltip(item,text)item.tooltip=text end
+function BlzSetItemExtendedTooltip(item,text)item.extended=text end
+function BlzSetItemDescription(item,text)item.description=text end
+function SetItemDroppable(item,value)item.droppable=value end
+function SetItemPawnable(item,value)item.pawnable=value end
+local add=UnitAddItem
+function UnitAddItem(u,item)
+    if item.id:match('^HsT')then
+        assert(item.description and item.extended==item.description and item.charges,
+            'The native pickup must see the current description before insertion')
+        assert(not item.description:find('자동 적용')and not item.description:find('레벨업 선택으로 강화')
+            and not item.description:find('|cffaaaaaa'),'No long suffix or flavor during pickup')
+    end
+    return add(u,item)
+end
+`, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+for _,id in ipairs(SurvivorConfig.startingTrinkets)do
+    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild('firebolt',id)
+    SurvivorNativeLoadout.Init(hero,build)
+    for level=1,5 do
+        if level>1 then SurvivorAugments.Apply(id,build,hero);SurvivorNativeLoadout.Refresh()end
+        local item=hero.inventory[1]
+        local expected=SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n')
+        assert(item.description==expected and item.extended==expected and item.charges==level)
+        assert(not expected:find('단독 기준')and not expected:find('합산')and not expected:find('|cffaaaaaa'))
+        assert(item.droppable==false and item.pawnable==false,'Description cleanup must retain item restrictions')
+        if id=='haste'then assert(expected==string.format('모든 무기 쿨다운 -%.1f%%',(1-1/(1+level*.1))*100))end
+        if id=='multicast'then assert(expected:find('추가 공격 피해',1,true))end
+        assert(SurvivorAugments.Preview(id,SurvivorAugments.NewBuild('firebolt')):find('→',1,true))
+    end
+    local item=hero.inventory[1];hero.inventory[1]=nil;RemoveItem(item);hero.paused=true
+    SurvivorNativeLoadout.Refresh();assert(hero.inventory[1]==nil and build.levels[id]==5)
+    hero.paused=false;SurvivorNativeLoadout.Refresh()
+    assert(hero.inventory[1]~=item and hero.inventory[1].charges==5)
+    assert(hero.inventory[1].description==SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n'))
+    SurvivorNativeLoadout.Cleanup();build=SurvivorAugments.NewBuild('firebolt',id)
+    SurvivorNativeLoadout.Init(hero,build);assert(hero.inventory[1].charges==1)
+    assert(hero.inventory[1].description==SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n'))
+    SurvivorNativeLoadout.Cleanup()
+end
+`);
+
+suite('weapon tooltips stay concise through five levels, all evolutions and native refreshes', mocks + String.raw`
+SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
+weaponText={}
+local write=BlzSetAbilityExtendedTooltip
+function BlzSetAbilityExtendedTooltip(id,text,level)
+    weaponText[id..':'..level]=text;return write(id,text,level)
+end
+`, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC'}
+local function Check(id,build)
+    local level=build.levels[id];local text=weaponText[ids[id]..':'..(level-1)]
+    assert(text==SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n'))
+    assert(not text:find('자동 적용')and not text:find('레벨업 선택으로 강화')and not text:find('|cffaaaaaa'))
+    assert(text:find('쿨다운',1,true)and text:find('피해',1,true),'Keep current numerical combat information')
+    if id=='chainlightning'then assert(text:find('전이마다 피해 -15%',1,true))end
+    if id=='frontslash'then assert(text:find('대상별 1회 타격',1,true))end
+end
+for id in pairs(ids)do
+    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(id)
+    SurvivorNativeLoadout.Init(hero,build)
+    for level=1,5 do
+        if level>1 then SurvivorAugments.Apply(id,build,hero);SurvivorNativeLoadout.Refresh()end
+        Check(id,build)
+        assert(BlzGetAbilityTooltip(ids[id])==SurvivorAugments.Get(id).name..' · '..(level==5 and 'MAX'or'Lv.'..level))
+    end
+    local writes=abilityWrites;for _=1,20 do SurvivorNativeLoadout.Refresh()end
+    assert(abilityWrites==writes,'Unchanged weapon tooltips must not be rewritten every tick')
+    SurvivorNativeLoadout.Cleanup()
+end
+for i=1,24 do
+    local evolution='evolution'..i;local entry=SurvivorAugments.Get(evolution)
+    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(entry.weapon)
+    build.levels[entry.weapon]=5;SurvivorAugments.Recalculate(build,hero)
+    SurvivorNativeLoadout.Init(hero,build);SurvivorAugments.Apply(evolution,build,hero);SurvivorNativeLoadout.Refresh()
+    Check(entry.weapon,build)
+    assert(weaponText[ids[entry.weapon]..':4']:find(entry.text,1,true),'Keep every evolution effect and condition')
+    assert(BlzGetAbilityTooltip(ids[entry.weapon])==entry.name..' · 진화')
+    assert(SurvivorAugments.Preview(evolution,build)=='진화 선택 후 변경 불가')
+    SurvivorNativeLoadout.Cleanup()
+end
+`);
+
+suite('native stat details attaches once without command slots and restores pre-existing ability ownership', mocks + String.raw`
+SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
+`, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+for _,preexisting in ipairs({false,true})do
+    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild('firebolt')
+    if preexisting then hero.abilities.ASde=1 end
+    local additions,positionWrites=0,0;local add=UnitAddAbility;local position=BlzSetAbilityPosX
+    UnitAddAbility=function(u,id)if id=='ASde'then additions=additions+1 end;return add(u,id)end
+    BlzSetAbilityPosX=function(id,...)assert(id~='ASde'and id~='ASpc','Native details must not occupy a weapon slot');positionWrites=positionWrites+1;position(id,...)end
+    SurvivorNativeLoadout.Init(hero,build)
+    local menuText=BlzGetAbilityExtendedTooltip('ASpc')
+    assert(select(2,menuText:gsub('|n',''))==2,'Shared menu tooltip contains only points, delivery status and regeneration')
+    assert(not menuText:find('각 구역 수색 준비에서',1,true)and not menuText:find('단계마다 셋 중 하나 선택',1,true)
+        and not menuText:find('상세 정보를 확인합니다',1,true),'The shared menu must not restore the long help text')
+    for _=1,20 do SurvivorNativeLoadout.Refresh()end
+    assert(GetUnitAbilityLevel(hero,'ASde')==1 and additions==(preexisting and 0 or 1))
+    SurvivorNativeLoadout.Cleanup()
+    assert(GetUnitAbilityLevel(hero,'ASde')==(preexisting and 1 or 0))
+    UnitAddAbility,BlzSetAbilityPosX=add,position
+end
+`);
+
 suite('native trinket snapshots share static slot reads and verify moves, restoration and rejected insertion', mocks + String.raw`
 SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
 `, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
@@ -675,6 +983,186 @@ UnitAddItem=function(u,item)inserted=item;u.bag={item};return true end
 assert(SurvivorNativeLoadout.Refresh()==true and displaced.removed and inserted.removed and hero.inventory[1]==nil)
 UnitAddItem=add;assert(SurvivorNativeLoadout.Refresh()==true and hero.inventory[1])
 SurvivorNativeLoadout.Cleanup()
+`);
+
+suite('engine regeneration preserves renewal values, pauses every lifecycle and never stacks Lua healing', mocks + String.raw`
+function ALICE_CallPeriodic(fn)periodic=fn;return fn end
+function ALICE_DisableCallback()periodic=nil end
+function ALICE_Halt()halted=true end
+function ALICE_Resume()halted=false end
+-- Deliberately regenerate even on paused units: interactive inventory heroes
+-- cannot rely on PauseUnit to freeze HP. The native field must actually be zero.
+function AdvanceEngine(seconds)
+    for _,u in ipairs(world)do
+        if not u.removed and u.life>0 then
+            u.life=math.min(u.maxLife,u.life+BlzGetUnitRealField(u,UNIT_RF_HIT_POINTS_REGENERATION_RATE)*seconds)
+        end
+    end
+end
+`, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+local hero,build=NewCombat('firebolt')
+hero.life,hero.maxLife=100,600
+local function Rate()return BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)end
+local hpWrites=0;local write=SetWidgetLife
+SetWidgetLife=function(...)hpWrites=hpWrites+1;return write(...)end
+assert(SurvivorCombat.Regenerate==nil and Rate()==0,'Base regeneration is zero and only the engine owns periodic healing')
+AdvanceEngine(10);assert(hero.life==100 and hpWrites==0,'Anya does not recover HP without regeneration bonuses')
+SurvivorAugments.Apply('renewal',build,hero)
+assert(Rate()==1 and hpWrites==0)
+AdvanceEngine(5);assert(hero.life==105,'Renewal contributes once, not on top of another Lua heal')
+local oldTitle,oldText=BlzGetAbilityTooltip('ASpc'),BlzGetAbilityExtendedTooltip('ASpc')
+SurvivorNativeLoadout.Init(hero,build)
+assert(BlzGetAbilityExtendedTooltip('ASpc'):find('초당 1.00',1,true))
+local calls=abilityWrites
+for _=1,20 do SurvivorNativeLoadout.Refresh()end
+assert(abilityWrites==calls,'Unchanged regeneration tooltips do not rewrite the native interface')
+assert(RunSession.Start(function()end,{pause=function(reason)SurvivorCombat.SetPaused(true,reason)end,
+    resume=function()SurvivorCombat.SetPaused(false)end,finish=function()SurvivorNativeLoadout.Cleanup();SurvivorCombat.Cleanup()end}))
+assert(RunSession.BeginChoice()and Rate()==0 and hero.paused)
+SurvivorAugments.Apply('renewal',build,hero)
+assert(build.stats.regeneration==2 and Rate()==0,'Learning renewal while choosing must not enable regeneration')
+SurvivorNativeLoadout.Refresh()
+assert(BlzGetAbilityExtendedTooltip('ASpc'):find('초당 2.00',1,true)
+    and BlzGetAbilityExtendedTooltip('ASpc'):find('정지 중 0',1,true))
+AdvanceEngine(60);assert(hero.life==105)
+RunSession.SetInventoryOpen(true);RunSession.EndChoice()
+assert(RunSession.GetState()=='INVENTORY'and not hero.paused and Rate()==0)
+SurvivorAugments.SetEquipmentBonuses(build,{gear={all={maxLife=50,moveSpeed=10}}},hero)
+assert(hero.life==105 and Rate()==0,'Equipment recalculation while paused must not heal or restart native regeneration')
+AdvanceEngine(60);SurvivorCombat.MaintainInventoryPause();assert(hero.life==105)
+RunSession.SetInventoryOpen(false);assert(RunSession.IsRunning()and Rate()==2)
+AdvanceEngine(5);assert(hero.life==115)
+RunSession.BeginStageClear();assert(Rate()==0)
+AdvanceEngine(60);assert(hero.life==115,'Story and search preparation remain frozen')
+RunSession.SetInventoryOpen(true)
+SurvivorCombat.BeginStage(2,RunSession.GetElapsed())
+SurvivorAugments.Apply('renewal',build,hero)
+assert(build.stats.regeneration==3 and Rate()==0,'Stage changes and paused upgrades cannot bypass the pause gate')
+RunSession.EndStageClear();assert(RunSession.GetState()=='INVENTORY'and Rate()==0)
+RunSession.SetInventoryOpen(false);assert(Rate()==3)
+hero.life=200;AdvanceEngine(.25);assert(hero.life==200.75)
+hero.life=hero.maxLife-1;AdvanceEngine(30);assert(hero.life==hero.maxLife)
+RunSession.Finish('test')
+assert(hero.removed and Rate()==0 and BlzGetAbilityTooltip('ASpc')==oldTitle and BlzGetAbilityExtendedTooltip('ASpc')==oldText)
+hero,build=NewCombat('firebolt');assert(Rate()==0,'Restart uses the fresh build with no base regeneration')
+SurvivorCombat.Cleanup()
+local partial=CreateUnit(0,'hero',0,0,0);build=SurvivorAugments.NewBuild('firebolt')
+local native=BlzSetUnitRealField;BlzSetUnitRealField=function()return false end
+local ok,message=pcall(SurvivorCombat.Init,partial,build.stats,{minX=-5000,maxX=5000,minY=-5000,maxY=5000})
+BlzSetUnitRealField=native
+assert(not ok and tostring(message):find('native hero regeneration'))
+SurvivorCombat.Cleanup();assert(partial.removed,'A failed native setup still owns and removes the partially initialized hero')
+`);
+
+suite('native talents award five points, reconcile hidden abilities once and survive paused equipment transactions', mocks,
+    [config,metrics,augments,combat,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+local hero,build=NewCombat('firebolt');hero.maxLife,hero.life=600,250
+for _,id in ipairs({'power','haste','reach','renewal','stride','vitality'})do SurvivorAugments.Apply(id,build,hero)end
+hero.abilities.ATua=3
+local talentWrites=0
+for tier,entries in ipairs(SurvivorConfig.talents.tiers)do for _,entry in ipairs(entries)do
+    abilityExtendedTooltips[entry.id]=entry.text..'|n|n'..tier..'단계 특성 · 셋 중 하나 선택 · 이번 수색 동안 유지'
+end end
+local writeTooltip=BlzSetAbilityExtendedTooltip
+BlzSetAbilityExtendedTooltip=function(id,text,level)
+    if id:match('^Ht[1-5][ABC]$')then talentWrites=talentWrites+1;assert(level==0)end
+    return writeTooltip(id,text,level)
+end
+SurvivorNativeLoadout.Init(hero,build)
+for _,entries in ipairs(SurvivorConfig.talents.tiers)do for _,entry in ipairs(entries)do
+    assert(BlzGetAbilityExtendedTooltip(entry.id,0)==entry.text,'Initialization must replace a stale talent footer')
+end end
+assert(talentWrites==15,'Each talent cache is initialized exactly once per run')
+assert(GetUnitAbilityLevel(hero,'HsTL')==1 and GetUnitAbilityLevel(hero,'ATua')==0)
+local slots={};for i=1,6 do slots[i]=hero.inventory[i]end
+local life,maximum,damage,regen=hero.life,hero.maxLife,build.stats.missileDamage,build.stats.regeneration
+SurvivorCombat.SetPaused(true,'STAGE_CLEAR')
+assert(SurvivorNativeLoadout.GrantStageTalent(1)and not SurvivorNativeLoadout.GrantStageTalent(1))
+assert(hero.talentPoints==1 and select(1,SurvivorNativeLoadout.TalentStatus())==1)
+for i=1,6 do assert(hero.inventory[i]==slots[i],'A native powerup must not displace a full classic inventory')end
+-- The engine grants an ability, not an event callback we can invent for ATal.
+hero.talentPoints=hero.talentPoints-1;UnitAddAbility(hero,'Ht1C')
+assert(SurvivorNativeLoadout.Refresh()and hero.life==life and hero.maxLife==maximum+100)
+assert(BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==0)
+local revision=build.revision
+for _=1,100 do assert(not SurvivorNativeLoadout.Refresh())end
+assert(build.revision==revision and hero.maxLife==maximum+100,'Repeated native polls must not stack a talent')
+assert(talentWrites==15,'Refreshes must not append text or keep rewriting the native talent cache')
+assert(SurvivorNativeLoadout.GrantStageTalent(2))
+hero.talentPoints=hero.talentPoints-1;UnitAddAbility(hero,'Ht2B');SurvivorNativeLoadout.Refresh()
+assert(build.talentTotals.all.rangePct==.12 and build.stats.regeneration==regen
+    and BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==0)
+SurvivorAugments.SetEquipmentBonuses(build,{gear={all={maxLife=50,damagePct=.20}}},hero)
+assert(hero.maxLife==maximum+150 and hero.life==life and build.stats.regeneration==regen)
+local preview=SurvivorAugments.PreviewEquipment(build,{})
+assert(preview.equipmentLife==build.stats.equipmentLife-50 and preview.regeneration==build.stats.regeneration,
+    'Equipment comparisons must retain the current talent build')
+for stage=3,5 do assert(SurvivorNativeLoadout.GrantStageTalent(stage))end
+assert(hero.talentPoints==3 and not SurvivorNativeLoadout.GrantStageTalent(5))
+for _,id in ipairs({'Ht3A','Ht4C','Ht5C'})do UnitAddAbility(hero,id);hero.talentPoints=hero.talentPoints-1 end
+assert(SurvivorNativeLoadout.Refresh())
+assert(select(1,SurvivorNativeLoadout.TalentStatus())==0 and select(2,SurvivorNativeLoadout.TalentStatus())==5)
+assert(hero.maxLife==maximum+350 and hero.life==life and build.stats.regeneration==regen)
+local before=build.stats.missileDamage
+SurvivorAugments.SetEquipmentBonuses(build,{},hero)
+assert(hero.maxLife==maximum+300 and build.stats.missileDamage<before and build.talentChoices[3]=='Ht3A')
+SurvivorCombat.SetPaused(false)
+assert(BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==regen)
+local ok=pcall(SurvivorNativeLoadout.GrantStageTalent,6);assert(not ok,'No sixth point beyond the five-stage run')
+SurvivorNativeLoadout.Cleanup()
+assert(GetUnitAbilityLevel(hero,'ATua')==3 and GetUnitAbilityLevel(hero,'HsTL')==0)
+for _,tier in ipairs(SurvivorConfig.talents.tiers)do for _,entry in ipairs(tier)do assert(GetUnitAbilityLevel(hero,entry.id)==0)end end
+SurvivorCombat.Cleanup()
+
+hero,build=NewCombat('firebolt');SurvivorNativeLoadout.Init(hero,build)
+assert(select(2,SurvivorNativeLoadout.TalentStatus())==0 and not build.talentChoices,'Restart has no previous talents or credits')
+local add,attempts=UnitAddItem,0
+UnitAddItem=function(u,item)if item.id=='ttal'then attempts=attempts+1;return false end;return add(u,item)end
+SurvivorNativeLoadout.GrantStageTalent(1)
+assert(attempts==1 and select(3,SurvivorNativeLoadout.TalentStatus())==1)
+for _=1,10 do SurvivorNativeLoadout.Refresh()end
+assert(attempts==1,'Rejected powerups must not spin on every refresh')
+local nested=false
+UnitAddItem=function(u,item)
+    if item.id=='ttal'and not nested then nested=true;SurvivorNativeLoadout.Refresh()end
+    return add(u,item)
+end
+for _=1,30 do SurvivorNativeLoadout.Refresh()end
+assert(hero.talentPoints==1 and select(3,SurvivorNativeLoadout.TalentStatus())==0,
+    'A later successful pickup and reentrant native callbacks grant exactly one point')
+UnitAddItem=add
+SurvivorNativeLoadout.Cleanup();SurvivorCombat.Cleanup()
+`);
+
+suite('talent damage, cooldown, size, range and duration share growth formulas without losing gear or previews', mocks,
+    [config,metrics,augments], String.raw`
+local hero=CreateUnit(0,'hero',0,0,0)
+local build=SurvivorAugments.NewBuild('firebolt')
+build.levels.chainlightning=1;build.levels.flamefield=1;build.levels.frostshard=1
+SurvivorAugments.Recalculate(build,hero)
+local base={damage=build.stats.missileDamage,interval=build.stats.missileInterval,size=build.stats.missileHitRadius,
+    range=build.stats.missileRange,life=build.stats.missileLifetime,zone=build.stats.zoneDuration}
+assert(SurvivorAugments.SetTalents(build,{[1]='Ht1A',[2]='Ht2A',[3]='Ht3B',[4]='Ht4B',[5]='Ht5B'},hero))
+assert(math.abs(build.stats.missileDamage/base.damage-1.12)<.00001)
+assert(math.abs(build.stats.missileInterval/base.interval-1/1.35)<.00001)
+assert(math.abs(build.stats.missileHitRadius/base.size-1.12)<.00001)
+assert(math.abs(build.stats.missileRange/base.range-1.15)<.00001)
+local revision=build.revision
+assert(not SurvivorAugments.SetTalents(build,build.talentChoices,hero)and build.revision==revision)
+SurvivorAugments.SetTalents(build,{[4]='Ht4C'},hero)
+assert(math.abs(build.stats.missileLifetime/base.life-1.15)<.00001
+    and math.abs(build.stats.zoneDuration/base.zone-1.15)<.00001)
+SurvivorAugments.SetTalents(build,{[2]='Ht2C',[4]='Ht4C'},hero)
+assert(math.abs(build.stats.missileLifetime/base.life-1.27)<.00001)
+SurvivorAugments.SetTalents(build,{[2]='Ht2A',[4]='Ht4A'},hero)
+assert(math.abs(build.stats.missileHitRadius/base.size-1.30)<.00001)
+assert(not pcall(SurvivorAugments.SetTalents,build,{[2]='Ht1A'},hero),'A talent cannot be assigned to another tier')
+SurvivorAugments.SetEquipmentBonuses(build,{gear={all={damagePct=.1,speedPct=.1}}},hero)
+SurvivorAugments.SetTalents(build,{[1]='Ht1A',[3]='Ht3A',[5]='Ht5A'},hero)
+assert(math.abs(build.stats.missileDamage/base.damage-1.65)<.00001)
+assert(math.abs(build.stats.missileInterval/base.interval-1/1.1)<.00001)
+local preview=SurvivorAugments.PreviewEquipment(build,{})
+assert(math.abs(preview.missileDamage/base.damage-1.55)<.00001)
 `);
 
 suite('all five boss transitions wait for cleanup and explicit story continuation', mocks + String.raw`
@@ -777,6 +1265,15 @@ end
 assert(SurvivorCombat.SpawnBoss() and SurvivorCombat.BossStatus(),'Boss actor and essential health state still appear')
 assert(#alerts==0 and #cues==0,'Monster spawning must not interrupt the screen with a panel or an alert sound')
 SurvivorCombat.Cleanup()
+for index,cap in ipairs({180,203,225,225,225})do
+    hero,build,units=NewCombat('orbitblade')
+    SetLocal(SurvivorCombat.Spawn,'stage',index)
+    for count=1,cap-1 do assert(SurvivorCombat.Spawn(false,'melee'))end
+    assert(not SurvivorCombat.Spawn(false,'melee'),'The enlarged regular wave still respects its stage cap')
+    assert(SurvivorCombat.SpawnBoss(),'A full wave must leave one reserved slot for its boss')
+    assert(SurvivorCombat.Counts()==cap and not SurvivorCombat.SpawnBoss(),'A single boss fills the reserved slot without exceeding the cap')
+    SurvivorCombat.Cleanup()
+end
 `);
 
 suite('risk investigations require explicit live acceptance and search deadlines use paused run time', mocks + String.raw`
@@ -786,7 +1283,8 @@ function SetTextTagText(tag,text)tag.text=text end
 for _,name in ipairs({'SetTextTagPos','SetTextTagColor','SetTextTagPermanent','PingMinimapEx'})do _G[name]=function()end end
 SurvivorStage.FindPoint=function(angle,radius)return {x=math.cos(angle)*radius,y=math.sin(angle)*radius}end
 SurvivorStage.LandmarkApproach=function()return {x=1000,y=0}end
-SurvivorCombat={ReleaseCourier=function()end,GrantSearchRecovery=function()return '회복'end}
+SurvivorCombat={ReleaseCourier=function()end,GrantSearchRecovery=function()return '회복'end,
+    SpawnCourier=function(points)return CreateUnit(12,'courier',points[1].x,points[1].y,0)end}
 notifications={}
 SurvivorUI.Notify=function(text)notifications[#notifications+1]=text end
 `, [config,'src/30_gameplay/SurvivorExpedition.lua'], String.raw`
@@ -798,7 +1296,7 @@ local function Begin(index,start)
         function(kind)rewards[#rewards+1]=kind end)
 end
 Begin(1,1000)
-now=1095;SurvivorExpedition.Step(0.02,now)
+now=1030;SurvivorExpedition.Step(0.02,now)
 local risk=Local(SurvivorExpedition.Step,'risk')
 assert(risk.state=='offered' and SurvivorExpedition.RiskOffer()==nil)
 assert(not SurvivorExpedition.AcceptRisk(),'A distant stale click cannot begin a challenge')
@@ -806,7 +1304,7 @@ hero.x,hero.y=risk.x,risk.y
 for i=1,100 do SurvivorExpedition.Step(.02,now)end
 assert(risk.state=='offered' and not SurvivorExpedition.RiskActive(),'Standing near a marker never automatically accepts risk')
 local offer=SurvivorExpedition.RiskOffer()
-assert(offer and offer.seconds==30 and offer.remaining==85 and offer.text:find('25%%') and offer.text:find('35%%'))
+assert(offer and offer.seconds==30 and offer.remaining==60 and offer.text:find('25%%') and offer.text:find('35%%'))
 local terms=SurvivorExpedition.Status();local lineCount=1
 for _ in terms:gmatch('\n')do lineCount=lineCount+1 end
 assert(terms:find('조사 수락') and terms:find('장소를 벗어나도') and lineCount==7,'Display every term before acceptance alongside the active search')
@@ -815,21 +1313,20 @@ state='RUNNING';hero.life=0;assert(not SurvivorExpedition.AcceptRisk(),'A dead h
 local marker,tag=risk.effect,risk.tag
 assert(SurvivorExpedition.AcceptRisk() and marker.destroyed and tag.destroyed)
 assert(SurvivorExpedition.RiskActive() and not SurvivorExpedition.RiskOffer() and not SurvivorExpedition.AcceptRisk())
-hero.x,hero.y=0,0;now=1124.9;SurvivorExpedition.Step(.02,now);assert(#rewards==0)
+hero.x,hero.y=0,0;now=1059.9;SurvivorExpedition.Step(.02,now);assert(#rewards==0)
 state='INVENTORY';for i=1,100 do SurvivorExpedition.Step(.02,now)end;assert(#rewards==0)
-state='RUNNING';now=1125;SurvivorExpedition.Step(.1,now);SurvivorExpedition.Step(.1,now)
+state='RUNNING';now=1060;SurvivorExpedition.Step(.1,now);SurvivorExpedition.Step(.1,now)
 assert(#rewards==1 and rewards[1]=='risk' and not SurvivorExpedition.RiskActive(),'Survival reward is granted once')
 
 Begin(2,2000);hero.x,hero.y=0,0;now=2095;SurvivorExpedition.Step(.02,now)
 risk=Local(SurvivorExpedition.Step,'risk');hero.x,hero.y=risk.x,risk.y
-assert(SurvivorExpedition.RiskOffer());now=2180
+assert(SurvivorExpedition.RiskOffer());now=2150
 assert(not SurvivorExpedition.AcceptRisk() and not SurvivorExpedition.RiskOffer(),'Expiry is rechecked even before the next Step')
-SurvivorExpedition.Step(.02,now);assert(risk.state=='closed')
-hero.x,hero.y=0,0;now=2210
+hero.x,hero.y=0,0;now=2150
 local count=#notifications;SurvivorExpedition.Step(.02,now)
-assert(SurvivorExpedition.SearchRemaining()==30 and #notifications==count+1)
+assert(risk.state=='closed' and SurvivorExpedition.SearchRemaining()==30 and #notifications==count+1)
 SurvivorExpedition.Step(.02,now);assert(#notifications==count+1,'Search deadline warning is announced once')
-now=2240;SurvivorExpedition.Step(.02,now)
+now=2180;SurvivorExpedition.Step(.02,now)
 assert(SurvivorExpedition.SearchRemaining()==nil and not SurvivorExpedition.AcceptRisk(),'Boss arrival closes optional objectives')
 SurvivorExpedition.Reset();assert(not SurvivorExpedition.HasRiskNotice() and SurvivorExpedition.Journal(2)=='')
 
@@ -844,9 +1341,25 @@ assert(#notifications==1 and notifications[1]:find('수색 완료') and not Surv
     'One short completion notice replaces the persistent completed objective')
 local count=#notifications;assert(SurvivorExpedition.UseAdvantage(1))
 assert(#notifications==count and not SurvivorExpedition.UseAdvantage(1),'Using an insight never opens a monster explanation popup')
-now=5095;SurvivorExpedition.Step(.02,now)
+now=5030;SurvivorExpedition.Step(.02,now)
 assert(#notifications==count and not SurvivorExpedition.Status(true):find('선택 수색'),
     'Risk offer terms can be shown alone during dialogue without a duplicate start popup')
+SurvivorExpedition.Reset()
+for index,window in ipairs({{30,90},{90,150},{95,180},{95,180},{95,180}})do
+    Begin(index,7000);hero.x,hero.y=0,0
+    now=7000+window[1]-.02;SurvivorExpedition.Step(.02,now)
+    risk=Local(SurvivorExpedition.Step,'risk');assert(risk.state=='waiting')
+    now=7000+window[1];SurvivorExpedition.Step(.02,now)
+    hero.x,hero.y=risk.x,risk.y;assert(SurvivorExpedition.RiskOffer())
+    now=7000+window[2]-.02
+    assert(SurvivorExpedition.AcceptRisk(),'Every stage offers a usable acceptance window')
+    local before=#rewards
+    now=now+29.98;SurvivorExpedition.Step(.02,now);assert(#rewards==before)
+    now=7000+window[2]-.02+30;SurvivorExpedition.Step(.02,now)
+    assert(#rewards==before+1 and risk.state=='complete','Even a late acceptance finishes before boss arrival')
+    now=7000+SurvivorConfig.StageTiming(index).bossStart;SurvivorExpedition.Step(.02,now)
+    assert(SurvivorExpedition.SearchRemaining()==nil)
+end
 SurvivorExpedition.Reset()
 `);
 
@@ -980,13 +1493,16 @@ function GetTriggerPlayer() return 0 end
 available,openPanel,acceptSync,queries=false,false,true,0
 sent,reconciles,restCollections,refreshes={},0,0,0
 local panel={handle=900,visible=false}
+local detailsPanel={handle=901,visible=false}
 function BlzGetFrameByName(name)
     queries=queries+1
+    if available and(name=='SimpleStatDetailsPanel'or name=='SimpleTalentsPanel')then return detailsPanel end
     if available then panel.visible=openPanel;return panel end
     return MISSING_FRAME
 end
 function BlzFrameIsVisible(frame)
     assert(type(frame)=='table' and frame.handle~=0,'Never pass a missing native frame to visibility queries')
+    if frame==detailsPanel then return false end
     return openPanel
 end
 function BlzSendSyncData(prefix,data)
@@ -1005,9 +1521,9 @@ SurvivorLootUI={Init=function()end,Reset=function()end,SetInventoryVisible=funct
 assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,finish=function()end}))
 SurvivorInventoryPause.Init()
 local oldTimer=timers[#timers].callback;local oldSync=triggers[#triggers].action
-TickTimers();assert(queries==3 and #sent==0 and not lootVisible)
+TickTimers();assert(queries==4 and #sent==0 and not lootVisible)
 available,openPanel,acceptSync=true,true,false
-TickTimers();assert(queries==6 and #sent==1 and not sent[1].accepted and RunSession.IsRunning())
+TickTimers();assert(queries==8 and #sent==1 and not sent[1].accepted and RunSession.IsRunning())
 acceptSync=true;TickTimers();assert(#sent==2 and sent[2].accepted,'Retry a failed sync transmission')
 syncData=sent[2].data;oldSync()
 assert(RunSession.GetState()=='INVENTORY' and halted and lootVisible and restVisible)
@@ -1036,6 +1552,64 @@ assert(RunSession.GetState()=='INVENTORY','A new generation still observes its o
 SurvivorInventoryPause.Cleanup();RunSession.Finish('test')
 `);
 }
+
+suite('native details and bag tabs share one pause while preserving choice and stage-clear reasons', mocks + String.raw`
+panels,sent={},{}
+function GetLocalPlayer()return 0 end
+function GetTriggerPlayer()return 0 end
+function BlzGetFrameByName(name)return panels[name]end
+function BlzFrameIsVisible(frame)return frame.visible end
+function BlzFrameSetVisible()error('Native panel visibility belongs to the engine')end
+function BlzSendSyncData(prefix,data)sent[#sent+1]=data;return true end
+function BlzGetTriggerSyncData()return syncData end
+function BlzTriggerRegisterPlayerSyncEvent()end
+function ALICE_CallPeriodic(fn)periodic=fn;return fn end
+function ALICE_DisableCallback()end
+function ALICE_Halt()halted=true end
+function ALICE_Resume()halted=false end
+SurvivorCombat={MaintainInventoryPause=function()end,IsClearing=function()return false end}
+SurvivorEquipment={Reconcile=function()return false,1 end,CollectRest=function()return false,1 end,UIRevision=function()return 1 end}
+SurvivorNativeLoadout={Refresh=function()end}
+SurvivorUI={SetRestInventoryVisible=function(value)restVisible=value end,InterruptCombatPreparation=function()interruptions=(interruptions or 0)+1 end}
+SurvivorLootUI={Init=function()end,Reset=function()end,
+    SetInventoryVisible=function(open,revision,details)bagVisible,detailsVisible=open,details end}
+`, [config,metrics,'src/20_system/RunSession.lua','src/30_gameplay/SurvivorInventoryPause.lua'], String.raw`
+local resumes=0
+RunSession.Start(function()end,{pause=function()end,resume=function()resumes=resumes+1 end,finish=function()end})
+SurvivorInventoryPause.Init()
+local sync=triggers[#triggers].action
+local function Observe()
+    TickTimers()
+    if #sent>0 then syncData=sent[#sent];sync()end
+end
+Observe();assert(RunSession.IsRunning()) -- Missing frames must be retried.
+panels.SimpleStatDetailsPanel={handle=900,visible=true}
+Observe();assert(RunSession.GetState()=='INVENTORY'and halted and restVisible and detailsVisible and not bagVisible)
+local elapsed=RunSession.GetElapsed();periodic();assert(RunSession.GetElapsed()==elapsed)
+panels.SimpleEquipmentInventoryPanel={handle=901,visible=true}
+Observe();assert(detailsVisible and not bagVisible and resumes==0,'Details suppress loot even when native bag is also visible')
+panels.SimpleStatDetailsPanel.visible=false
+Observe();assert(bagVisible and not detailsVisible and resumes==0,'Changing native tabs must not resume combat')
+panels.SimpleEquipmentInventoryPanel.visible=false
+Observe();assert(RunSession.IsRunning()and resumes==1 and not restVisible)
+assert(RunSession.BeginChoice())
+panels.SimpleTalentsPanel={handle=902,visible=true};Observe()
+assert(RunSession.GetState()=='CHOOSING'and detailsVisible)
+panels.SimpleTalentsPanel.visible=false;Observe()
+assert(RunSession.GetState()=='CHOOSING'and halted,'Closing details cannot dismiss a level-up choice')
+panels.SimpleStatDetailsPanel.visible=true;Observe()
+RunSession.EndChoice();assert(RunSession.GetState()=='INVENTORY')
+panels.SimpleStatDetailsPanel.visible=false;Observe();assert(RunSession.IsRunning())
+RunSession.BeginStageClear();panels.SimpleStatDetailsPanel.visible=true;Observe()
+assert(RunSession.GetState()=='STAGE_CLEAR')
+RunSession.EndStageClear();assert(RunSession.GetState()=='INVENTORY')
+panels.SimpleStatDetailsPanel.visible=false;Observe();assert(RunSession.IsRunning())
+assert(interruptions==4,'Only synchronized opens interrupt a pending preparation')
+local oldTick=timers[#timers].callback
+SurvivorInventoryPause.Cleanup();RunSession.Finish('test')
+panels.SimpleStatDetailsPanel.visible=true;oldTick();sync()
+assert(RunSession.GetState()=='FINISHED','Stale detail callbacks cannot pause a subsequent run')
+`);
 
 for (const clockFixture of [
     ['missing', 'nil'], ['throwing', 'function()error("clock failure")end'],
@@ -1357,7 +1931,7 @@ function CatalogIndex(id)
 end
 `;
 const equipment = 'src/20_system/SurvivorEquipment.lua';
-suite('equipment and native trinkets omit all prices and cleanup retains deletion without currency', gearMocks + String.raw`
+suite('equipment and native trinkets omit redundant text while preserving stats and cleanup mechanics', gearMocks + String.raw`
 function SetPlayerState()error('Equipment must not change player currency')end
 function AdjustPlayerStateBJ()error('Equipment must not award sale income')end
 function SetItemPawnable(item,value)item.pawnable=value end
@@ -1376,12 +1950,22 @@ local hero,build=NewGear('firebolt',6)
 for _,entry in ipairs(SurvivorEquipment.Catalog())do
     local description=SurvivorEquipment.Describe(entry.id,{})
     assert(not description:find('골드')and not description:find('판매'),entry.id..' retains a price')
-    assert(description:find('가방 정리 시 장비가 삭제됩니다.'),'Retain the deletion warning')
+    assert(description:find(entry.description,1,true),'Retain the actual equipment stats')
+    for _,text in ipairs({'가방 정리 시 장비가 삭제됩니다.','자동 공격 스킬을 새로 부여하지 않습니다.',
+        '보유 중인 해당 무기에만 적용','기본 능력치는 각각 적용','세트 효과의 추가 피해는',
+        '확장 인벤토리에서 장착 시 적용'})do assert(not description:find(text,1,true))end
 end
 SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
 SurvivorAugments.Apply('power',build,hero);SurvivorNativeLoadout.Init(hero,build)
 local indicator=hero.inventory[1]
-assert(indicator and indicator.pawnable==false and indicator.description:find('버리기 불가'))
+assert(indicator and indicator.pawnable==false and indicator.charges==1)
+for _,id in ipairs(SurvivorConfig.startingTrinkets)do
+    local text=SurvivorAugments.OwnedTooltip(id,build)
+    assert(not text:find('자동 적용',1,true)and not text:find('레벨업 선택으로 강화',1,true))
+end
+for _,text in ipairs({'레벨업 장신구','버리기 불가','숫자는 강화 레벨','자동 적용','레벨업 선택으로 강화'})do
+    assert(not indicator.description:find(text,1,true))
+end
 assert(not indicator.description:find('판매')and not indicator.description:find('골드'))
 SurvivorEquipment.DropAt(0,0,1)
 local item;for candidate in pairs(Local(SurvivorEquipment.Step,'owned'))do item=candidate end
@@ -1493,13 +2077,27 @@ SurvivorEquipment.Cleanup();assert(pending.removed and SurvivorEquipment.Pending
 
 suite('equipment effect revisions, individual tooltips and bounded pickup inventory scans', gearMocks,
     [config, metrics, augments, equipment], String.raw`
+local function CheckEquipmentText(text)
+    for _,removed in ipairs({'가방 정리 시 장비가 삭제됩니다.','자동 공격 스킬을 새로 부여하지 않습니다.',
+        '보유 중인 해당 무기에만 적용','기본 능력치는 각각 적용','세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음',
+        '확장 인벤토리에서 장착 시 적용','동일 이름은 1개로 계산 · 세트 추가 공격은 재발동하지 않음',
+        '해당 무기 보유 시 적용','(장착 시 회복 없음)','(단독 기준)','레벨업으로 얻는 인장과 별도의 장비입니다.'})do
+        assert(not text:find(removed,1,true),'Runtime equipment tooltip restored removed help: '..removed)
+    end
+end
+local writeExtended,writeDescription=BlzSetItemExtendedTooltip,BlzSetItemDescription
+BlzSetItemExtendedTooltip=function(item,text)CheckEquipmentText(text);return writeExtended(item,text)end
+BlzSetItemDescription=function(item,text)CheckEquipmentText(text);item.description=text;return writeDescription(item,text)end
 local hero,build=NewGear("firebolt",6)
 local revision=build.revision
-local item=CreateItem("Hs01",0,0);hero.bag[1]=item
+local item=CreateItem("Hs01",0,0);item.tooltip='가방 정리 시 장비가 삭제됩니다.';hero.bag[1]=item
 SurvivorEquipment.Reconcile()
+assert(item.description==item.tooltip and item.tooltip:find('모든 무기 피해 +5%',1,true),
+    'An editor-provided item with stale text must receive the clean current description')
 assert(build.revision==revision,'External bag acquisition must not recalculate weapons')
 local ui=SurvivorEquipment.UIRevision();local writes=gearTooltipWrites
 assert(SurvivorEquipment.ToggleLock(item))
+assert(item.tooltip:find('[보관 잠금]',1,true),'Keep the live lock status')
 assert(build.revision==revision and gearTooltipWrites==writes+1 and SurvivorEquipment.UIRevision()>ui,
     'Locking changes only the selected tooltip and UI revision')
 writes=gearTooltipWrites
@@ -1626,7 +2224,7 @@ assert(math.abs(build.stats.missileDamage-SurvivorConfig.missileDamage*1.20)<0.0
 local sources,equipped=Local(SurvivorEquipment.Reconcile,"Sources")(Local(SurvivorEquipment.Reconcile,"ReadSlots")())
 assert(sources["set:ember:2"]==nil,"Two identical rings must not activate a two-piece set")
 local text=SurvivorEquipment.Describe("He05",equipped)
-assert(text:find("기본 능력치는 각각 적용") and text:find("동일 장비의 세트 개수는 1개"))
+assert(text:find("1/9") and not text:find("기본 능력치는 각각 적용") and not text:find("동일 장비의 세트 개수는 1개"))
 hero.equipped[3]=CreateItem("Hs04",0,0);SurvivorEquipment.Reconcile()
 assert(math.abs(build.stats.missileDamage-SurvivorConfig.missileDamage*1.35)<0.0001)
 SurvivorEquipment.Cleanup()
@@ -1913,6 +2511,222 @@ SurvivorCombat={DamageRows=function()return {}end,BossStatus=function()return ni
     WardStatus=function()return shieldAmount or 0,shieldRemaining or 0 end}
 HeroSurvivor={CanRetrySame=function()return true end,RetrySame=function()retryCalls=(retryCalls or 0)+1;return true end}
 `;
+suite('custom UI containers leave pointer input to buttons across setup, HUD, story, inventory, choices and results', presentationMocks + String.raw`
+-- Conservative custom-frame hit test: alpha never makes a surface click-through.
+-- Treat generic FRAME rectangles as potential blockers even when disabled; only
+-- display-only BACKDROP and disabled TEXT children are safe decoration here.
+local create=BlzCreateFrameByType
+function BlzCreateFrameByType(kind,name,parent,...)
+    local frame=create(kind,name,parent,...);frame.level=parent and parent.level or 0;return frame
+end
+function BlzCreateFrame(name,parent,priority,context)
+    local kind=name=='ScriptDialogButton'and'GLUETEXTBUTTON'or'BACKDROP'
+    local frame=BlzCreateFrameByType(kind,name..context,parent);frame.template=name;return frame
+end
+HeroSurvivor.IsStorySummary=function()return false end
+SurvivorEquipment={UIRevision=function()return 1 end,PendingRewardCount=function()return 0 end,
+    PickupMode=function()return '전체'end,CleanupFamilies=function()return {'화염'}end,
+    BagEntries=function()return {},0,9 end,
+    Get=function(id)return {id=id,icon='icon',description='gear'}end,
+    Name=function(id)return id end,Summary=function()return 'summary','set'end}
+`, [config,augments,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua',
+    'src/30_gameplay/SurvivorSetupUI.lua','src/30_gameplay/SurvivorLootUI.lua'], String.raw`
+local chosen,rerolled,excluded=0,0,0
+SurvivorUI.Init(function()chosen=chosen+1;SurvivorUI.HidePanel()end,function()end,
+    function()rerolled=rerolled+1 end,function()end,function()excluded=excluded+1 end)
+SurvivorSetupUI.Init(function()end,function()end,function()end,function()end)
+SurvivorLootUI.Init()
+local factors={FRAMEPOINT_CENTER={.5,.5},FRAMEPOINT_TOP={.5,1},FRAMEPOINT_BOTTOM={.5,0},
+    FRAMEPOINT_TOPLEFT={0,1},FRAMEPOINT_BOTTOMLEFT={0,0},FRAMEPOINT_TOPRIGHT={1,1},
+    FRAMEPOINT_BOTTOMRIGHT={1,0},FRAMEPOINT_RIGHT={1,.5}}
+local function Rect(frame)
+    if frame.allPoints then return Rect(frame.allPoints)end
+    local w,h=frame.width or 0,frame.height or 0
+    local point,x,y
+    if frame.absolute then point,x,y=frame.absolute,frame.x,frame.y
+    elseif frame.anchor then
+        local a=frame.anchor;local target=Rect(a.target);if not target then return end
+        local f=factors[a.targetPoint];point=a.point
+        x,y=target[1]+f[1]*target[3]+a.x,target[2]+f[2]*target[4]+a.y
+    else return end
+    local f=factors[point];return {x-f[1]*w,y-f[2]*h,w,h}
+end
+local function Pick(frame,x,y)
+    if not frame.visible then return end
+    local children={}
+    for _,child in pairs(frames)do if child.parent==frame then children[#children+1]=child end end
+    table.sort(children,function(a,b)
+        if a.level~=b.level then return a.level>b.level end
+        return a.handle>b.handle
+    end)
+    for _,child in ipairs(children)do local hit=Pick(child,x,y);if hit then return hit end end
+    local r=Rect(frame)
+    if r and r[3]>0 and r[4]>0 and x>=r[1]and x<=r[1]+r[3]and y>=r[2]and y<=r[2]+r[4]
+        and frame.kind~='BACKDROP'and(frame.kind=='FRAME'or frame.enabled)then return frame end
+end
+local function CheckTextures()
+    for _,frame in pairs(frames)do
+        local visible,parent=frame.visible,frame.parent
+        while visible and parent do visible=parent.visible;parent=parent.parent end
+        if visible and frame.kind=='BACKDROP'then
+            assert(frame.texture or frame.template,'Visible backdrop has no texture: '..frame.name)
+        end
+    end
+end
+local function Surface(button,fx,fy)
+    CheckTextures()
+    local r=assert(Rect(button));local hit=Pick(NativeGameUI(),r[1]+fx*r[3],r[2]+fy*r[4])
+    assert(hit==button,'Pointer intercepted over '..button.name..' by '..(hit and hit.name or 'nothing'))
+    return hit
+end
+local function WorldAt(frame,fx,fy)
+    CheckTextures()
+    local r=assert(Rect(frame));local hit=Pick(NativeGameUI(),r[1]+fx*r[3],r[2]+fy*r[4])
+    assert(not hit,'Noninteractive region of '..frame.name..' intercepted by '..(hit and hit.name or 'nothing'))
+end
+local function Event(button,event)
+    for _,trigger in ipairs(triggers)do
+        if trigger.frame==button and trigger.event==event then trigger.action();return end
+    end
+    error('Missing pointer event')
+end
+local build=SurvivorAugments.NewBuild('firebolt','power')
+local function Show()
+    state='CHOOSING';SurvivorUI.ShowChoices({'firebolt','frontslash','haste'},2,build,0,3)
+end
+state='RUNNING';SurvivorLootUI.Refresh();SurvivorUI.UpdateSpeech()
+Surface(frames.ScriptDialogButton810,.5,.5)
+WorldAt(frames.HSLootRoot,.75,.5) -- The hidden manage button must not leave a dead region.
+WorldAt(frames.HSExpedition,.5,.5)
+SurvivorUI.Notify('notice');SurvivorUI.UpdateSpeech();WorldAt(frames.HSNotice,.5,.5)
+SurvivorUI.Say('안야','speech');SurvivorUI.UpdateSpeech();WorldAt(frames.HSSpeech,.9,.5)
+shieldAmount,shieldRemaining=100,10
+SurvivorUI.UpdateSpeech();WorldAt(frames.HSEssentialHUD,.5,.5)
+shieldAmount,shieldRemaining=0,0
+state='INVENTORY';SurvivorLootUI.SetInventoryVisible(true)
+ClickFrame(Surface(frames.ScriptDialogButton811,.5,.5))
+assert(SurvivorLootUI.IsExpanded())
+WorldAt(frames.QuestButtonBaseTemplate812,.5,.92)
+for _,context in ipairs({810,811,842,843,846,847})do Surface(frames['ScriptDialogButton'..context],.5,.5)end
+SurvivorLootUI.SetInventoryVisible(false)
+state='READY';SurvivorLootUI.Refresh()
+SurvivorSetupUI.ShowMenu('normal','firebolt','power')
+WorldAt(frames.HeroSurvivorSetupRoot,.02,.5)
+for _,name in ipairs({'DIFFICULTY','WEAPON','TRINKET','Start'})do
+    Surface(frames['HeroSurvivorSetup'..name],.5,.5)
+end
+Surface(frames.HSSummaryToggle,.5,.5)
+for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
+    SurvivorSetupUI.ShowOptions(kind,nil)
+    WorldAt(frames.HeroSurvivorSetupOptions,.02,.5)
+    for i=1,6 do local button=frames['HeroSurvivorSetupOption'..i]
+        if button.visible then Surface(button,.5,.5);Surface(button,.07,.5)end
+    end
+    Surface(frames.HeroSurvivorSetupBack,.5,.5)
+    if frames.HeroSurvivorSetupFollowing.visible and frames.HeroSurvivorSetupFollowing.enabled then
+        Surface(frames.HeroSurvivorSetupFollowing,.5,.5)
+    end
+end
+SurvivorSetupUI.Hide()
+SurvivorUI.ShowNarrative('test','test',function()end)
+WorldAt(frames.HeroSurvivorStoryContent,.5,.9)
+Surface(frames.ScriptDialogButton700,.5,.5)
+SurvivorUI.AdvanceNarrative()
+SurvivorUI.ShowConversation('test',{{speaker='안야',text='test'}},function()end)
+WorldAt(frames.HeroSurvivorCaption,.95,.5)
+Surface(frames.ScriptDialogButton700,.5,.5);Surface(frames.ScriptDialogButton701,.5,.5)
+SurvivorUI.SkipConversation();AdvanceVisualTime(.7)
+state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,function()end,function()return true end)
+WorldAt(frames.HSCombatPreparation,.05,.5)
+Surface(frames.HSCombatPreparationStart,.5,.5)
+SurvivorUI.HidePanel()
+Show() -- Check immediately, before the 0.05/0.1-second HUD observers run.
+local function CheckCardText()
+    for i=1,3 do
+        local card=Rect(frames['HeroSurvivorCard'..i])
+        local hint=Rect(frames['HeroSurvivorHint'..i])
+        local preview=Rect(frames['HeroSurvivorPreview'..i])
+        local description=Rect(frames['HeroSurvivorDescription'..i])
+        assert(hint[2]>=card[2]+.025,'Selection hint must clear the decorative bottom border')
+        assert(hint[2]+hint[4]<preview[2] and preview[2]+preview[4]<description[2],
+            'Description, preview and selection hint need separate vertical space')
+    end
+end
+CheckCardText()
+SurvivorUI.ShowChoices({'evolution1','evolution2','haste'},2,build,0,3);CheckCardText()
+SurvivorUI.ShowGearRewards({'gear1','gear2','gear3'},1,function()end);CheckCardText()
+Show()
+WorldAt(frames.HeroSurvivorChoiceRoot,.5,.95)
+for i=1,3 do
+    for _,prefix in ipairs({'HeroSurvivorCard','HeroSurvivorReroll','HeroSurvivorExclude'})do
+        local button=frames[prefix..i]
+        if button.enabled then
+            for _,p in ipairs({{.5,.5},{.03,.03},{.97,.97},{.5,.87},{.5,.3}})do Surface(button,p[1],p[2])end
+        end
+    end
+end
+local card,reroll,exclude=frames.HeroSurvivorCard2,frames.HeroSurvivorReroll2,frames.HeroSurvivorExclude2
+for _,button in ipairs({card,reroll,exclude})do
+    Event(Surface(button,.5,.5),FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+    if button==reroll then
+        local r=Rect(frames.HSChoiceActionTooltip)
+        assert(Pick(NativeGameUI(),r[1]+r[3]/2,r[2]+r[4]/2)==card,
+            'The action tooltip must let the pointer reach the card beneath it')
+    end
+    Surface(button,.5,.5);Surface(button,.02,.5)
+    Event(Surface(button,.5,.5),FRAMEEVENT_MOUSE_DOWN)
+    Event(Surface(button,.5,.5),FRAMEEVENT_MOUSE_UP)
+    ClickFrame(Surface(button,.5,.5))
+    if button==card then Show()end
+end
+assert(chosen==1 and rerolled==1 and excluded==1,'Pointer-selected controls reach all three callbacks')
+-- Native details shares the inventory gateway. The custom modal must relinquish
+-- its entire hit region, including shade, then restore the queued choice.
+local nativeDetails=BlzCreateFrameByType('BACKDROP','NativeDetailsSurface',NativeGameUI(),'',0)
+nativeDetails.texture='native';nativeDetails.level=2
+BlzFrameSetSize(nativeDetails,.14,.1204);BlzFrameSetAbsPoint(nativeDetails,FRAMEPOINT_TOPLEFT,.02,.55)
+local nativeClose=BlzCreateFrameByType('GLUETEXTBUTTON','NativeDetailsClose',nativeDetails,'',0)
+BlzFrameSetSize(nativeClose,.025,.025);BlzFrameSetPoint(nativeClose,FRAMEPOINT_TOPRIGHT,nativeDetails,FRAMEPOINT_TOPRIGHT,0,0)
+local oldFrameCount=0;for _ in pairs(frames)do oldFrameCount=oldFrameCount+1 end
+SurvivorUI.SetRestInventoryVisible(true)
+SurvivorLootUI.SetInventoryVisible(false,nil,true)
+assert(not frames.HeroSurvivorChoiceRoot.visible and not frames.HSLootRoot.visible and SurvivorUI.IsChoiceVisible())
+Surface(nativeClose,.5,.5)
+SurvivorUI.SetRestInventoryVisible(false);SurvivorLootUI.SetInventoryVisible(false,nil,false)
+BlzFrameSetVisible(nativeDetails,false)
+Surface(card,.5,.5);Surface(reroll,.5,.5);Surface(exclude,.5,.5)
+-- A newly offered choice while details is already open must restore as well.
+SurvivorUI.HidePanel();SurvivorUI.SetRestInventoryVisible(true);Show()
+assert(not frames.HeroSurvivorChoiceRoot.visible)
+SurvivorUI.SetRestInventoryVisible(false);Surface(card,.5,.5)
+local frameCount=0;for _ in pairs(frames)do frameCount=frameCount+1 end
+assert(frameCount==oldFrameCount,'Opening and closing native details must not create a transparent overlay')
+-- The picker must catch invisible blockers rather than merely validating callbacks.
+local blocker=BlzCreateFrameByType('FRAME','InjectedTransparentBlocker',card,'',0)
+BlzFrameSetAllPoints(blocker,card);BlzFrameSetAlpha(blocker,0)
+local ok,message=pcall(Surface,card,.5,.5)
+assert(not ok and message:find('InjectedTransparentBlocker'))
+BlzFrameSetVisible(blocker,false);Surface(card,.5,.5)
+SurvivorUI.HidePanel();state='STAGE_CLEAR';SurvivorLootUI.Refresh()
+assert(frames.HSLootRoot.visible)
+SurvivorUI.ShowGearRewards({'gear1','gear2','gear3'},1,function()chosen=chosen+1 end)
+SurvivorUI.SetRestInventoryVisible(true)
+assert(not frames.HeroSurvivorChoiceRoot.visible and SurvivorUI.IsChoiceVisible())
+SurvivorUI.SetRestInventoryVisible(false)
+Surface(frames.HeroSurvivorCard1,.03,.97)
+SurvivorLootUI.Refresh() -- Inventory observation must not put loot controls back over rewards.
+assert(not frames.HSLootRoot.visible)
+Surface(frames.HeroSurvivorCard1,.03,.97)
+ClickFrame(Surface(frames.HeroSurvivorCard2,.5,.5))
+assert(chosen==2)
+state='FINISHED';SurvivorUI.ShowResult('defeated',10,3,1,nil,'report')
+WorldAt(frames.HeroSurvivorChoiceRoot,.02,.5)
+Surface(frames.ScriptDialogButton501,.5,.5)
+Surface(frames.ScriptDialogButton4,.5,.5);Surface(frames.ScriptDialogButton720,.5,.5)
+SurvivorUI.HidePanel()
+WorldAt(frames.HeroSurvivorStoryContent,.5,.5)
+`);
+
 suite('native top art and minimap hide locally while hotkeys, console parents and custom HUD remain usable', presentationMocks + String.raw`
 NativeGameUI()
 local protected={GameUI=true,NativeClockMinimapParent=true,ConsoleUI=true,ConsoleBottomBar=true,
@@ -1974,7 +2788,7 @@ assert(nativeLookups==lookups)
 state='RUNNING';SurvivorCombat.BossStatus=function()return {name='boss',current=500,max=1000}end
 SurvivorUI.UpdateDamageBoard({weapons={},evolutions={}},2,120,3,'normal');TickTimers()
 local board=Local(SurvivorUI.UpdateDamageBoard,'damageBoard')
-assert(board.visible and board.title:find('3:00')and frames.HSEssentialHUD.visible,
+assert(board.visible and board.title:find('2:00')and frames.HSEssentialHUD.visible,
     'Hiding the top console preserves the custom boss panel and native statistics title')
 SurvivorUI.Say('안야','읽을 수 있는 대사');TickTimers()
 assert(frames.HSSpeech.visible and frames.HSEssentialHUD.visible and frames.HSSpeech.parent==frames.ConsoleUIBackdrop)
@@ -2675,7 +3489,8 @@ end
 assert(completed==5)
 SurvivorStory.ShowEnding(hero,function()completed=completed+1 end)
 for i=1,4 do SurvivorUI.AdvanceNarrative();assert(completed==5)end
-assert(frames.HeroSurvivorStageText.text:find("본편"))
+assert(frames.HeroSurvivorStageText.text:find("지하 묘실") and frames.HeroSurvivorStageText.text:find("이름"),
+    'The ending records the transport while leaving the survivor unnamed')
 assert(frames.ScriptDialogButton700.text=='결과 보기')
 SurvivorUI.AdvanceNarrative();assert(completed==6 and hero.visible)
 local journal=SurvivorStory.JournalChapters();local found,pages=false,0
@@ -2715,8 +3530,8 @@ suite('each clue branch and remembered summary retains current progress and the 
     [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7600,7400,0)
-local destinations={'불탄 보급로','서리 낀 납골당','폐허의 검문소','사슬로 막힌 지하 관문'}
-local progress={'무리에서 갈라진 발자국','불탄 보급로의 가장자리','납골당의 문은','적 수색대도 같은 방향'}
+local destinations={'불타는 스트라솔름','스트라솔름 납골당','로데론 수도','로데론 수도 하수구'}
+local progress={'무리와 갈라진 발자국','담장 가장자리로 발자국','납골당의 문은','스컬지 수색대도 같은 방향'}
 local completed=0
 for index=1,4 do
     local defaultObservation
@@ -2800,10 +3615,12 @@ assert(frames.HSExcludeHover1.alpha==0 and not tip.visible,'Owned upgrades canno
 Event(exclude,FRAMEEVENT_MOUSE_ENTER);Event(exclude,FRAMEEVENT_MOUSE_DOWN)
 Event(exclude,FRAMEEVENT_MOUSE_UP);assert(frames.QuestButtonBaseTemplate402.color.r==255)
 ClickFrame(exclude);assert(excluded==1 and orange.alpha==0 and not tip.visible)
+Show(3);ClickFrame(reroll)
+assert(rerolled==1 and gold.alpha==0 and not tip.visible,'An available reroll reaches its gameplay callback once')
 Event(reroll,FRAMEEVENT_MOUSE_ENTER);Show(0);AdvanceVisualTime(.14)
 assert(gold.alpha==0 and not tip.visible and not reroll.enabled)
 Event(reroll,FRAMEEVENT_MOUSE_ENTER);ClickFrame(reroll);AdvanceVisualTime(.14)
-assert(gold.alpha==0 and not tip.visible and rerolled==0,'A disabled reroll cannot consume a charge')
+assert(gold.alpha==0 and not tip.visible and rerolled==1,'A disabled reroll cannot consume a charge')
 Show(3);GetLocalPlayer=function()return 12 end
 Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 assert(gold.alpha==0 and not tip.visible and LiveTimers(.02)==0,'Mouse feedback is local to the playable client')
@@ -2832,8 +3649,8 @@ for _,pair in ipairs({{'HSSpeech','CustomTooltipBackgroundTemplate710'},{'HSNoti
     {'HSExpedition','CustomTooltipBackgroundTemplate715'},
     {'HeroSurvivorCaption','CustomTooltipBackgroundTemplate712'}})do
     local panel,skin=frames[pair[1]],frames[pair[2]]
-    assert(panel.kind=='FRAME' and skin.parent==panel and skin.allPoints==panel)
-    assert(not panel.texture and not skin.texture, 'Keep the template border and textured background')
+    assert(skin.parent==panel and skin.allPoints==panel)
+    assert(not skin.texture, 'Keep the template border and textured background')
     assert(panel.enabled==false and skin.enabled==false, 'Decorative panels must not consume clicks')
 end
 Inside(frames.HSSpeechName,frames.HSSpeech)
@@ -2933,7 +3750,7 @@ local preparedX,preparedY=cart.x,cart.y
 SurvivorUI.AdvanceNarrative()
 AdvanceVisualTime(.7)
 assert(cart.x>preparedX and cart.y>preparedY and anya.x<cart.x and putress.x>cart.x,'Both companions depart alongside the transport')
-assert(frames.HeroSurvivorStageText.text:find('본편') and completed==0)
+assert(frames.HeroSurvivorStageText.text:find('지하 묘실') and completed==0)
 SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation()
 assert(completed==1 and hero.visible)
 for _,effect in ipairs(effects)do assert(effect.destroyed,'An ending scene effect leaked')end
@@ -3295,7 +4112,7 @@ SurvivorUI.UpdateDamageBoard(build,2,120,3,'normal')
 local board=Local(SurvivorUI.UpdateDamageBoard,'damageBoard')
 MultiboardMinimize(board,false)
 SurvivorUI.Say('안야','통계 내용보다 먼저 읽을 대사');SurvivorUI.UpdateSpeech()
-assert(board.visible and board.minimized and board.title:find('3:00'),'Collapse rows while retaining the native timer title')
+assert(board.visible and board.minimized and board.title:find('2:00'),'Collapse rows while retaining the native timer title')
 assert(Local(SurvivorUI.UpdateSpeech,'damageBoardOriginalMinimized')==false,'Remember the player-expanded false value')
 for i=1,5 do SurvivorUI.UpdateSpeech()end
 assert(Local(SurvivorUI.UpdateSpeech,'damageBoardOriginalMinimized')==false,'Repeated quiet ticks never replace the original state')
@@ -3315,6 +4132,52 @@ SurvivorUI.ClearDamageBoard();assert(board.destroyed and not board.minimized,'Re
 SurvivorUI.UpdateDamageBoard(build,2,130,3,'normal');local replacement=Local(SurvivorUI.UpdateDamageBoard,'damageBoard')
 assert(replacement~=board and replacement.minimized,'A replacement board begins with its own default')
 SurvivorUI.UpdateSpeech();SurvivorUI.ClearSpeech();assert(replacement.minimized,'An old false snapshot never leaks into the new board')
+SurvivorUI.ClearDamageBoard()
+`);
+
+suite('native statistics clicks override one-time speech and warning folding through restoration and cleanup', presentationMocks,
+    [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
+SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
+state='RUNNING';now=0;local build={weapons={},evolutions={}}
+SurvivorUI.UpdateDamageBoard(build,1,120,4,'normal')
+local board=Local(SurvivorUI.UpdateDamageBoard,'damageBoard')
+SurvivorUI.Say('안야','화살표로 통계를 펼칠 수 있는 대사');SurvivorUI.UpdateSpeech()
+local calls=board.minimizeCalls
+for i=1,5 do SurvivorUI.UpdateSpeech()end
+assert(board.minimizeCalls==calls,'An already folded board needs no repeated minimize calls')
+MultiboardMinimize(board,false);calls=board.minimizeCalls
+for i=1,5 do SurvivorUI.UpdateSpeech()end
+assert(not board.minimized and board.minimizeCalls==calls,'Manual expansion survives every speech tick')
+SurvivorUI.Alert(2,'대사와 겹친 경고',100,'test');SurvivorUI.UpdateSpeech()
+assert(not board.minimized and board.minimizeCalls==calls,'Overlapping warnings do not re-enter quiet mode')
+now=2.1;SurvivorUI.UpdateSpeech();now=7.1;SurvivorUI.UpdateSpeech()
+assert(not board.minimized and board.minimizeCalls==calls,'Speech expiry preserves manual expansion')
+
+SurvivorUI.Alert(2,'새 경고',100,'test');SurvivorUI.UpdateSpeech()
+assert(board.minimized and board.minimizeCalls==calls+1,'A new quiet interval folds an expanded board once')
+MultiboardMinimize(board,false);SurvivorUI.UpdateSpeech()
+MultiboardMinimize(board,true);calls=board.minimizeCalls
+SurvivorUI.UpdateSpeech();now=9.2;SurvivorUI.UpdateSpeech()
+assert(board.minimized and board.minimizeCalls==calls,'Manual folding after expansion cancels automatic restoration')
+
+SurvivorUI.Say('안야','종료 직전에 펼치기');SurvivorUI.UpdateSpeech()
+MultiboardMinimize(board,false);calls=board.minimizeCalls
+SurvivorUI.ClearSpeech()
+assert(not board.minimized and board.minimizeCalls==calls,'Cleanup also respects a click before the next observer tick')
+SurvivorUI.Say('안야','새 대사에서는 다시 한 번만 접기');SurvivorUI.UpdateSpeech()
+assert(board.minimized and board.minimizeCalls==calls+1,'Cleanup resets the quiet entry guard')
+MultiboardMinimize(board,false);SurvivorUI.UpdateSpeech()
+MultiboardMinimize(board,true);calls=board.minimizeCalls
+SurvivorUI.ClearSpeech()
+assert(board.minimized and board.minimizeCalls==calls,'Clearing speech preserves the last observed manual choice')
+SurvivorUI.ClearDamageBoard()
+SurvivorUI.UpdateDamageBoard(build,1,120,4,'normal')
+local replacement=Local(SurvivorUI.UpdateDamageBoard,'damageBoard')
+assert(replacement~=board and replacement.minimized)
+MultiboardMinimize(replacement,false)
+SurvivorUI.Say('안야','새 통계판');SurvivorUI.UpdateSpeech()
+assert(replacement.minimized,'A replacement board has its own quiet interval')
+SurvivorUI.ClearSpeech();assert(not replacement.minimized,'An untouched automatic fold still restores the original state')
 SurvivorUI.ClearDamageBoard()
 `);
 
@@ -3542,6 +4405,36 @@ SurvivorUI.UpdateSpeech();assert(not frames.HSNotice.visible)
 SurvivorCombat.Cleanup()
 `);
 
+suite('result summary separates progress, six weapon totals and rest guidance across tab switches', presentationMocks,
+    [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
+SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
+local build={weapons={},evolutions={}}
+for index,minutes in ipairs({3,4,5,5,5})do
+    SurvivorUI.UpdateDamageBoard(build,index,0,3,'normal')
+    assert(Local(SurvivorUI.UpdateDamageBoard,'damageBoard').title:find(minutes..':00',1,true))
+    SurvivorUI.UpdateDamageBoard(build,index,60,3,'normal')
+    assert(Local(SurvivorUI.UpdateDamageBoard,'damageBoard').title:find((minutes-1)..':00',1,true))
+end
+local details={difficulty='쉬움',level=16,weapons={'잿불 화살'},trinkets={},stages={}}
+local report='누적 유효 피해'
+for index=1,6 do report=report..'\n무기 '..index..' '..index*1000 end
+state='STAGE_CLEAR';SurvivorUI.ShowResult('stage_clear',122,427,1,2,report,details)
+local info,damage,rest=frames.HSResultSummaryInfo,frames.HSResultSummaryDamage,frames.HSResultSummaryRest
+assert(info.visible and damage.visible and rest.visible and not frames.HeroSurvivorResultNote.visible)
+assert(info.vertical==TEXT_JUSTIFY_TOP and info.horizontal==TEXT_JUSTIFY_LEFT
+    and damage.vertical==TEXT_JUSTIFY_TOP and damage.horizontal==TEXT_JUSTIFY_LEFT)
+assert(info.text:find('현재 레벨 16',1,true) and info.text:find('2:02',1,true)
+    and damage.text:find('무기 6 6000',1,true))
+assert(rest.text:find('다음 시작 지점',1,true) and frames.ScriptDialogButton4.text=='다음 스테이지')
+local tabs=Local(SurvivorUI.NavigateJournal,'resultTabs')
+ClickFrame(tabs[2].frame)
+assert(not info.visible and not damage.visible and not rest.visible and frames.HeroSurvivorResultNote.visible)
+ClickFrame(tabs[1].frame);assert(info.visible and damage.visible and rest.visible)
+state='FINISHED';SurvivorUI.ShowResult('timeout',180,427,1,60,'',details)
+assert(rest.text=='' and info.text:find('종료 레벨 16',1,true) and damage.text:find('없음',1,true),
+    'Later results replace previous rest guidance and damage content')
+`);
+
 suite('chapter journal navigation is reversible, bounded and independent of repeated tab clicks', presentationMocks,
     [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
@@ -3660,7 +4553,7 @@ SurvivorEquipment={Init=function()end,Cleanup=function()end,Reconcile=function()
     SetStage=function(index)equipmentStage=index end,CarryGroundToStage=function()carriedStages=(carriedStages or 0)+1 end}
 SurvivorLootUI={Init=function()end,Reset=function()end,SetInventoryVisible=function()end,Refresh=function()end,
     IsExpanded=function()return false end}
-for _,name in ipairs({'SimpleEquipmentInventoryPanel','SimpleEquipmentPanel','SimpleTalentsPanel'})do
+for _,name in ipairs({'SimpleEquipmentInventoryPanel','SimpleEquipmentPanel','SimpleTalentsPanel','SimpleStatDetailsPanel'})do
     BlzGetFrameByName(name).visible=false
 end
 `, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/30_gameplay/SurvivorNativeLoadout.lua',
@@ -3682,6 +4575,7 @@ local function CountdownText()
     return frames.HSCombatCountdown.text:gsub('|c%x%x%x%x%x%x%x%x',''):gsub('|r','')
 end
 local function Waiting(index)
+    assert(select(2,SurvivorNativeLoadout.TalentStatus())==index,'Each actual preparation grants its own stage point exactly once')
     assert(RunSession.GetState()=='STAGE_CLEAR'and halted and expeditionPaused
         and SurvivorUI.IsCombatPreparationVisible()and SurvivorUI.IsNarrativeVisible())
     local current=Local(HeroSurvivor.BeginRun,'hero')
@@ -3752,6 +4646,16 @@ for page=1,4 do
     SurvivorUI.AdvanceNarrative()
 end
 Waiting(1)
+local traitPanel=frames.SimpleTalentsPanel
+local beforeTalent=build.stats.missileDamage
+traitPanel.visible=true;AdvanceVisualTime(.05)
+assert(DeliverInventorySync()==1 and not frames.HSCombatPreparation.visible and RunSession.GetState()=='STAGE_CLEAR')
+UnitAddAbility(hero,'Ht1A');hero.talentPoints=hero.talentPoints-1
+traitPanel.visible=false;AdvanceVisualTime(.05)
+assert(DeliverInventorySync()==1 and build.talentChoices[1]=='Ht1A'and build.stats.missileDamage>beforeTalent
+    and select(1,SurvivorNativeLoadout.TalentStatus())==0 and frames.HSCombatPreparation.visible
+    and BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==0,
+    'A real native selection is reconciled while paused before the start button is restored')
 local firstReady,firstCanStart=latestReady,latestCanStart
 StartCountdown()
 assert(RunSession.IsRunning()and not halted and not expeditionPaused and resumeCount==1)
@@ -3763,6 +4667,41 @@ assert(hero.inventory[1]and not hero.inventory[1].removed,'Starting trinket surv
 local elapsed=RunSession.GetElapsed();periodic();assert(RunSession.GetElapsed()>elapsed and expeditionSteps==1)
 AdvanceVisualTime(.12);assert(RunSession.IsRunning()and #unsafeFrameCalls==0,
     'Real combat resume and following UI/inventory timers use only supported native frame calls')
+hero.level=3;periodic()
+assert(RunSession.GetState()=='CHOOSING'and halted and expeditionPaused and frames.HeroSurvivorChoiceRoot.visible,
+    'Two actual hero levels open the growth controls and pause combat')
+local choiceTime=RunSession.GetElapsed()
+local pendingOffers=Local(HeroSurvivor.BeginRun,'offers')
+local details=frames.SimpleStatDetailsPanel
+details.visible=true;AdvanceVisualTime(.05)
+assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
+    and not frames.HeroSurvivorChoiceRoot.visible and GetUnitAbilityLevel(hero,'ASde')==1,
+    'The real native details observer hides cards without consuming their queued offers')
+details.visible=false;AdvanceVisualTime(.05)
+assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
+    and frames.HeroSurvivorChoiceRoot.visible and Local(HeroSurvivor.BeginRun,'offers')==pendingOffers
+    and RunSession.GetElapsed()==choiceTime,'Closing details restores the same live card controls')
+local rerolls=Local(HeroSurvivor.BeginRun,'rerollsRemaining')
+assert(frames.HeroSurvivorReroll2.enabled);ClickFrame(frames.HeroSurvivorReroll2)
+assert(Local(HeroSurvivor.BeginRun,'rerollsRemaining')==rerolls-1 and RunSession.GetState()=='CHOOSING')
+local excluded=Local(HeroSurvivor.BeginRun,'offers')[2]
+assert(frames.HeroSurvivorExclude2.enabled);ClickFrame(frames.HeroSurvivorExclude2)
+assert(build.excluded[excluded]and build.excludesRemaining==SurvivorConfig.excludesPerRun-1
+    and Local(HeroSurvivor.BeginRun,'rerollsRemaining')==rerolls-1,
+    'Real exclusion replaces the candidate without consuming another reroll or level')
+for remaining=1,0,-1 do
+    local id=Local(HeroSurvivor.BeginRun,'offers')[1]
+    local previous=SurvivorAugments.Level(build,id)
+    ClickFrame(frames.HeroSurvivorCard1)
+    assert(SurvivorAugments.Level(build,id)==previous+1,'Each card click grants exactly one queued growth reward')
+    if remaining>0 then
+        periodic();assert(RunSession.GetState()=='CHOOSING'and halted and RunSession.GetElapsed()==choiceTime)
+    end
+end
+assert(RunSession.IsRunning()and not halted and not expeditionPaused and not frames.HeroSurvivorChoiceRoot.visible,
+    'The last growth selection closes the modal and resumes the actual session')
+ClickFrame(frames.HeroSurvivorCard1)
+assert(RunSession.IsRunning(),'A stale click cannot consume another reward or pause the resumed run')
 for index=2,5 do
     assert(RunSession.BeginStageClear())
     if index==2 then
@@ -3794,7 +4733,8 @@ for _,id in ipairs(SurvivorConfig.startingWeapons)do
         'Every supported starting weapon reaches the initial narrative')
     SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
     if id=='firebolt'then
-        local bag=frames.SimpleEquipmentInventoryPanel
+      for _,panelName in ipairs({'SimpleEquipmentInventoryPanel','SimpleStatDetailsPanel','SimpleTalentsPanel'})do
+        local bag=frames[panelName]
         bag.visible=true;AdvanceVisualTime(.05)
         assert(#sentSync==1 and not RunSession.IsInventoryOpen()and SurvivorUI.IsCombatPreparationVisible()
             and not frames.HSCombatPreparation.visible and not frames.HSCombatPreparationStart.visible,
@@ -3820,6 +4760,7 @@ for _,id in ipairs(SurvivorConfig.startingWeapons)do
         AdvanceVisualTime(4)
         assert(RunSession.GetState()=='STAGE_CLEAR'and LiveTimers(1)==0,
             'Closing the inventory never restarts the cancelled countdown automatically')
+      end
     end
     StartCountdown()
     assert(RunSession.IsRunning()and selectedUnit==nextHero and nextHero.visible and lastFirstCast==id,
@@ -4564,8 +5505,220 @@ for (const failManifest of [false, true]) {
 }
 
 const {bundle, count} = collectSources();
-const original = fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x'));
+const original = fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x'));
 const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
+{
+    for (const [tier,entries] of talentCatalog.tiers.entries()) {
+        assert.deepEqual(entries.map(entry=>Object.keys(entry.bonuses)), tier%2===0
+            ? [['damagePct'],['speedPct'],['maxLife']] : [['sizePct'],['rangePct'],['durationPct']],
+            'Talent rows must use the requested effect order without hidden secondary bonuses');
+    }
+    const snapshots = new Map(), prepared = prepareItemTooltipCleanup(map,snapshots);
+    const again = cleanItemTooltipEntries(prepared.entries);
+    for (const [name,bytes] of prepared.entries) assert.deepEqual(again.get(name),bytes);
+    const tooltipStrings = new Map([...prepared.entries.get('war3map.wts').toString('utf8')
+        .matchAll(/^STRING (\d+)\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n([\s\S]*?)\r?\n\}/gm)].map(match=>[Number(match[1]),match[2]]));
+    const mainItems = parseObjectData(prepared.entries.get('war3map.w3t'),'item');
+    const skinItems = parseObjectData(prepared.entries.get('war3mapSkin.w3t'),'item');
+    for(const row of mainItems.tables.flat().filter(row=>/^H(?:sT[1-9A]|[seitabnchv]\d{2})$/.test(row.newId))) {
+        const skin=skinItems.tables.flat().find(value=>value.newId===row.newId);
+        for(const id of ['utub','ides']) {
+            const field=row.fields.find(field=>field.id===id),skinField=skin.fields.find(field=>field.id===id);
+            assert.equal(field.value,skinField.value,'Both native item readers must resolve the same clean text');
+            const text=tooltipStrings.get(Number(field.value.slice(8)))??field.value;
+            assert(text.length>0 && !/가방 정리 시 장비가 삭제됩니다\.|자동 공격 스킬을 새로 부여하지 않습니다\.|보유 중인 해당 무기에만 적용|기본 능력치는 각각 적용|세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음|확장 인벤토리에서 장착 시 적용/.test(text));
+            if(/^HsT/.test(row.newId))assert(!text.includes('|cffaaaaaa') && !/단독 기준|강화 단계마다|자동 적용/.test(text));
+        }
+    }
+    assert.deepEqual(cleanItemTooltipText('피해 +10%|n|cffaaaaaa보유 중인 해당 무기에만 적용|r|n풍미 문장'), '피해 +10%|n풍미 문장');
+    assert.deepEqual(cleanItemTooltipText('체력 +100\r\n가방 정리 시 장비가 삭제됩니다.\r\n풍미 문장'), '체력 +100\r\n풍미 문장');
+    const fixture = new Map(prepared.entries), skin = parseObjectData(fixture.get('war3mapSkin.w3t'),'item');
+    const row = skin.tables.flat().find(row=>row.newId==='He05'), field = row.fields.find(field=>field.id==='utub');
+    delete row.raw; delete field.raw;
+    field.value='피해 +10%|n가방 정리 시 장비가 삭제됩니다.|n풍미 문장';
+    fixture.set('war3mapSkin.w3t',serializeObjectData(skin));
+    const inline = cleanItemTooltipEntries(fixture);
+    assert.equal(parseObjectData(inline.get('war3mapSkin.w3t'),'item').tables.flat().find(row=>row.newId==='He05')
+        .fields.find(field=>field.id==='utub').value,'피해 +10%|n풍미 문장');
+    verifyPreserved(original,map.replace(prepared.entries),[...prepared.entries.keys()]);
+    assert.equal(snapshots.size,7);
+    console.log('PASS requested talent categories and item tooltip cleanup preserve stats, flavor, unrelated data and repeated builds');
+}
+{
+    const catalog=loadItemTooltipCatalog();
+    assert.equal(catalog.get('HsT2').name,'신속의 인장');
+    assert.equal(catalog.get('HsT3').name,'추적의 인장');
+    assert.equal(catalog.get('HsT4').name,'가속의 인장');
+    assert.equal(catalog.get('HsT5').name,'확대의 인장');
+    const unwanted=/단계 특성 · 셋 중 하나 선택|이번 수색 동안 유지|자동 적용|레벨업 선택으로 강화|버리기 불가|숫자는 강화 레벨|가방 정리 시 장비가 삭제됩니다|자동 공격 스킬을 새로 부여하지 않습니다|보유 중인 해당 무기에만 적용|기본 능력치는 각각 적용|세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음|확장 인벤토리에서 장착 시 적용|해당 무기 보유 시 적용|장착 시 회복 없음|단독 기준|별도의 장비입니다/;
+    for(const filename of [baseMapPath,path.join(root,'dist/AnyasLongNight-playtest.w3x')]) {
+        const candidate=openMap(fs.readFileSync(filename));
+        const strings=new Map([...candidate.read('war3map.wts').toString('utf8')
+            .matchAll(/^STRING (\d+)\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n([\s\S]*?)\r?\n\}/gm)].map(match=>[Number(match[1]),match[2]]));
+        const resolve=field=>/^TRIGSTR_\d+$/.test(field.value)?strings.get(Number(field.value.slice(8))):field.value;
+        for(const name of ['war3map.w3t','war3mapSkin.w3t']) {
+            const rows=parseObjectData(candidate.read(name),'item').tables.flat();
+            for(const [id,expected]of catalog) {
+                const row=rows.find(row=>row.newId===id);assert(row,filename+' missing '+id);
+                for(const field of ['utub','ides']) {
+                    const value=resolve(row.fields.find(value=>value.id===field));
+                    assert.equal(value,expected.description,filename+' '+id+'/'+field+' differs from runtime');
+                    assert(!unwanted.test(value),'A removed notice remains in '+id);
+                }
+                for(const field of row.fields.filter(field=>['unam','utip'].includes(field.id)))assert.equal(resolve(field),expected.name);
+            }
+        }
+        for(const name of ['war3map.w3a','war3mapSkin.w3a']) {
+            const rows=parseObjectData(candidate.read(name),'ability').tables[1];
+            for(const entry of talentCatalog.tiers.flat())assert.equal(rows.find(row=>row.newId===entry.id)
+                .fields.find(field=>field.id==='aub1').value,entry.text);
+            const controller=rows.find(row=>row.newId===talentCatalog.controller);
+            for(let level=1;level<=5;level++)assert.equal(controller.fields.find(field=>field.id==='aub1'&&field.level===level).value,talentCatalog.controllerText);
+            const interfaceRow=parseObjectData(candidate.read(name),'ability').tables[0].find(row=>row.oldId==='ASpc');
+            assert(interfaceRow,'Both maps must store the short default interface tooltip');
+            assert.equal(interfaceRow.fields.find(field=>field.id==='atp1').value,talentCatalog.interface.title);
+            assert.equal(interfaceRow.fields.find(field=>field.id==='aub1').value,talentCatalog.interface.defaultText);
+            assert.deepEqual(installInterfaceTooltip(candidate.read(name),talentCatalog),candidate.read(name));
+        }
+    }
+    const weapons=loadWeaponTooltipCatalog();
+    for(const filename of [baseMapPath,path.join(root,'dist/AnyasLongNight-playtest.w3x')]) {
+        const candidate=openMap(fs.readFileSync(filename));
+        const entries=new Map(['war3map.w3a','war3mapSkin.w3a','war3map.wts'].map(name=>[name,candidate.read(name)]));
+        for(const [name,bytes]of cleanWeaponTooltipEntries(entries,weapons))assert.deepEqual(bytes,entries.get(name),'Saved weapon tooltip differs from runtime: '+filename+'/'+name);
+    }
+    const weaponEntries=new Map(['war3map.w3a','war3mapSkin.w3a','war3map.wts'].map(name=>[name,map.read(name)]));
+    const installed=cleanWeaponTooltipEntries(weaponEntries,weapons);
+    const strip=bytes=>{
+        const data=parseObjectData(bytes,'ability');
+        for(const row of data.tables[1].filter(row=>/^HsW[1-9ABC]$/.test(row.newId))) {
+            row.fields=row.fields.filter(field=>!['anam','atp1','aub1'].includes(field.id));delete row.raw;
+        }
+        return serializeObjectData(data);
+    };
+    for(const name of ['war3map.w3a','war3mapSkin.w3a'])assert.deepEqual(strip(installed.get(name)),strip(weaponEntries.get(name)),
+        'Weapon tooltip synchronization must preserve every combat field and unrelated ability');
+    console.log('PASS complete original/test audit: 15 talents, 10 trinkets, 82 equipment items and 60 weapon levels match runtime');
+}
+{
+    const snapshots=new Map(),prepared=prepareNativeTalents(map,snapshots);
+    const ids=new Set([talentCatalog.controller,...talentCatalog.tiers.flat().map(entry=>entry.id)]);
+    for(const [name,skin]of [['war3map.w3a',false],['war3mapSkin.w3a',true]]) {
+        const source=map.read(name),output=prepared.entries.get(name),data=parseObjectData(output,'ability');
+        const controller=data.tables[1].find(row=>row.newId===talentCatalog.controller);
+        assert.equal(controller.oldId,'ATua');
+        if(!skin) {
+            assert.equal(controller.fields.find(field=>field.id==='alev').value,5);
+            const tiers=controller.fields.filter(field=>field.id==='aabi');
+            assert.equal(tiers.length,5);
+            for(let i=0;i<5;i++)assert.deepEqual([tiers[i].level,tiers[i].column,tiers[i].value],
+                [i+1,0,talentCatalog.tiers[i].map(entry=>entry.id).join(',')]);
+        }
+        for(const entry of talentCatalog.tiers.flat()) {
+            const row=data.tables[1].find(row=>row.newId===entry.id);assert.equal(row.oldId,'Aamk');
+            assert.equal(row.fields.find(field=>field.id==='aub1').value,entry.text,
+                'Both base and skin data must contain only the concise talent effect');
+            if(skin) {
+                assert.equal(row.fields.find(field=>field.id==='abpy').value,-11);
+                assert.equal(row.fields.find(field=>field.id==='aub1').value,entry.text);
+            } else for(const id of ['Iagi','Iint','Istr'])assert.equal(row.fields.find(field=>field.id===id).value,0);
+        }
+        const strip=value=>{const d=parseObjectData(value,'ability');d.tables[1]=d.tables[1].filter(row=>!ids.has(row.newId));return serializeObjectData(d);};
+        assert.deepEqual(strip(output),strip(source),'All unrelated ability rows must retain exact raw bytes');
+        assert.deepEqual(installNativeTalents(output,skin,talentCatalog),output);
+        const collision=parseObjectData(output,'ability');collision.tables[1].find(row=>row.newId==='Ht1A').oldId='AHbz';
+        assert.throws(()=>installNativeTalents(serializeObjectData({...collision,tables:collision.tables.map(table=>table.map(row=>{
+            if(row.newId==='Ht1A')delete row.raw;return row;
+        }))}),skin,talentCatalog),/collision/);
+    }
+    const installed=map.replace(prepared.entries),saved=openMap(installed);
+    for(const [name,bytes]of prepared.entries)assert.deepEqual(saved.read(name),bytes);
+    verifyPreserved(original,installed,['war3map.w3a','war3mapSkin.w3a']);
+    assert(snapshots.size===3 && prepared.assets.size===2);
+    assert(bundle.includes(talentLua(talentCatalog)),'Native objects and runtime must use the same guarded catalog');
+    console.log('PASS ATua-based five-tier tree, fifteen hidden zero-stat markers, catalog consistency, raw preservation, collision guards and MPQ readback');
+}
+{
+    const source = map.read('war3map.w3a'), snapshots = new Map();
+    const prepared = prepareStatDetails(map, snapshots);
+    const output = prepared.entries.get('war3map.w3a');
+    const data = parseObjectData(output, 'ability');
+    const row = data.tables[0].find(row => row.oldId === 'ASde');
+    assert(row, 'Native ASde must have an explicit supported-stat list');
+    const field = row.fields.find(field => field.id === 'Asdf');
+    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS0F']);
+    assert.deepEqual(installStatDetails(output), output, 'ASde installation must be idempotent');
+    const stripOwned = bytes => {const d = parseObjectData(bytes, 'ability');
+        d.tables[0] = d.tables[0].filter(row => row.oldId !== 'ASde');return serializeObjectData(d);};
+    assert.deepEqual(stripOwned(output), stripOwned(source), 'Every unrelated ability record retains its raw bytes');
+    for (const version of [1,2,3]) {
+        const fixture = {version, kind: 'ability', tables: [[{oldId:'ASde',newId:'\0\0\0\0',extra:version===3?[0]:[],fields:[
+            {id:'Asdf',type:3,level:1,column:4,value:'AS01,AS03,AS0F',endId:'ASde'},
+            {id:'anam',type:3,level:0,column:0,value:'keep native text',endId:'ASde'}]}],[]]};
+        const bytes = serializeObjectData(fixture), installed = installStatDetails(bytes);
+        const before = parseObjectData(bytes, 'ability').tables[0][0], after = parseObjectData(installed, 'ability').tables[0][0];
+        assert.equal(after.fields[0].value, 'AS01,AS0F');assert.deepEqual(after.fields[1].raw, before.fields[1].raw);
+        assert.deepEqual(installStatDetails(bytes, true), installed, 'A skin override cannot restore unsupported stats');
+        fixture.tables[0][0].fields[0].column = 2;
+        assert.throws(() => installStatDetails(serializeObjectData(fixture)), /field layout/);
+    }
+    const patched = map.replace(prepared.entries), saved = openMap(patched);
+    assert.deepEqual(saved.read('war3map.w3a'), output);
+    assert.deepEqual(prepareStatDetails(saved).entries.get('war3map.w3a'), output);
+    verifyPreserved(original, patched, ['war3map.w3a','war3mapSkin.w3a']);
+    assert(snapshots.size===2 && prepared.assets.size===2);
+    assert.deepEqual(fs.readFileSync(path.join(root,'assets/war3map.w3a')), source, 'Preparation must not publish assets');
+    console.log('PASS native ASde shows only engine regeneration and magic resistance; level/column, skins, unrelated bytes, MPQ readback and idempotence are preserved');
+}
+{
+    const prepared = prepareHeroRegeneration(map), source = map.read('war3map.w3u');
+    const output = prepared.entries.get('war3map.w3u');
+    const row = parseUnits(output).tables[0].find(row => row.oldId === 'Uany');
+    assert.equal(row.fields.find(field => field.id === 'uhrt').value, 1);
+    assert.equal(row.fields.find(field => field.id === 'uhpr').value, 0);
+    const stripOwned = bytes => {const data = parseUnits(bytes);
+        for (const row of data.tables[0]) if (row.oldId === 'Uany') {
+            row.fields = row.fields.filter(field => !['uhrt','uhpr'].includes(field.id)); delete row.raw;
+        }return serializeUnits(data);};
+    assert.deepEqual(stripOwned(output),stripOwned(source),'Only native regeneration fields may change on Anya');
+    assert.deepEqual(installHeroRegeneration(output),output);
+    for (const version of [1,2,3]) {
+        const fixture = {version,kind:'unit',tables:[[{oldId:'Uany',newId:'\0\0\0\0',extra:version===3?[0,7]:[],fields:[
+            {id:'uhrt',type:0,value:0,endId:'Uany'}, {id:'uhpr',type:1,value:2,endId:'Uany'},
+            {id:'umdl',type:3,value:'keep-model',endId:'Uany'}]}],[]]};
+        const before=serializeUnits(fixture),after=installHeroRegeneration(before);
+        assert.deepEqual(stripOwned(after),stripOwned(before));
+        assert.deepEqual(installHeroRegeneration(before,true),after,'An explicit skin cannot disable always-on regeneration');
+        assert.deepEqual(installHeroRegeneration(after),after);
+    }
+    validateStrengthRegeneration(map.read('war3mapMisc.txt'));
+    for (const text of ['[Misc]\nStrRegenBonus=0.05','[Misc]\nStrRegenBonus=0\nStrRegenBonus=0',
+        '[Other]\nStrRegenBonus=0','[Misc]\nStrRegenBonus=']) {
+        assert.throws(()=>validateStrengthRegeneration(Buffer.from(text)),/StrRegenBonus/);
+    }
+    const saved=map.replace(prepared.entries);
+    assert.deepEqual(openMap(saved).read('war3map.w3u'),output);
+    verifyPreserved(original,saved,['war3map.w3u','war3mapSkin.w3u']);
+    assert.deepEqual(fs.readFileSync(path.join(root,'assets/war3map.w3u')),source,'Preparation must not publish unit assets');
+    assert(!bundle.includes('SurvivorCombat.Regenerate('),'The old periodic Lua heal must not survive in the runtime bundle');
+    console.log('PASS Anya always regenerates natively with no inherited base or STR bonus; skins, field bytes and saved MPQ remain consistent');
+}
+{
+    const snapshots = new Map(), entries = prepareUIResources(map, snapshots);
+    const texture = entries.get('HeroSurvivorUI\\Transparent.tga');
+    assert(texture && snapshots.size === 1, 'Container texture is guarded as a build input');
+    for (let i = 21; i < texture.length; i += 4) assert.equal(texture[i], 0);
+    const installed = map.replace(entries), readback = openMap(installed);
+    assert.deepEqual(readback.read('HeroSurvivorUI\\Transparent.tga'), texture);
+    assert(readback.read('(listfile)').toString('utf8').includes('HeroSurvivorUI\\Transparent.tga'));
+    assert.deepEqual(readback.replace(entries), installed, 'Resource installation is idempotent');
+    assert.deepEqual(readback.replace(prepareUIResources(readback)), installed, 'Editor import registration is idempotent');
+    const oldImports = map.read('war3map.imp'), imports = readback.read('war3map.imp');
+    assert.deepEqual(imports.subarray(8, oldImports.length), oldImports.subarray(8), 'Existing import paths and flags are preserved');
+    assert(imports.includes(Buffer.from('HeroSurvivorUI\\Transparent.tga\0')), 'The editor must retain the imported texture on save');
+    verifyPreserved(original, installed, ['HeroSurvivorUI\\Transparent.tga', 'war3map.imp', '(listfile)']);
+    console.log('PASS fully transparent container texture is imported, listed, byte-verified and preserves unrelated map data');
+}
 {
     const ui = fs.readFileSync(path.join(root, 'src/30_gameplay/SurvivorUI.lua'), 'utf8');
     const match = ui.match(/BlzFrameSetTexture\(introRoot,\s*"((?:\\.|[^"\\])*)"/);
@@ -4850,7 +6003,7 @@ assert.throws(() => refreshBase(original, baseMap.replace(new Map([['war3map.wts
     console.log('PASS base string deletion retains only referenced gameplay text, source bytes, LF/CRLF, idempotence and collision guards');
 }
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Dry verification changed original');
-assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original, 'Dry verification published output');
+assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original, 'Dry verification published output');
 console.log(`PASS resized-base refresh (${baseTerrain.width - 1}x${baseTerrain.height - 1} cells), native geography, undead rules, editor source, ${refreshed.preserved} gameplay entries and palette/pathing guards`);
 
 const unitEntries = new Map();
@@ -4938,7 +6091,7 @@ delete wrongRow.raw; delete wrongField.raw; wrongField.value = 'UnexpectedReplac
 assert.throws(() => installPortraitUnits(serializeUnits(wrongAnya), true, {migrateLegacyAnya: true}), /conflicting fields/,
     'Explicit installation only permits the known BansheeRanger-to-HeroAnya migration');
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Portrait preparation changed original');
-assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original, 'Portrait preparation published a map');
+assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original, 'Portrait preparation published a map');
 for (const [name, bytes] of unitAssetSnapshots) assert.deepEqual(fs.readFileSync(path.join(root, 'assets', name)), bytes,
     'Portrait dry preparation must not write its asset source');
 console.log('PASS native portrait unit definitions, real speaker models, byte-preserved rows, assets, idempotence and missing-object guard');
@@ -5118,7 +6271,7 @@ if (encryptedFixtureIndex >= 0) {
     assert.throws(() => openMap(crcBytes).compact(), /CRC/,
         'Unsupported encrypted CRC layouts must not be published');
 }
-assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original);
+assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original);
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes);
 console.log('PASS MPQ no-op patching, compaction, prefix/locale/attributes, unnamed live blocks and encrypted FIX_KEY safety');
 {
@@ -5135,7 +6288,7 @@ console.log('PASS MPQ no-op patching, compaction, prefix/locale/attributes, unna
         assert.equal(cached.read('missing-cache-fixture'), null); assert.equal(cached.read('MISSING-CACHE-FIXTURE'), null);
         const toc = cached.read('war3mapImported/CustomTooltip.toc');
         assert.deepEqual(cached.read('WAR3MAPIMPORTED\\CUSTOMTOOLTIP.TOC'), toc, 'Slash and case variants share one entry');
-        assert.deepEqual(fs.readFileSync(path.join(root, 'dist/HeroSurvivor-playtest.w3x')), original,
+        assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original,
             'Mutating a read result must not modify the archive');
         console.log('PASS MPQ decoded cache avoids repeated inflate and isolates mutable read buffers');
     } finally { zlib.inflateSync = inflate; }

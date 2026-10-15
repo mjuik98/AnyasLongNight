@@ -13,6 +13,7 @@ do
     local stormHits, stormReady, bladeReady = 0, 0, 0
     local boss, bossDefeated = nil, false
     local damageTrigger, escapeEffect = nil, nil
+    local escapeOwnsInvulnerability = false
     local escapeReady, escapeUntil, escapeUses, eliteSerial = true, 0, 0, 0
     local ward, wardUntil, damageContext, hitSecondary = 0, 0, nil, false
     local recentDamage, stageEscapeUses = {}, {}
@@ -63,10 +64,15 @@ do
         return escapeReady, math.max(0, escapeUntil - RunSession.GetElapsed()), escapeUses
     end
     local function ClearEscape()
-        local effect = escapeEffect
-        escapeEffect = nil
+        local effect, release = escapeEffect, escapeOwnsInvulnerability
+        escapeEffect, escapeOwnsInvulnerability = nil, false
         escapeUntil = 0
-        if effect then DestroyEffect(effect) end
+        local errors = {}
+        if release and hero ~= nil and GetUnitTypeId(hero) ~= 0 then
+            CleanupCall(errors, "escape invulnerability", function() SetUnitInvulnerable(hero, false) end)
+        end
+        if effect then CleanupCall(errors, "escape effect", function() DestroyEffect(effect) end) end
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
 
     function SurvivorCombat.TrackWeapons(ids)
@@ -172,17 +178,20 @@ do
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function FriendlyEffectAlpha(object, warning)
+        if object.identifier == "hsChainHit" then return warning and 110 or 255 end
+        if object.identifier == "hsEscapeDeparture" or object.identifier == "hsEscapeArrival" then return 255 end
         -- Solid metal needs more opacity than luminous spell particles at night.
         if object.readableBlade then return warning and 150 or 255 end
         return warning and 70 or 140
     end
     local function CreateObject(object, model, scale)
-        object.visual = AddSpecialEffect(model, object.x, object.y)
+        object.visual = object.attachPoint and AddSpecialEffectTarget(model, object.target, object.attachPoint)
+            or AddSpecialEffect(model, object.x, object.y)
         assert(object.visual ~= nil, "Could not create combat effect")
         object.destroy = DestroyObject
         objects[object] = true
         BlzSetSpecialEffectScale(object.visual, scale)
-        BlzSetSpecialEffectZ(object.visual, object.z)
+        if not object.attachPoint then BlzSetSpecialEffectZ(object.visual, object.z) end
         object.friendly = not object.identifier:find("Enemy") and not object.identifier:find("Boss")
         object.readableBlade = object.identifier == "hsBlade" or object.identifier == "hsSlash"
             or object.identifier == "hsSlashHit"
@@ -194,6 +203,8 @@ do
             BlzSetSpecialEffectColor(object.visual, 235, 245, 255)
         elseif object.identifier == "hsReturnBlade" then
             BlzSetSpecialEffectColor(object.visual, 190, 165, 225)
+        elseif object.identifier == "hsEscapeDeparture" or object.identifier == "hsEscapeArrival" then
+            BlzSetSpecialEffectColor(object.visual, 185, 135, 255)
         end
         ALICE_Create(object)
     end
@@ -296,6 +307,61 @@ do
         end
         return dt
     end
+    local function EscapeLanding(source)
+        local x, y = GetUnitX(hero), GetUnitY(hero)
+        local hasSource = source ~= nil and source ~= hero and GetUnitTypeId(source) ~= 0
+        local angle = hasSource and Atan2(y - GetUnitY(source), x - GetUnitX(source))
+            or GetUnitFacing(hero) * bj_DEGTORAD
+        local enemies = {}
+        for u in pairs(units) do
+            if Enemy(u) then enemies[#enemies + 1] = {GetUnitX(u), GetUnitY(u)} end
+        end
+        local function Walkable(px, py)
+            if px < bounds.minX + 32 or px > bounds.maxX - 32
+                or py < bounds.minY + 32 or py > bounds.maxY - 32 then return false end
+            -- Check the hero's footprint, not just an empty center pixel.
+            for ox = -32, 32, 32 do
+                for oy = -32, 32, 32 do
+                    if IsTerrainPathable(px + ox, py + oy, PATHING_TYPE_WALKABILITY) then return false end
+                end
+            end
+            return true
+        end
+        local bestX, bestY, bestScore = x, y, -math.huge
+        for _, distance in ipairs(SurvivorConfig.escapeDistances) do
+            for _, offset in ipairs({0, 1, -1, 2, -2, 3, -3, 4}) do
+                local direction = angle + offset * math.pi / 4
+                local tx, ty = x + math.cos(direction) * distance, y + math.sin(direction) * distance
+                local clear = Walkable(tx, ty) and SurvivorStage.LineClear(x, y, tx, ty)
+                -- Do not cross cliffs, trees or narrow gaps into an isolated pocket.
+                local steps = math.ceil(distance / 32)
+                for step = 1, steps - 1 do
+                    if not clear then break end
+                    clear = Walkable(x + (tx - x) * step / steps, y + (ty - y) * step / steps)
+                end
+                if clear then
+                    local score = distance - math.abs(offset) * 20
+                    for _, enemy in ipairs(enemies) do
+                        local separation = math.sqrt((tx - enemy[1])^2 + (ty - enemy[2])^2)
+                        score = score - math.max(0, 320 - separation) * 3 - math.max(0, 96 - separation) * 10
+                    end
+                    if score > bestScore then bestX, bestY, bestScore = tx, ty, score end
+                end
+            end
+        end
+        return bestX, bestY
+    end
+    local function EscapeBlink(source)
+        local x, y = GetUnitX(hero), GetUnitY(hero)
+        local tx, ty = EscapeLanding(source)
+        CreateObject({identifier = "hsEscapeDeparture", x = x, y = y, z = Height(x, y), life = 0.7,
+            isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.escapeDepartureModel, 1.5)
+        SetUnitX(hero, tx)
+        SetUnitY(hero, ty)
+        CreateObject({identifier = "hsEscapeArrival", x = tx, y = ty, z = Height(tx, ty), life = 0.9,
+            isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.escapeArrivalModel, 1.8)
+        return (tx - x)^2 + (ty - y)^2 > 1
+    end
     local function ZoneDamage(zone, enemy)
         local interval = zone.pulse
         if not RunSession.IsRunning() or zone.cleaned or zone.life <= 0 then return interval end
@@ -365,6 +431,10 @@ do
             bolt.lightning = AddLightningEx(jump == 1 and "CLPB" or "CLSB", true, x, y, z, tx, ty, tz)
             objects[bolt] = true
             ALICE_Create(bolt)
+            CreateObject({identifier = "hsChainHit", x = tx, y = ty, z = tz,
+                target = target, attachPoint = "chest", life = SurvivorConfig.chainHitDuration,
+                isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime},
+                SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
             Hit(target, damage, "chainlightning")
             x, y, z, range = tx, ty, tz, stats.chainJumpRange
             damage = damage * SurvivorConfig.chainFalloff
@@ -730,7 +800,8 @@ do
         return dt
     end
     local function NewZone(id, x, y, w, damage)
-        local model = id == "blizzard" and [[Abilities\Spells\Human\Blizzard\BlizzardTarget.mdl]] or SurvivorConfig.zoneModel
+        local model = id == "blizzard" and [[Abilities\Spells\Human\Blizzard\BlizzardTarget.mdl]]
+            or id == "meteor" and SurvivorConfig.meteorImpactModel or SurvivorConfig.zoneModel
         CreateObject({identifier = "hsExtraZone", weapon = id, x = x, y = y, z = Height(x, y),
             radius = w.radius, damage = damage, life = w.duration, pulse = w.pulse, pulseClock = w.pulse,
             slow = w.slow, slowDuration = math.max(0.5, w.duration / 3) + (w.slowDurationBonus or 0), isStationary = true, isAnonymous = true,
@@ -852,11 +923,6 @@ do
             pulse = w.pulse, pulseClock = 0, spherical = true, slow = 0, hitTimes = {},
             isAnonymous = true, selfInteractions = id == "thunderorb" and MoveOrb or MoveReturnBlade}
         CreateObject(object, id == "thunderorb" and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel, w.size)
-    end
-    function SurvivorCombat.Regenerate(dt)
-        if RunSession.IsRunning() and Alive(hero) and stats.regeneration > 0 then
-            SetWidgetLife(hero, math.min(BlzGetUnitMaxHP(hero), GetWidgetLife(hero) + stats.regeneration * dt))
-        end
     end
     local function MoveFrost(shard)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1515,6 +1581,10 @@ do
     function SurvivorCombat.SetPaused(enable, reason)
         local interactiveHero = enable and (reason == "INVENTORY" or reason == "STAGE_CLEAR")
         if frozen == enable and inventoryFrozen == interactiveHero then return end
+        -- PauseUnit alone is insufficient for the interactive inventory hero.
+        -- Suppress the engine rate for every pause reason, before touching UI/units.
+        stats.nativeRegenerationPaused = enable == true
+        SurvivorAugments.ApplyHeroRegeneration(hero, stats)
         if inventoryFrozen then
             SurvivorCombat.MaintainInventoryPause()
             BlzUnitDisableAbility(hero, FourCC("Amov"), false, false)
@@ -1565,9 +1635,7 @@ do
         for i = 1, #rows do
             lines[#lines + 1] = SurvivorAugments.Get(rows[i].id).name .. string.format(" %.0f", rows[i].damage)
         end
-        local summaryRows = {}
-        for i = 1, #lines, 2 do summaryRows[#summaryRows + 1] = lines[i] .. (lines[i + 1] and " / " .. lines[i + 1] or "") end
-        return #lines > 0 and "누적 유효 피해\n" .. table.concat(summaryRows, "\n") or "누적 유효 피해: 없음"
+        return #lines > 0 and "누적 유효 피해\n" .. table.concat(lines, "\n") or "누적 유효 피해: 없음"
     end
     local function CancelBattlefieldClear()
         clearGeneration, clearing = clearGeneration + 1, false
@@ -1688,6 +1756,10 @@ do
         local errors = {}
         CleanupCall(errors, "battlefield timer", CancelBattlefieldClear)
         onKill, onDeath = nil, nil
+        if stats then stats.nativeRegenerationPaused = true end
+        if hero ~= nil and GetUnitTypeId(hero) ~= 0 then
+            CleanupCall(errors, "hero regeneration", function() SurvivorAugments.ApplyHeroRegeneration(hero, stats) end)
+        end
         CleanupCall(errors, "escape", ClearEscape)
         local oldDamage, oldDeath = damageTrigger, deathTrigger
         damageTrigger, deathTrigger = nil, nil
@@ -1732,6 +1804,8 @@ do
         difficulty = assert(SurvivorConfig.difficulties[difficultyId or "normal"], "Invalid combat difficulty")
         hero, stats, bounds, onKill, onDeath = unit, buildStats, arena, killCallback, deathCallback
         units[hero] = {enemy = false, alive = true}
+        stats.nativeRegenerationPaused = false
+        SurvivorAugments.ApplyHeroRegeneration(hero, stats)
         heightLocation = Location(0, 0)
         queryGroup = CreateGroup()
         damageTrigger = CreateTrigger()
@@ -1754,16 +1828,22 @@ do
                     name = sourceName .. " / " .. (damageContext and damageContext.name or "일반 공격"),
                     hint = damageContext and damageContext.hint or "근접 적에게 포위되지 않도록 넓은 쪽으로 이동하세요."}
                 if escapeReady and damage >= GetWidgetLife(hero) - 0.405 then
-                    escapeReady, escapeUntil, escapeUses = false, RunSession.GetElapsed() + 2.5, escapeUses + 1
+                    escapeReady, escapeUntil, escapeUses = false, RunSession.GetElapsed() + SurvivorConfig.escapeDuration, escapeUses + 1
                     BlzSetEventDamage(0)
                     SetWidgetLife(hero, math.max(GetWidgetLife(hero), BlzGetUnitMaxHP(hero) * 0.30))
+                    escapeOwnsInvulnerability = not BlzIsUnitInvulnerable(hero)
+                    if escapeOwnsInvulnerability then SetUnitInvulnerable(hero, true) end
+                    local moved = EscapeBlink(source)
                     escapeEffect = AddSpecialEffectTarget([[Abilities\Spells\Undead\AntiMagicShell\AntiMagicShell.mdl]], hero, "origin")
+                    BlzSetSpecialEffectScale(escapeEffect, 1.2)
+                    BlzSetSpecialEffectColor(escapeEffect, 185, 135, 255)
                     stageEscapeUses[stage] = (stageEscapeUses[stage] or 0) + 1
                     entry.escaped, entry.damage = true, 0
                     SurvivorUI.Cue("escape")
                     SurvivorUI.Alert(6,
-                        "|cffbbaaff그림자 탈출 · 치명상 무효|r\n생명력 최소 30% · 2.5초 피해 무효\n다음 스테이지에서 재충전", 50, "escape")
-                    SurvivorUI.Say("안야", "아직 끝나지 않았어. 길을 찾아야 해.")
+                        "|cffbbaaff그림자 탈출 · " .. (moved and "순간 이동" or "제자리 보호")
+                        .. "|r\n생명력 최소 30% · 2.5초 무적\n다음 스테이지에서 재충전", 50, "escape")
+                    SurvivorUI.Say("안야", "위험했네… 여기서 벗어나자.")
                 else BlzSetEventDamage(damage) end
                 if damage > 0 then
                     if #recentDamage == 5 then table.remove(recentDamage, 1) end

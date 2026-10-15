@@ -1,6 +1,6 @@
 [Misc]
 StrRegenBonus=0.0
-AgiDefenseBonus=0.0
+AgiDefenseBonus=0.001
 AgiDefenseBase=0.0
 PawnItemRate=0.0
 DropItemRange=10000.0
