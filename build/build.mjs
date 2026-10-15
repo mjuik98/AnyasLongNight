@@ -122,7 +122,7 @@ export const portraitUnits = [
         armorType: 'hero',
         icon: 'ReplaceableTextures\\CommandButtons\\BTNNecromancer.blp'},
 ];
-export function installPortraitUnits(bytes, skin = false, {migrateLegacyAnya = false, migrateLegacyArmor = false} = {}) {
+export function installPortraitUnits(bytes, skin = false, {migrateLegacyAnya = false, migrateLegacyArmor = false, migrateLegacyUpgrades = false} = {}) {
     const data = parseUnits(bytes); assert.deepEqual(serializeUnits(data), bytes, 'Unit reader must round-trip losslessly');
     const migratedFields = new Map();
     const recordMigration = (row, index, id, type, value) => {
@@ -133,7 +133,7 @@ export function installPortraitUnits(bytes, skin = false, {migrateLegacyAnya = f
         // Native animated portraits follow umdl. upat is not a portrait override.
         const values = skin ? [['umdl', 3, unit.model], ['unam', 3, unit.name], ['uico', 3, unit.icon],
             ['usnd', 3, ''], ['ushu', 3, '']] : [['uabi', 3, ''], ['uaen', 0, 0], ['ucol', 2, 0],
-            ['umvs', 0, 0], ['ufoo', 0, 0], ['uhom', 0, 1], ['udty', 3, unit.armorType]];
+            ['umvs', 0, 0], ['ufoo', 0, 0], ['uhom', 0, 1], ['udty', 3, unit.armorType], ['upgr', 3, '']];
         const existing = data.tables.flat().find(row => (row.newId === '\0\0\0\0' ? row.oldId : row.newId) === unit.id);
         if (existing) {
             assert.equal(existing.newId, unit.id, 'Portrait ID collides with a stock object');
@@ -141,8 +141,20 @@ export function installPortraitUnits(bytes, skin = false, {migrateLegacyAnya = f
             // Base data owns the armor override. Existing skin overrides must agree, but
             // absent skin fields inherit the base and need no extra gameplay metadata.
             if (skin && existing.fields.some(field => field.id === 'udty')) values.push(['udty', 3, unit.armorType]);
+            if (skin && existing.fields.some(field => field.id === 'upgr')) values.push(['upgr', 3, '']);
             for (const [id, type, value] of values) {
                 const matches = existing.fields.filter(field => field.id === id);
+                // Removing the override would inherit hfoo's upgrade list again.
+                // Own an explicit empty string in base data and any existing skin override.
+                if (id === 'upgr' && (!matches.length || matches.length === 1 && matches[0].type === 3 && matches[0].value === 'Rguv')) {
+                    assert(migrateLegacyUpgrades, 'Story portrait inherits Rguv; run build with --portrait-objects before publishing');
+                    const index = matches.length ? existing.fields.indexOf(matches[0]) : existing.fields.length;
+                    delete existing.raw;
+                    if (matches.length) { delete matches[0].raw; matches[0].value = value; }
+                    else existing.fields.push({id, type, value, endId: unit.id});
+                    recordMigration(existing, index, id, type, value);
+                    continue;
+                }
                 if (id === 'udty' && !matches.length) {
                     assert(migrateLegacyArmor, 'Story portrait armor is not explicit Hero; run build with --portrait-objects before publishing');
                     const index = existing.fields.length;
@@ -191,7 +203,7 @@ export function installPortraitUnits(bytes, skin = false, {migrateLegacyAnya = f
             }
             for (let i = row.fields.length; i < after.fields.length; i++) {
                 const expected = migrations.get(i), field = after.fields[i];
-                assert(expected?.id === 'udty', 'Portrait migration added an unrelated field');
+                assert(['udty', 'upgr'].includes(expected?.id), 'Portrait migration added an unrelated field');
                 assert.equal(field.id, expected.id); assert.equal(field.type, expected.type);
                 assert.equal(field.value, expected.value); assert.equal(field.endId, row.newId);
             }
@@ -216,8 +228,8 @@ function preparePortraitObjects(map, snapshots) {
             data.tables = data.tables.map(table => table.filter(row => !portraitUnits.some(unit => row.newId === unit.id)));
             return serializeUnits(data); };
         assert.deepEqual(withoutOwned(source), withoutOwned(bytes), 'Asset and test map unit data diverge: ' + name);
-        const output = installPortraitUnits(bytes, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true});
-        assert.deepEqual(installPortraitUnits(source, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true}), output, 'Portrait asset output must match the map');
+        const output = installPortraitUnits(bytes, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true});
+        assert.deepEqual(installPortraitUnits(source, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true}), output, 'Portrait asset output must match the map');
         snapshots.set(assetPath, source); entries.set(name, output); assets.set(assetPath, output);
     }
     return {entries, assets};
@@ -351,6 +363,42 @@ export function validateGoldRemoval(map) {
             : name.endsWith('.wts') ? removeGoldStrings(bytes) : removeGoldMisc(bytes);
         assert(output.equals(bytes), 'Gold costs, bounty or sale text remain in ' + name + '; run build with --remove-gold');
     }
+}
+// The asset owns the cumulative XP curve; patch only that gameplay constant.
+// Other constants in an editor map must never be replaced by this operation.
+export function installExperienceCurve(bytes, source) {
+    const read = value => {
+        assert(Buffer.isBuffer(value), 'Missing experience game constants');
+        let section = '', levels, curve;
+        for (const line of value.toString('utf8').split(/\r?\n/)) {
+            const header = line.match(/^\s*\[([^\]]+)\]/);
+            if (header) section = header[1].toLowerCase();
+            if (section !== 'misc') continue;
+            const field = line.match(/^\s*(MaxHeroLevel|NeedHeroXP)\s*=\s*([^;\r\n]*)/i);
+            if (!field) continue;
+            if (field[1].toLowerCase() === 'maxherolevel') {
+                assert(levels === undefined, 'Duplicate MaxHeroLevel'); levels = Number(field[2].trim());
+            } else {
+                assert(curve === undefined, 'Duplicate NeedHeroXP'); curve = field[2].trim().split(',').map(Number);
+            }
+        }
+        assert(Number.isInteger(levels) && levels >= 2 && levels <= 1000, 'Invalid MaxHeroLevel');
+        assert(curve?.length === levels - 1, 'Experience curve must cover every level through MaxHeroLevel');
+        assert(curve.every((xp, i) => Number.isSafeInteger(xp) && xp > (curve[i - 1] ?? 0)),
+            'Experience thresholds must be positive and strictly increasing integers');
+        return {levels, curve};
+    };
+    const desired = read(source), current = read(bytes);
+    assert.equal(current.levels, desired.levels, 'Experience migration must preserve MaxHeroLevel');
+    let section = '';
+    const output = Buffer.from(bytes.toString('utf8').split(/(?<=\n)/).map(line => {
+        const header = line.match(/^\s*\[([^\]]+)\]/);
+        if (header) section = header[1].toLowerCase();
+        if (section !== 'misc' || !/^\s*NeedHeroXP\s*=/i.test(line)) return line;
+        return line.replace(/^(\s*NeedHeroXP\s*=\s*)[^;\r\n]*/i, (_, prefix) => prefix + desired.curve.join(','));
+    }).join(''));
+    assert.deepEqual(read(output), desired, 'Experience curve readback differs');
+    return output.equals(bytes) ? bytes : output;
 }
 export function terrainInfo(bytes) {
     assert(bytes && bytes.toString('ascii', 0, 4) === 'W3E!', 'Invalid terrain entry');
@@ -610,7 +658,7 @@ export function publishTransaction(entries, {io = fs, stamp = new Date().toISOSt
 
 function main() {
     const args = process.argv.slice(2);
-    let check = false, refresh = false, portraits = false, compact = false, removeGold = false, basePath = baseMapPath;
+    let check = false, refresh = false, portraits = false, compact = false, removeGold = false, experience = false, basePath = baseMapPath;
     let input = path.join(root, 'dist/HeroSurvivor-playtest.w3x'), output = input;
     let profile = 'playtest', outputExplicit = false, inputExplicit = false;
     for (let i = 0; i < args.length; i++) {
@@ -619,6 +667,7 @@ function main() {
         else if (args[i] === '--portrait-objects') portraits = true;
         else if (args[i] === '--compact') compact = true;
         else if (args[i] === '--remove-gold') removeGold = true;
+        else if (args[i] === '--experience-curve') experience = true;
         else if (args[i] === '--release') profile = 'release';
         else if (args[i] === '--profile') {
             profile = args[++i];
@@ -651,6 +700,14 @@ function main() {
     ]));
     const portraitObjects = portraits ? preparePortraitObjects(openMap(patched), snapshots) : null;
     if (portraitObjects) patched = openMap(patched).replace(portraitObjects.entries);
+    const experienceAsset = path.join(root, 'assets/war3mapMisc.txt');
+    const experienceSource = fs.readFileSync(experienceAsset);
+    snapshots.set(experienceAsset, experienceSource);
+    const constants = openMap(patched).read('war3mapMisc.txt');
+    const experienceConstants = installExperienceCurve(constants, experienceSource);
+    if (experience) patched = openMap(patched).replace(new Map([['war3mapMisc.txt', experienceConstants]]));
+    else assert.deepEqual(constants, experienceConstants,
+        'Map experience curve differs from assets; run build with --experience-curve');
     const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots, portraitObjects?.assets) : null;
     if (goldRemoval) patched = openMap(patched).replace(goldRemoval.entries);
     const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? [])]);
@@ -664,7 +721,8 @@ function main() {
     validatePortraitObjects(preparedMap, bundle);
     validateGoldRemoval(preparedMap);
     const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
-        ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? [])])];
+        ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []),
+        ...(experience ? ['war3mapMisc.txt'] : [])])];
     const preserved = verifyPreserved(original, patched, changedEntries);
     assert.equal(preparedMap.read('war3map.lua').toString('utf8'), script);
     console.log(`Validated ${count} Lua sources; preserved ${preserved} unrelated map entries.`);
@@ -724,6 +782,7 @@ function main() {
                     ...(base ? {base: basePath, baseSha256: digest(base), refreshedEntries: refreshed.entries} : {}),
                     ...(portraitObjects ? {portraitObjects: [...portraitObjects.entries.keys()]} : {}),
                     ...(goldRemoval ? {goldRemoval: [...goldRemoval.entries.keys()]} : {}),
+                    ...(experience ? {experienceCurve: 'war3mapMisc.txt'} : {}),
                     ...(compactStats ? {compaction: compactStats} : {}),
                     sources: Object.fromEntries([...snapshots].map(([p, b]) => [path.relative(root, p), digest(b)]))}, null, 2) + '\n')}];
         }});

@@ -225,7 +225,7 @@ do
         local chapter, lines = chapters[stage], {}
         if not riskOnly and objective and objective.state == "search" then
             lines[#lines + 1] = "|cff70e6cc선택 수색: " .. chapter.name .. "|r · " .. Locate(objective)
-            lines[#lines + 1] = string.format("보스 등장 시 수색 종료 · 남은 %d초", math.ceil(SurvivorExpedition.SearchRemaining()))
+            lines[#lines + 1] = string.format("보스 등장 시 수색 종료 · |cffffcc00남은 %d초|r", math.ceil(SurvivorExpedition.SearchRemaining()))
             lines[#lines + 1] = chapter.action .. (chapter.seconds and string.format(" (%.1f/%.0f초)", math.min(objective.progress, chapter.seconds), chapter.seconds)
                 or chapter.mode ~= "courier" and (" (" .. (objective.index - 1) .. "/" .. #objective.points .. ")") or "")
         end

@@ -8,7 +8,7 @@ import fengari from 'fengari';
 import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo, mapInfo,
     parseUnits, serializeUnits, installPortraitUnits, portraitUnits, validatePortraitObjects, publishTransaction, editorBundle,
     parseObjectData, serializeObjectData, removeGoldObjectData, removeGoldStrings, removeGoldMisc,
-    prepareGoldRemoval, validateGoldRemoval, root, baseMapPath} from './build.mjs';
+    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = fengari;
 function suite(name, before, files, after) {
@@ -291,15 +291,30 @@ SurvivorCombat.Cleanup()
 hero,build,units=NewCombat("orbitblade")
 local alphaWrites=0
 BlzSetSpecialEffectAlpha=function(effect,value) effect.alpha=value;alphaWrites=alphaWrites+1 end
-SurvivorCombat.CastBlades();blade=actors[1];assert(blade.visual.alpha==140)
+BlzSetSpecialEffectColor=function(effect,r,g,b)effect.color={r,g,b}end
+SurvivorCombat.CastBlades();blade=actors[1];assert(blade.visual.alpha==255)
+assert(blade.visual.color[1]==235 and blade.visual.color[2]==245 and blade.visual.color[3]==255)
 SetLocal(SurvivorCombat.UpdateWeapons,"warningUntil",10)
-SurvivorCombat.UpdateWeapons(0.02);assert(blade.visual.alpha==70)
+SurvivorCombat.UpdateWeapons(0.02);assert(blade.visual.alpha==150)
 local writes=alphaWrites
 for i=1,100 do SurvivorCombat.UpdateWeapons(0.02) end
 assert(alphaWrites==writes)
-SurvivorCombat.CastBlades();assert(actors[#actors].visual.alpha==70)
+SurvivorCombat.CastBlades();assert(actors[#actors].visual.alpha==150)
 now=11;SurvivorCombat.UpdateWeapons(0.02)
-for _,a in ipairs(actors) do assert(a.visual.alpha==140) end
+for _,a in ipairs(actors) do assert(a.visual.alpha==255) end
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('frontslash');target=EnemyAt(units,50,0,false)
+SurvivorCombat.CastFrontSlash()
+for _,a in ipairs(actors)do
+    if a.identifier=='hsSlash'or a.identifier=='hsSlashHit'then assert(a.visual.alpha==255)end
+end
+SetLocal(SurvivorCombat.UpdateWeapons,'warningUntil',10);SurvivorCombat.UpdateWeapons(.02)
+for _,a in ipairs(actors)do
+    if a.identifier=='hsSlash'or a.identifier=='hsSlashHit'then assert(a.visual.alpha==150)end
+end
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('returnblade');EnemyAt(units,100,0,false);SurvivorCombat.CastExtra('returnblade')
+assert(actors[1].visual.alpha==140,'Unrelated blade weapons keep their existing visibility policy')
 SurvivorCombat.Cleanup()
 `);
 
@@ -1664,6 +1679,7 @@ function ALICE_ExcludeTypes(...)for _,id in ipairs({...})do excludedPortraitType
 for _,name in ipairs({"FRAMEPOINT_CENTER","FRAMEPOINT_TOP","FRAMEPOINT_BOTTOM","FRAMEPOINT_TOPLEFT","FRAMEPOINT_BOTTOMLEFT",
     "FRAMEPOINT_TOPRIGHT","FRAMEPOINT_RIGHT","FRAMEPOINT_BOTTOMRIGHT",
     "TEXT_JUSTIFY_TOP","TEXT_JUSTIFY_LEFT","TEXT_JUSTIFY_MIDDLE","TEXT_JUSTIFY_CENTER","FRAMEEVENT_CONTROL_CLICK",
+    "FRAMEEVENT_MOUSE_ENTER","FRAMEEVENT_MOUSE_LEAVE","FRAMEEVENT_MOUSE_DOWN","FRAMEEVENT_MOUSE_UP",
     "ORIGIN_FRAME_GAME_UI","ORIGIN_FRAME_MINIMAP","ORIGIN_FRAME_MINIMAP_BUTTON","ORIGIN_FRAME_HERO_BAR",
     "ORIGIN_FRAME_UNIT_PANEL_BUFF_BAR","ORIGIN_FRAME_PORTRAIT_HP_TEXT","ORIGIN_FRAME_PORTRAIT_MANA_TEXT",
     "ORIGIN_FRAME_PORTRAIT","ORIGIN_FRAME_WORLD_FRAME","ORIGIN_FRAME_TOOLTIP","ORIGIN_FRAME_UBERTOOLTIP",
@@ -1758,6 +1774,7 @@ function BlzFrameSetPoint(f,p,target,tp,x,y)RequireFrameObject(f,'BlzFrameSetPoi
 function BlzFrameClearAllPoints(f)RequireFrameObject(f,'BlzFrameClearAllPoints');f.anchor,f.absolute=nil,nil end
 function BlzFrameSetAllPoints(f,target)RequireFrameObject(f,'BlzFrameSetAllPoints');f.allPoints=target end
 function BlzFrameSetVertexColor(f,color)RequireFrameObject(f,'BlzFrameSetVertexColor');f.color=color end
+function BlzFrameSetTextColor(f,color)RequireFrameObject(f,'BlzFrameSetTextColor');f.textColor=color end
 function BlzConvertColor(a,r,g,b)return {a=a,r=r,g=g,b=b}end
 function BlzLoadTOCFile()return true end
 function BlzTriggerRegisterFrameEvent(t,f,e) t.frame,t.event=f,e end
@@ -2356,6 +2373,47 @@ SurvivorUI.ShowConversation('retry',pages,Done,nil,function()closes=closes+1 end
 SurvivorUI.AdvanceNarrative();assert(closes==2 and completed==2 and #unsafeFrameCalls==0)
 `);
 
+suite('gameplay return fades reveal restored views once and cancel on replacement, failure and cleanup', presentationMocks,
+    [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
+SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
+state='STAGE_CLEAR';local completed=0;local hero=CreateUnit(0,'Uany',0,0,0)
+local function Done()completed=completed+1;SurvivorUI.ShowCombatPreparation(1,function()end)end
+SurvivorStory.ShowBriefing(hero,Done);AdvanceVisualTime(.6)
+SurvivorUI.SkipConversation();SurvivorUI.SkipConversation();SurvivorUI.AdvanceNarrative()
+local cover=frames.HSStoryReturnShade
+assert(completed==1 and hero.visible and selectedUnit==hero and cover.visible and cover.alpha==255)
+assert(SurvivorUI.IsCombatPreparationVisible()and LiveTimers(.02)==1 and now==0,
+    'Only presentation time advances; preparation still owns the gameplay pause')
+local first=Local(SurvivorUI.SkipConversation,'returnTimer')
+AdvanceVisualTime(.3);assert(cover.visible and cover.alpha>0 and cover.alpha<255)
+AdvanceVisualTime(.35);assert(not cover.visible and LiveTimers(.02)==0 and first.destroyed and completed==1)
+SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
+local replaced=Local(SurvivorUI.SkipConversation,'returnTimer')
+SurvivorUI.ShowNarrative('replacement','new text',function()end)
+assert(replaced.destroyed and not cover.visible)
+replaced.callback();assert(not cover.visible and frames.HeroSurvivorStageIntro.alpha==255)
+SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
+local reset=Local(SurvivorUI.SkipConversation,'returnTimer')
+SurvivorUI.HidePanel();SurvivorStory.Reset();reset.callback()
+assert(reset.destroyed and not cover.visible and LiveTimers(.02)==0)
+SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
+local failed=Local(SurvivorUI.SkipConversation,'returnTimer');local alpha=BlzFrameSetAlpha
+function BlzFrameSetAlpha(frame,value)
+    if frame==cover and value<255 then error('return fade failure')end
+    return alpha(frame,value)
+end
+local ok,message=pcall(AdvanceVisualTime,.02)
+assert(not ok and message:find('return fade failure')and failed.destroyed and not cover.visible)
+BlzFrameSetAlpha=alpha;failed.callback();assert(LiveTimers(.02)==0)
+SurvivorUI.ShowConversation('next scene',{{speaker='안야',text='one'}},function()
+    SurvivorUI.ShowNarrative('next','preserved',function()end)
+end)
+SurvivorUI.AdvanceNarrative()
+assert(not cover.visible and LiveTimers(.02)==0 and frames.HeroSurvivorStageText.text=='preserved',
+    'A completion callback opening another narrative keeps that narrative visible')
+SurvivorUI.HidePanel()
+`);
+
 suite('intro reveal timers cancel on skip, replacement, error and restart and stale callbacks stay inert', presentationMocks,
     [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
@@ -2697,6 +2755,62 @@ end
 SurvivorStory.Reset();SurvivorUI.HidePanel()
 `);
 
+suite('choice hover stays local, uses bounded animation and cannot consume rerolls or exclusions', presentationMocks,
+    [config,augments,'src/30_gameplay/SurvivorUI.lua'], String.raw`
+local selected,rerolled,excluded=0,0,0
+SurvivorUI.Init(function()selected=selected+1 end,function()end,function()rerolled=rerolled+1 end,
+    function()end,function()excluded=excluded+1 end)
+state='CHOOSING'
+local build=SurvivorAugments.NewBuild('firebolt','power')
+local offers={'firebolt','frontslash','haste'}
+local function Show(rerolls)SurvivorUI.ShowChoices(offers,2,build,0,rerolls)end
+local function Event(frame,event)
+    for _,trigger in ipairs(triggers)do
+        if trigger.frame==frame and trigger.event==event then trigger.action();return end
+    end
+    error('Missing mouse binding')
+end
+Show(3)
+local reroll,exclude=frames.HeroSurvivorReroll2,frames.HeroSurvivorExclude2
+local gold,orange,tip=frames.HSRerollHover2,frames.HSExcludeHover2,frames.HSChoiceActionTooltip
+local timerCount=#timers;local width,height=reroll.width,reroll.height
+Event(reroll,FRAMEEVENT_MOUSE_ENTER)
+assert(tip.visible and frames.HSChoiceActionTooltipText.text:find('리롤 기회'))
+AdvanceVisualTime(.04);assert(gold.alpha>0 and gold.alpha<230)
+AdvanceVisualTime(.1);assert(gold.alpha==230 and LiveTimers(.02)==0)
+assert(reroll.width==width and reroll.height==height and frames.HeroSurvivorRerollText2.textColor.g==220)
+Event(reroll,FRAMEEVENT_MOUSE_DOWN);assert(frames.QuestButtonBaseTemplate202.color.r==165)
+Event(exclude,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+assert(frames.QuestButtonBaseTemplate202.color.r==255 and gold.alpha==0 and orange.alpha==230,
+    'Moving to another button clears pressed styling even without the old Mouse Up')
+assert(frames.HeroSurvivorExcludeText2.textColor.g==165 and frames.HSChoiceActionTooltipText.text:find('다시 등장하지'))
+Event(reroll,FRAMEEVENT_MOUSE_LEAVE);assert(tip.visible,'A late leave from the old button preserves the current tooltip')
+Event(exclude,FRAMEEVENT_MOUSE_LEAVE);AdvanceVisualTime(.14)
+assert(orange.alpha==0 and not tip.visible and LiveTimers(.02)==0)
+assert(selected==0 and rerolled==0 and excluded==0 and build.excludesRemaining==SurvivorConfig.excludesPerRun)
+Event(frames.HeroSurvivorExclude1,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+assert(frames.HSExcludeHover1.alpha==0 and not tip.visible,'Owned upgrades cannot be highlighted or excluded')
+Event(exclude,FRAMEEVENT_MOUSE_ENTER);Event(exclude,FRAMEEVENT_MOUSE_DOWN)
+Event(exclude,FRAMEEVENT_MOUSE_UP);assert(frames.QuestButtonBaseTemplate402.color.r==255)
+ClickFrame(exclude);assert(excluded==1 and orange.alpha==0 and not tip.visible)
+Event(reroll,FRAMEEVENT_MOUSE_ENTER);Show(0);AdvanceVisualTime(.14)
+assert(gold.alpha==0 and not tip.visible and not reroll.enabled)
+Event(reroll,FRAMEEVENT_MOUSE_ENTER);ClickFrame(reroll);AdvanceVisualTime(.14)
+assert(gold.alpha==0 and not tip.visible and rerolled==0,'A disabled reroll cannot consume a charge')
+Show(3);GetLocalPlayer=function()return 12 end
+Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+assert(gold.alpha==0 and not tip.visible and LiveTimers(.02)==0,'Mouse feedback is local to the playable client')
+GetLocalPlayer=function()return 0 end
+Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.04)
+local feedbackTimer=Local(SurvivorUI.HidePanel,'actionTimer')
+SurvivorUI.HidePanel();feedbackTimer.callback()
+assert(gold.alpha==0 and orange.alpha==0 and not tip.visible and LiveTimers(.02)==0)
+Show(3);Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+ClickFrame(frames.HeroSurvivorCard2)
+assert(selected==1 and gold.alpha==0 and not tip.visible and #timers==timerCount,
+    'Selections and repeated hovers reuse the map-lifetime timer and clear all feedback')
+`);
+
 suite('dialogue and notification content stays inside framed panels across layout switches', presentationMocks,
     [config, 'src/30_gameplay/SurvivorStory.lua', 'src/30_gameplay/SurvivorUI.lua'], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
@@ -2708,6 +2822,7 @@ local function Inside(text,panel)
     assert(-text.anchor.y>=0.009 and -text.anchor.y+text.height<=panel.height-0.009, 'Vertical text padding')
 end
 for _,pair in ipairs({{'HSSpeech','CustomTooltipBackgroundTemplate710'},{'HSNotice','CustomTooltipBackgroundTemplate711'},
+    {'HSExpedition','CustomTooltipBackgroundTemplate715'},
     {'HeroSurvivorCaption','CustomTooltipBackgroundTemplate712'}})do
     local panel,skin=frames[pair[1]],frames[pair[2]]
     assert(panel.kind=='FRAME' and skin.parent==panel and skin.allPoints==panel)
@@ -3012,11 +3127,11 @@ state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);local completed
 SurvivorStory.ShowInterlude(1,hero,function()completed=completed+1 end)
 AdvanceVisualTime(.6);SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.6)
 assert(completed==0 and #soundHandles<=2 and now==0)
-SurvivorUI.SkipConversation();assert(completed==1 and hero.visible and LiveTimers()==1)
+SurvivorUI.SkipConversation();AdvanceVisualTime(.65);assert(completed==1 and hero.visible and LiveTimers()==1)
 local count=#soundHandles;GetLocalPlayer=function()return 12 end
 SurvivorStory.ShowInterlude(2,hero,function()completed=completed+1 end);AdvanceVisualTime(.6)
 assert(#soundHandles==count,'Optional sounds never allocate on a nonlocal client')
-SurvivorUI.SkipConversation();assert(completed==2 and hero.visible and LiveTimers()==1)
+SurvivorUI.SkipConversation();AdvanceVisualTime(.65);assert(completed==2 and hero.visible and LiveTimers()==1)
 `);
 }
 
@@ -3101,21 +3216,23 @@ SafeLeftLane()
 riskOffer={name='봉인',remaining=40,seconds=30,text='risk terms'};SurvivorUI.UpdateSpeech()
 local accept=Local(SurvivorUI.UpdateExpedition,'riskAccept')
 local function SeparatedRiskControls()
-    local text=frames.HeroSurvivorExpedition
-    assert(text.y<=.515 and text.y>=.36 and text.height>=.041 and text.height<=.128)
-    assert(text.y-text.height-accept.y>=.009-.00001,'Risk button must sit below every line of the terms with visible spacing')
+    local text,root=frames.HeroSurvivorExpedition,frames.HSExpedition
+    assert(root.y<=.515 and root.y>=.36 and text.height>=.041 and text.height<=.128)
+    assert(root.y-root.height-accept.y>=.009-.00001,'Risk button must sit below its panel with visible spacing')
+    assert(root.visible and text.parent==root and text.anchor.y==-0.014 and root.width==frames.HSNotice.width,
+        'Search and region notices share a bordered panel width and internal padding')
 end
 riskVisible=true;SurvivorUI.UpdateSpeech()
 assert(accept.visible and frames.HeroSurvivorExpedition.visible);SeparatedRiskControls()
-assert(frames.HSNotice.y-frames.HSNotice.height-frames.HeroSurvivorExpedition.y>=.012-.00001,'Urgent notices leave room above risk terms')
+assert(frames.HSNotice.y-frames.HSNotice.height-frames.HSExpedition.y>=.012-.00001,'Urgent notices leave room above risk terms')
 SurvivorUI.ClearSpeech();SurvivorUI.UpdateSpeech();SeparatedRiskControls()
 SurvivorUI.Notify('일반 알림');SurvivorUI.UpdateSpeech();SafeLeftLane()
-assert(frames.HSNotice.y-frames.HSNotice.height-frames.HeroSurvivorExpedition.y>=.012-.00001,'Ordinary notices leave room above risk terms')
+assert(frames.HSNotice.y-frames.HSNotice.height-frames.HSExpedition.y>=.012-.00001,'Ordinary notices leave room above risk terms')
 assert(frames.HSSpeech.x-frames.HSSpeech.width/2-(accept.x+accept.width/2)>=.011-.00001,'Risk input cannot overlap combat subtitles')
 assert(accept.text=='조사 수락','Offer terms and explicit action use the same investigation label')
 ClickFrame(accept);assert(riskAccepts==1)
 riskOffer=nil;SurvivorUI.UpdateSpeech();assert(not accept.visible)
-emptyStatus=true;SurvivorUI.UpdateSpeech();assert(not frames.HeroSurvivorExpedition.visible and not accept.visible,
+emptyStatus=true;SurvivorUI.UpdateSpeech();assert(not frames.HSExpedition.visible and not frames.HeroSurvivorExpedition.visible and not accept.visible,
     'A completed objective leaves no persistent blank or duplicate status')
 emptyStatus=false
 state='INVENTORY';SurvivorUI.UpdateSpeech();assert(not frames.HSEssentialHUD.visible and not accept.visible)
@@ -3731,8 +3848,8 @@ assert(not frames.HeroSurvivorStageIntro.visible and not frames.HeroSurvivorShad
     and frames.NativeWorldFrame.visible and frames.NativeWorldBars.visible and frames.NativePortrait.visible
     and frames.CommandBarFrame.visible and frames.SimpleInventoryBar.visible,
     'Preparation restores the normal arena and hero HUD after a narrative screen')
-assert(root.absolute==FRAMEPOINT_TOPRIGHT and root.x-root.width>.4 and root.x<.8
-    and root.y-root.height>.16 and root.y<=.6,'The preparation panel leaves the central hero and lower console clear')
+assert(root.absolute==FRAMEPOINT_CENTER and root.x==.4 and root.y==.34 and root.height<.29
+    and root.y-root.height/2>.16,'The compact preparation panel is centered above the lower console')
 assert(start.kind=='GLUETEXTBUTTON'and start~=frames.ScriptDialogButton700 and start~=frames.ScriptDialogButton701
     and start.anchor.target==root and start.anchor.y-start.height>=-root.height)
 assert(frames.HSCombatPreparationFooter.text==''and not frames.HSCombatPreparationRecord
@@ -4567,6 +4684,34 @@ console.log(`PASS Lua syntax (${count} sources), repeated bundle replacement, na
     console.log('PASS economic asset preparation is read-only and publication rejects returned prices or sale text');
 }
 
+{
+    const asset = fs.readFileSync(path.join(root, 'assets/war3mapMisc.txt'));
+    const values = asset.toString('utf8').match(/^NeedHeroXP=([^\r\n]+)/m)[1].split(',').map(Number);
+    assert.equal(values.length, 69);
+    assert.deepEqual(values.slice(0, 4), [120, 280, 480, 720], 'Opening levels retain their existing kill requirements');
+    for (let i = 1; i < values.length; i++) {
+        assert(values[i] > values[i - 1]);
+        if (i > 1) assert(values[i] - values[i - 1] > values[i - 1] - values[i - 2], 'Each later level costs more XP');
+    }
+    assert.equal(values[18], 28320); assert.equal(values[38], 135120); assert.equal(values[68], 445320);
+    assert.equal(1 + values.filter(xp => xp <= 7950).length, 11, 'Old level-20 XP must no longer permit early multi-weapon completion');
+    assert.equal(1 + values.filter(xp => xp <= 12000).length, 14, 'A strong first-stage kill count still leaves room for later growth');
+    const source = map.read('war3mapMisc.txt');
+    assert.deepEqual(installExperienceCurve(source, asset), source, 'Saved map must use the authoritative XP table');
+    const old = Buffer.from(source.toString('utf8').replace(/^NeedHeroXP=[^\r\n]+/m,
+        'NeedHeroXP=' + Array.from({length: 69}, (_, i) => (i + 1) * 120).join(',')));
+    const upgraded = installExperienceCurve(old, asset);
+    const withoutCurve = bytes => bytes.toString('utf8').replace(/^NeedHeroXP=[^\r\n]+/m, 'NeedHeroXP=');
+    assert.equal(withoutCurve(upgraded), withoutCurve(old), 'Only the XP table may change');
+    assert.deepEqual(installExperienceCurve(upgraded, asset), upgraded);
+    for (const invalid of [asset.toString('utf8').replace('120,280', '120,120'),
+        asset.toString('utf8').replace('120,280', '120,1.5'),
+        asset.toString('utf8').replace('MaxHeroLevel=70', 'MaxHeroLevel=69'),
+        asset.toString('utf8') + '\nNeedHeroXP=120\n'])
+        assert.throws(() => installExperienceCurve(source, Buffer.from(invalid)));
+    console.log('PASS experience curve opening pace, all 69 thresholds, saved map, single-field migration and malformed-table guards');
+}
+
 // Prepare the exact resized archive in memory: these checks never publish a map.
 const baseBytes = fs.readFileSync(baseMapPath);
 const baseMap = openMap(baseBytes), baseTerrain = terrainInfo(baseMap.read('war3map.w3e'));
@@ -4675,10 +4820,10 @@ const unitAssetSnapshots = new Map();
 for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
     const before = map.read(name), assetBefore = fs.readFileSync(path.join(root, 'assets', name));
     unitAssetSnapshots.set(name, assetBefore);
-    const output = installPortraitUnits(before, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true}), data = parseUnits(output);
+    const output = installPortraitUnits(before, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true}), data = parseUnits(output);
     assert.deepEqual(serializeUnits(parseUnits(before)), before, 'Existing unit fields must round-trip byte for byte');
     assert.deepEqual(installPortraitUnits(output, skin), output, 'Portrait installation must be idempotent');
-    assert.deepEqual(installPortraitUnits(assetBefore, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true}), output,
+    assert.deepEqual(installPortraitUnits(assetBefore, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true}), output,
         'Asset source and archive receive identical portrait definitions and migrations');
     for (const unit of portraitUnits) {
         const row = data.tables[1].find(row => row.newId === unit.id);
@@ -4695,7 +4840,7 @@ for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) 
     const conflicting = parseUnits(output), row = conflicting.tables[1].find(row => row.newId === 'hsPP');
     const field = row.fields.find(field => field.id === (skin ? 'umdl' : 'ucol'));
     delete row.raw; delete field.raw; field.value = skin ? 'FallbackWrongSpeaker.mdl' : 100;
-    assert.throws(() => installPortraitUnits(serializeUnits(conflicting), skin, {migrateLegacyAnya: true, migrateLegacyArmor: true}), /conflicting fields/,
+    assert.throws(() => installPortraitUnits(serializeUnits(conflicting), skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true}), /conflicting fields/,
         'Existing conflicting proxy data must not be silently overwritten');
     unitEntries.set(name, output);
 }
@@ -4760,6 +4905,35 @@ for (const [name, bytes] of unitAssetSnapshots) assert.deepEqual(fs.readFileSync
     'Portrait dry preparation must not write its asset source');
 console.log('PASS native portrait unit definitions, real speaker models, byte-preserved rows, assets, idempotence and missing-object guard');
 console.log('PASS explicit Anya model migration, single-field changes, unrelated records, legacy guard, MPQ readback and conflict refusal');
+
+{
+    for (const skin of [false, true]) {
+        const beforeData = parseUnits(unitEntries.get(skin ? 'war3mapSkin.w3u' : 'war3map.w3u'));
+        for (const id of ['hsPA', 'hsPP']) {
+            const row = beforeData.tables[1].find(row => row.newId === id);
+            delete row.raw;
+            row.fields = row.fields.filter(field => field.id !== 'upgr');
+            if (id === 'hsPP' || skin) row.fields.push({id: 'upgr', type: 3, value: 'Rguv', endId: id});
+        }
+        const before = serializeUnits(beforeData);
+        assert.throws(() => installPortraitUnits(before, skin), /--portrait-objects/);
+        const after = installPortraitUnits(before, skin, {migrateLegacyUpgrades: true});
+        const result = parseUnits(after);
+        for (const [table, rows] of parseUnits(before).tables.entries()) for (const row of rows) {
+            const next = result.tables[table].find(value => value.oldId === row.oldId && value.newId === row.newId);
+            if (!['hsPA', 'hsPP'].includes(row.newId)) assert.deepEqual(next.raw, row.raw);
+            else {
+                const upgrades = next.fields.filter(field => field.id === 'upgr');
+                assert.equal(upgrades.length, 1); assert.equal(upgrades[0].type, 3); assert.equal(upgrades[0].value, '');
+                assert.equal(next.fields.length, row.fields.length + (row.fields.some(field => field.id === 'upgr') ? 0 : 1));
+                for (const field of row.fields.filter(field => field.id !== 'upgr'))
+                    assert.deepEqual(next.fields.find(value => value.id === field.id).raw, field.raw);
+            }
+        }
+        assert.deepEqual(installPortraitUnits(after, skin), after);
+    }
+    console.log('PASS portrait inherited/explicit Rguv removal, skin overrides, unrelated fields, gameplay units and idempotence');
+}
 
 {
     const legacy = parseUnits(unitEntries.get('war3map.w3u'));

@@ -171,6 +171,11 @@ do
         -- Keep coordinates intact until ALICE_Kill completes actor destruction.
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
+    local function FriendlyEffectAlpha(object, warning)
+        -- Solid metal needs more opacity than luminous spell particles at night.
+        if object.readableBlade then return warning and 150 or 255 end
+        return warning and 70 or 140
+    end
     local function CreateObject(object, model, scale)
         object.visual = AddSpecialEffect(model, object.x, object.y)
         assert(object.visual ~= nil, "Could not create combat effect")
@@ -179,12 +184,15 @@ do
         BlzSetSpecialEffectScale(object.visual, scale)
         BlzSetSpecialEffectZ(object.visual, object.z)
         object.friendly = not object.identifier:find("Enemy") and not object.identifier:find("Boss")
+        object.readableBlade = object.identifier == "hsBlade" or object.identifier == "hsSlash"
+            or object.identifier == "hsSlashHit"
         if object.friendly then
-            object.alpha = RunSession.GetElapsed() < warningUntil and 70 or 140
+            object.alpha = FriendlyEffectAlpha(object, RunSession.GetElapsed() < warningUntil)
             BlzSetSpecialEffectAlpha(object.visual, object.alpha)
         end
-        if object.identifier == "hsBlade" or object.identifier == "hsReturnBlade"
-            or object.identifier == "hsSlash" or object.identifier == "hsSlashHit" then
+        if object.readableBlade then
+            BlzSetSpecialEffectColor(object.visual, 235, 245, 255)
+        elseif object.identifier == "hsReturnBlade" then
             BlzSetSpecialEffectColor(object.visual, 190, 165, 225)
         end
         ALICE_Create(object)
@@ -472,9 +480,12 @@ do
         if friendlyAlpha ~= alpha then
             friendlyAlpha = alpha
             for object in pairs(objects) do
-                if object.friendly and object.visual and object.alpha ~= alpha then
-                    object.alpha = alpha
-                    BlzSetSpecialEffectAlpha(object.visual, alpha)
+                if object.friendly and object.visual then
+                    local targetAlpha = FriendlyEffectAlpha(object, now < warningUntil)
+                    if object.alpha ~= targetAlpha then
+                        object.alpha = targetAlpha
+                        BlzSetSpecialEffectAlpha(object.visual, targetAlpha)
+                    end
                 end
             end
         end
