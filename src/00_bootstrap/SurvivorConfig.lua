@@ -26,7 +26,8 @@ SurvivorConfig = {
     -- Native automatic kill XP is suspended; only AwardXP grants rewards.
     enemyExperience = 40, enemyExperienceByType = {},
     -- assets/war3mapMisc.txt sets native max level 70 and cumulative XP thresholds.
-    -- First levels take 3, 4, 5... normal kills; no separate Lua XP counter.
+    -- Levels 2..5 keep the opening pace; each later step costs 200 XP more.
+    -- The complete native table, including the late curve, lives in that asset.
     eliteInterval = 45.0, eliteLifeMultiplier = 4, eliteDamageMultiplier = 2,
     eliteExperience = 120,
     rangedEnemy = {life = 85, damage = 12,

@@ -11,7 +11,9 @@ do
     local rerollCounter, rerollPips = nil, {}
     local excludeCallback
     local gearCallback
-    local expeditionText
+    local expeditionRoot, expeditionText
+    local actionFeedback, actionTimer, actionTimerRunning, actionTooltip, actionTooltipText = {}, nil, false, nil, nil
+    local ResetActionFeedback
     local speechRoot, speechName, speechText, noticeRoot, noticeText
     local speechQueue, speech, notice, speechClock, speechVisible = {}, nil, nil, 0, false
     local deferredNotice
@@ -76,6 +78,7 @@ do
         speechClock = RunSession.GetElapsed()
         if speechRoot then SetVisible(speechRoot, false) end
         if noticeRoot then SetVisible(noticeRoot, false) end
+        if expeditionRoot then SetVisible(expeditionRoot, false); SetVisible(expeditionText, false) end
     end
     function SurvivorUI.Say(speaker, text)
         if SurvivorStory then SurvivorStory.Remember(speaker, text) end
@@ -222,7 +225,8 @@ do
     end
     function SurvivorUI.UpdateExpedition()
         if not expeditionText then return end
-        local visible = RunSession.IsRunning() and not nativeInventoryVisible and not SurvivorUI.IsNarrativeVisible()
+        local visible = RunSession.IsRunning() and not choosing and not restVisible
+            and not nativeInventoryVisible and not SurvivorUI.IsNarrativeVisible()
             and not (SurvivorLootUI and SurvivorLootUI.IsExpanded())
             and (not speechVisible or SurvivorExpedition.HasRiskNotice())
         local text = visible and SurvivorExpedition.Status(speechVisible) or ""
@@ -234,18 +238,32 @@ do
             cached.wrapHeight = math.min(0.128, math.max(0.041, WrappedLines(text) * 0.0125 + 0.006))
         end
         local height = cached.wrapHeight
-        SetAbsPoint(expeditionText, FRAMEPOINT_TOPLEFT, 0.025, top)
-        SetSize(expeditionText, 0.255, height)
+        SetAbsPoint(expeditionRoot, FRAMEPOINT_TOPLEFT, 0.025, top)
+        SetSize(expeditionRoot, 0.29, height + 0.028)
+        SetSize(expeditionText, 0.254, height)
+        SetVisible(expeditionRoot, visible)
         SetVisible(expeditionText, visible)
         if visible then SetText(expeditionText, text) end
         if riskAccept then
-            SetAbsPoint(riskAccept, FRAMEPOINT_TOP, 0.072, top - height - 0.010)
+            SetAbsPoint(riskAccept, FRAMEPOINT_TOP, 0.072, top - height - 0.028 - 0.010)
             SetVisible(riskAccept, visible and not choosing and not SurvivorUI.IsNarrativeVisible()
                 and SurvivorExpedition.RiskOffer() ~= nil)
         end
     end
     local introRoot, introTitle, introText, introContent, introSkip, introReady, caption, introFooter, storyPosition
     local revealTimer, revealGeneration = nil, 0
+    local returnShade, returnTimer, returnGeneration = nil, nil, 0
+    local function CancelReturnReveal()
+        returnGeneration = returnGeneration + 1
+        local timer = returnTimer
+        returnTimer = nil
+        if returnShade then BlzFrameSetVisible(returnShade, false) end
+        if timer then
+            local paused, pauseError = pcall(PauseTimer, timer)
+            local destroyed, destroyError = pcall(DestroyTimer, timer)
+            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
+        end
+    end
     local function DialogueAmbience(enabled)
         if SurvivorStage and SurvivorStage.SetDialogueAmbience then
             pcall(SurvivorStage.SetDialogueAmbience, enabled, "ui")
@@ -296,6 +314,7 @@ do
             if not ok then failures[#failures + 1] = tostring(message) end
         end
         Attempt(CancelReveal)
+        Attempt(CancelReturnReveal)
         Attempt(StopPreparation)
         -- Return selection to the gameplay hero while the native HUD is still hidden.
         -- A portrait proxy must not be selected when the gameplay containers reopen.
@@ -333,9 +352,31 @@ do
         end)
         -- This synchronized 0.45-second timer only reveals the scene; it never advances a page.
     end
+    local function RevealGameplay()
+        CancelReturnReveal()
+        BlzFrameSetAlpha(returnShade, 255)
+        BlzFrameSetVisible(returnShade, true)
+        local timer, generation, step = CreateTimer(), returnGeneration, 0
+        returnTimer = timer
+        TimerStart(timer, 0.02, true, function()
+            if returnTimer ~= timer or generation ~= returnGeneration then return end
+            local ok, message = pcall(function()
+                step = step + 1
+                local progress = math.min(1, step / 30)
+                local eased = progress * progress * (3 - 2 * progress)
+                BlzFrameSetAlpha(returnShade, math.floor(255 * (1 - eased)))
+                if step >= 30 then CancelReturnReveal() end
+            end)
+            if not ok then
+                local cleaned, failure = pcall(StopIntro)
+                if not cleaned then message = tostring(message) .. "\nUI cleanup: " .. tostring(failure) end
+                RunSession.Fail(message)
+            end
+        end)
+    end
     local resultTabs, resultPages = {}, {}
     -- Leave room for the tall Reforged console decorations below the choice controls.
-    local cardTop, cardHeight = -0.043, 0.24
+    local cardTop, cardHeight = -0.045, 0.29
 
     function SurvivorUI.ClearDamageBoard()
         RestoreDamageBoardMinimize()
@@ -400,10 +441,14 @@ do
     end
     local function CompleteIntro()
         local callback = introReady
+        local returning = conversation ~= nil
         StopIntro() -- Consume before callbacks, including a second click in the same tick.
         DisplayDamageBoard(true)
         if callback then callback() end
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
+        -- Cleanup, camera restoration and the next panel happen in this same tick,
+        -- beneath an opaque cover. Reveal the restored view without delaying gameplay callbacks.
+        if returning and not introReady then RevealGameplay() end
     end
     function SurvivorUI.IsNarrativeVisible() return introReady ~= nil or preparationReady ~= nil end
     function SurvivorUI.IsCombatPreparationVisible() return preparationReady ~= nil end
@@ -633,6 +678,116 @@ do
         BlzFrameSetEnable(skin, false)
         return frame
     end
+    local function ActionAvailable(control)
+        return choosing and control.card.available and control.card[control.key]
+    end
+    local function RenderActionFeedback(control)
+        local amount = control.pressed and 1 or control.amount
+        local color = control.color
+        BlzFrameSetAlpha(control.glow, math.floor(amount * (control.pressed and 110 or 230)))
+        BlzFrameSetVertexColor(control.background, BlzConvertColor(255,
+            control.pressed and 165 or 255, control.pressed and 165 or 255, control.pressed and 165 or 255))
+        BlzFrameSetTextColor(control.label, BlzConvertColor(255,
+            math.floor(255 + (color[1] - 255) * amount),
+            math.floor(255 + (color[2] - 255) * amount),
+            math.floor(255 + (color[3] - 255) * amount)))
+    end
+    ResetActionFeedback = function()
+        -- The handle is allocated for every client in Init; mouse events only
+        -- animate local frames and never allocate timers or touch gameplay state.
+        if actionTimer then PauseTimer(actionTimer) end
+        actionTimerRunning = false
+        for _, control in ipairs(actionFeedback) do
+            control.hovered, control.pressed, control.amount = false, false, 0
+            RenderActionFeedback(control)
+        end
+        if actionTooltip then BlzFrameSetVisible(actionTooltip, false) end
+    end
+    local function AnimateActionFeedback()
+        local moving = false
+        for _, control in ipairs(actionFeedback) do
+            local target = control.hovered and ActionAvailable(control) and 1 or 0
+            if not ActionAvailable(control) then control.hovered, control.pressed = false, false end
+            if control.amount ~= target then
+                control.amount = target > control.amount and math.min(target, control.amount + 0.2)
+                    or math.max(target, control.amount - 0.2)
+                RenderActionFeedback(control)
+            end
+            moving = moving or control.amount ~= target
+        end
+        if not moving then PauseTimer(actionTimer); actionTimerRunning = false end
+    end
+    local function StartActionAnimation()
+        if actionTimerRunning then return end
+        actionTimerRunning = true
+        TimerStart(actionTimer, 0.02, true, function()
+            local ok, message = pcall(AnimateActionFeedback)
+            if not ok then
+                pcall(ResetActionFeedback)
+                print("[HeroSurvivor] Button feedback: " .. tostring(message))
+            end
+        end)
+    end
+    local function BindActionFeedback(card, key, button, background, label, name, color, tooltip)
+        local glow = BlzCreateFrameByType("FRAME", name, button, "", 0)
+        BlzFrameSetAllPoints(glow, button)
+        BlzFrameSetLevel(glow, 1)
+        BlzFrameSetEnable(glow, false)
+        BlzFrameSetAlpha(glow, 0)
+        -- Existing UI textures are solid swatches, so draw a hollow border from
+        -- four strips instead of placing a filled rectangle over the button.
+        local width = key == "rerollAvailable" and 0.108 or 0.09
+        for _, edge in ipairs({{"Top", FRAMEPOINT_TOPLEFT, 0.002, -0.002, width - 0.004, 0.0015},
+            {"Bottom", FRAMEPOINT_BOTTOMLEFT, 0.002, 0.002, width - 0.004, 0.0015},
+            {"Left", FRAMEPOINT_TOPLEFT, 0.002, -0.002, 0.0015, 0.026},
+            {"Right", FRAMEPOINT_TOPRIGHT, -0.002, -0.002, 0.0015, 0.026}}) do
+            local strip = BlzCreateFrameByType("BACKDROP", name .. edge[1], glow, "", 0)
+            BlzFrameSetPoint(strip, edge[2], glow, edge[2], edge[3], edge[4])
+            BlzFrameSetSize(strip, edge[5], edge[6])
+            BlzFrameSetTexture(strip, "HeroSurvivorUI\\Ready.tga", 0, true)
+            BlzFrameSetVertexColor(strip, BlzConvertColor(255, 255,
+                key == "excludeAvailable" and 190 or 255, key == "excludeAvailable" and 120 or 255))
+            BlzFrameSetEnable(strip, false)
+        end
+        BlzFrameSetLevel(label, 2)
+        local control = {card = card, key = key, button = button, background = background, label = label,
+            glow = glow, color = color, amount = 0, hovered = false, pressed = false}
+        actionFeedback[#actionFeedback + 1] = control
+        local function LocalEvent(event, action)
+            Bind(button, event, function()
+                if GetLocalPlayer() == Player(SurvivorConfig.playerId) then action() end
+            end)
+        end
+        LocalEvent(FRAMEEVENT_MOUSE_ENTER, function()
+            if not ActionAvailable(control) then return end
+            -- A direct move between siblings must not retain the old pressed state.
+            for _, other in ipairs(actionFeedback) do
+                local wasPressed = other.pressed
+                other.hovered, other.pressed = false, false
+                if wasPressed then RenderActionFeedback(other) end
+            end
+            control.hovered = true
+            BlzFrameClearAllPoints(actionTooltip)
+            BlzFrameSetPoint(actionTooltip, FRAMEPOINT_BOTTOM, button, FRAMEPOINT_TOP, 0, 0.008)
+            BlzFrameSetText(actionTooltipText, tooltip)
+            BlzFrameSetVisible(actionTooltip, true)
+            StartActionAnimation()
+        end)
+        LocalEvent(FRAMEEVENT_MOUSE_LEAVE, function()
+            local wasHovered = control.hovered
+            control.hovered, control.pressed = false, false
+            RenderActionFeedback(control)
+            if wasHovered then BlzFrameSetVisible(actionTooltip, false) end
+            StartActionAnimation()
+        end)
+        LocalEvent(FRAMEEVENT_MOUSE_DOWN, function()
+            if not ActionAvailable(control) then return end
+            control.pressed = true; RenderActionFeedback(control)
+        end)
+        LocalEvent(FRAMEEVENT_MOUSE_UP, function()
+            control.pressed = false; RenderActionFeedback(control)
+        end)
+    end
     local function RenderResultPage(index)
         if not resultPages[index] then return end
         if index == 5 and #journalChapters > 0 then
@@ -747,12 +902,15 @@ do
         -- The opaque backdrop covers the world and its overlays. Leave renderer-owned
         -- origin frames and undocumented child indices alone when opening a modal UI.
         AcquireCinematicFrames()
-        expeditionText = BlzCreateFrameByType("TEXT", "HeroSurvivorExpedition", parent, "", 0)
-        BlzFrameSetAbsPoint(expeditionText, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
-        BlzFrameSetSize(expeditionText, 0.255, 0.041)
+        expeditionRoot = FramedPanel(parent, "HSExpedition", 715, 0.29, 0.069)
+        BlzFrameSetAbsPoint(expeditionRoot, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
+        BlzFrameSetLevel(expeditionRoot, 15)
+        expeditionText = Text(expeditionRoot, "HeroSurvivorExpedition", 0.254, 0.041, 0, -0.014)
+        BlzFrameSetLevel(expeditionText, 3)
         BlzFrameSetTextAlignment(expeditionText, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
         BlzFrameSetEnable(expeditionText, false)
         BlzFrameSetVisible(expeditionText, false)
+        BlzFrameSetVisible(expeditionRoot, false)
         speechRoot = FramedPanel(parent, "HSSpeech", 710, 0.54, 0.084)
         BlzFrameSetAbsPoint(speechRoot, FRAMEPOINT_CENTER, 0.4, 0.235)
         BlzFrameSetSize(speechRoot, 0.54, 0.084)
@@ -813,8 +971,8 @@ do
         BlzFrameSetLevel(shade, 9)
         -- Transparent layout root: each choice has its own separate card background.
         panel = BlzCreateFrameByType("FRAME", "HeroSurvivorChoiceRoot", parent, "", 0)
-        BlzFrameSetAbsPoint(panel, FRAMEPOINT_CENTER, 0.4, 0.34)
-        BlzFrameSetSize(panel, 0.74, 0.46)
+        BlzFrameSetAbsPoint(panel, FRAMEPOINT_CENTER, 0.4, 0.35)
+        BlzFrameSetSize(panel, 0.74, 0.50)
         BlzFrameSetLevel(panel, 10)
         resultBackdrop = Backdrop(panel, "CustomTooltipBackgroundTemplate", 0, 0.60, 0.35)
         BlzFrameSetPoint(resultBackdrop, FRAMEPOINT_CENTER, panel, FRAMEPOINT_CENTER, 0, 0)
@@ -860,13 +1018,13 @@ do
         journalPosition = Text(resultBackdrop, "HSJournalPosition", 0.18, 0.022, 0, -0.253)
         BlzFrameSetLevel(journalPosition, 3)
         heading = Text(panel, "HeroSurvivorHeading", 0.68, 0.04, 0, -0.005)
-        note = Text(panel, "HeroSurvivorNote", 0.70, 0.016, 0, -0.355)
-        rerollCounter = Text(panel, "HeroSurvivorRerollCount", 0.26, 0.021, -0.065, -0.328)
+        note = Text(panel, "HeroSurvivorNote", 0.70, 0.016, 0, -0.405)
+        rerollCounter = Text(panel, "HeroSurvivorRerollCount", 0.26, 0.021, -0.065, -0.378)
         BlzFrameSetLevel(rerollCounter, 5)
         for i = 1, SurvivorConfig.rerollCapacity do
             local pip = BlzCreateFrameByType("BACKDROP", "HeroSurvivorRerollPip" .. i, panel, "", 0)
             BlzFrameSetSize(pip, 0.011, 0.011)
-            BlzFrameSetPoint(pip, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, 0.08 + (i - 1) * 0.016, -0.332)
+            BlzFrameSetPoint(pip, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, 0.08 + (i - 1) * 0.016, -0.382)
             BlzFrameSetTexture(pip, "ReplaceableTextures\\CommandButtons\\BTNReincarnation.blp", 0, true)
             BlzFrameSetEnable(pip, false)
             BlzFrameSetLevel(pip, 5)
@@ -874,6 +1032,12 @@ do
         end
         BlzFrameSetLevel(heading, 5)
         BlzFrameSetLevel(note, 5)
+        actionTimer = CreateTimer()
+        actionTooltip = FramedPanel(parent, "HSChoiceActionTooltip", 716, 0.23, 0.060)
+        BlzFrameSetLevel(actionTooltip, 30)
+        actionTooltipText = Text(actionTooltip, "HSChoiceActionTooltipText", 0.194, 0.032, 0, -0.014)
+        BlzFrameSetLevel(actionTooltipText, 3)
+        BlzFrameSetVisible(actionTooltip, false)
         for i = 1, 3 do
             local slot = i
             local frame = Backdrop(panel, "EscMenuBackdrop", 100 + i, 0.212, cardHeight)
@@ -899,14 +1063,19 @@ do
             cards[i] = {frame = frame, button = button, icon = icon, rerollFrame = rerollFrame,
                 excludeFrame = excludeFrame, exclude = exclude,
                 excludeText = Text(exclude, "HeroSurvivorExcludeText" .. i, 0.082, 0.03, 0, 0),
-                title = Text(button, "HeroSurvivorTitle" .. i, 0.185, 0.023, 0, -0.083),
-                description = Text(button, "HeroSurvivorDescription" .. i, 0.178, 0.045, 0, -0.108),
-                preview = Text(button, "HeroSurvivorPreview" .. i, 0.18, 0.035, 0, -0.157),
-                hint = Text(button, "HeroSurvivorHint" .. i, 0.18, 0.015, 0, -0.197),
+                title = Text(button, "HeroSurvivorTitle" .. i, 0.185, 0.041, 0, -0.083),
+                description = Text(button, "HeroSurvivorDescription" .. i, 0.178, 0.075, 0, -0.132),
+                preview = Text(button, "HeroSurvivorPreview" .. i, 0.18, 0.042, 0, -0.214),
+                hint = Text(button, "HeroSurvivorHint" .. i, 0.18, 0.015, 0, -0.263),
                 reroll = reroll,
                 rerollText = Text(reroll, "HeroSurvivorRerollText" .. i, 0.10, 0.03, 0, 0)}
+            BindActionFeedback(cards[i], "rerollAvailable", reroll, rerollFrame, cards[i].rerollText,
+                "HSRerollHover" .. i, {255, 220, 105}, "|cffffdc69이 후보를 다시 추첨|r\n리롤 기회 1회를 사용합니다.")
+            BindActionFeedback(cards[i], "excludeAvailable", exclude, excludeFrame, cards[i].excludeText,
+                "HSExcludeHover" .. i, {255, 165, 75}, "|cffffa54b이번 판에서 제외|r\n다시 등장하지 않습니다.")
             Bind(button, FRAMEEVENT_CONTROL_CLICK, function()
                 if gearCallback and cards[slot].available then
+                    ResetActionFeedback()
                     local callback = gearCallback
                     gearCallback = nil
                     ReleaseFocus(button)
@@ -915,16 +1084,19 @@ do
                 end
                 if not choosing or not cards[slot].available then return end
                 choosing = false
+                ResetActionFeedback()
                 ReleaseFocus(button)
                 chooseCallback(slot)
             end)
             Bind(reroll, FRAMEEVENT_CONTROL_CLICK, function()
                 if not choosing or not cards[slot].rerollAvailable then return end
+                ResetActionFeedback()
                 ReleaseFocus(reroll)
                 rerollCallback(slot)
             end)
             Bind(exclude, FRAMEEVENT_CONTROL_CLICK, function()
                 if not choosing or not cards[slot].excludeAvailable then return end
+                ResetActionFeedback()
                 ReleaseFocus(exclude)
                 excludeCallback(slot)
             end)
@@ -959,6 +1131,13 @@ do
         BlzFrameSetTexture(introRoot, "HeroSurvivorUI\\Black.tga", 0, true)
         BlzFrameSetLevel(introRoot, 20)
         BlzFrameSetEnable(introRoot, false)
+        returnShade = BlzCreateFrameByType("BACKDROP", "HSStoryReturnShade", parent, "", 0)
+        BlzFrameSetAbsPoint(returnShade, FRAMEPOINT_CENTER, 0.4, 0.3)
+        BlzFrameSetSize(returnShade, 2.4, 0.6)
+        BlzFrameSetTexture(returnShade, "HeroSurvivorUI\\Black.tga", 0, true)
+        BlzFrameSetLevel(returnShade, 30)
+        BlzFrameSetEnable(returnShade, false)
+        BlzFrameSetVisible(returnShade, false)
         -- Text/buttons are siblings: fading the backdrop must not fade the dialogue.
         introContent = BlzCreateFrameByType("FRAME", "HeroSurvivorStoryContent", parent, "", 0)
         BlzFrameSetAbsPoint(introContent, FRAMEPOINT_CENTER, 0.4, 0.3)
@@ -992,21 +1171,20 @@ do
             SurvivorUI.SkipConversation()
         end)
         -- A distinct action frame prevents a queued narrative click from starting combat.
-        -- Keep the live hero and the arena visible to the left of this preparation panel.
-        preparationRoot = FramedPanel(parent, "HSCombatPreparation", 714, 0.35, 0.30)
-        BlzFrameSetAbsPoint(preparationRoot, FRAMEPOINT_TOPRIGHT, 0.78, 0.585)
+        preparationRoot = FramedPanel(parent, "HSCombatPreparation", 714, 0.35, 0.235)
+        BlzFrameSetAbsPoint(preparationRoot, FRAMEPOINT_CENTER, 0.4, 0.34)
         BlzFrameSetLevel(preparationRoot, 24)
         -- Only what the player has not just seen: goal, one zone tip and inventory warnings.
         preparationTitle = Text(preparationRoot, "HSCombatPreparationTitle", 0.31, 0.020, 0, -0.016)
-        preparationMission = Text(preparationRoot, "HSCombatPreparationMission", 0.31, 0.046, 0, -0.050)
-        preparationHint = Text(preparationRoot, "HSCombatPreparationHint", 0.31, 0.080, 0, -0.108)
-        preparationFooter = Text(preparationRoot, "HSCombatPreparationFooter", 0.31, 0.034, 0, -0.198)
+        preparationMission = Text(preparationRoot, "HSCombatPreparationMission", 0.31, 0.046, 0, -0.048)
+        preparationHint = Text(preparationRoot, "HSCombatPreparationHint", 0.31, 0.060, 0, -0.100)
+        preparationFooter = Text(preparationRoot, "HSCombatPreparationFooter", 0.31, 0.022, 0, -0.165)
         for _, frame in ipairs({preparationTitle, preparationMission, preparationHint, preparationFooter}) do
             BlzFrameSetLevel(frame, 3)
             BlzFrameSetTextAlignment(frame, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
         end
         preparationButton = BlzCreateFrameByType("GLUETEXTBUTTON", "HSCombatPreparationStart", parent, "ScriptDialogButton", 0)
-        BlzFrameSetPoint(preparationButton, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -0.248)
+        BlzFrameSetPoint(preparationButton, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -0.191)
         BlzFrameSetSize(preparationButton, 0.24, 0.034)
         BlzFrameSetLevel(preparationButton, 26)
         BlzFrameSetText(preparationButton, "수색 시작")
@@ -1125,14 +1303,34 @@ do
         DisplayDamageBoard(false)
         local theme = SurvivorStage.Get(index)
         preparationReady, preparationCheck = onReady, canStart
+        -- Fit the actual chapter text instead of retaining a large blank footer.
+        local mission = "|cff9bdbc0이번 목표|r\n" .. theme.mission
+        local hint = "|cffffcc00구역 안내|r\n" .. theme.hint
+        local missionHeight = math.max(0.032, WrappedLines(mission) * 0.0125 + 0.005)
+        local hintHeight = math.max(0.044, WrappedLines(hint) * 0.0125 + 0.005)
+        local hintTop = 0.048 + missionHeight + 0.006
+        local footerTop = hintTop + hintHeight + 0.005
+        local buttonTop = footerTop + 0.026 + 0.008
+        BlzFrameSetSize(preparationRoot, 0.35, buttonTop + 0.034 + 0.012)
+        BlzFrameSetSize(preparationMission, 0.31, missionHeight)
+        BlzFrameSetSize(preparationHint, 0.31, hintHeight)
+        BlzFrameClearAllPoints(preparationHint)
+        BlzFrameSetPoint(preparationHint, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -hintTop)
+        BlzFrameClearAllPoints(preparationFooter)
+        BlzFrameSetSize(preparationFooter, 0.31, 0.026)
+        BlzFrameSetPoint(preparationFooter, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -footerTop)
+        BlzFrameClearAllPoints(preparationButton)
+        BlzFrameSetPoint(preparationButton, FRAMEPOINT_TOP, preparationRoot, FRAMEPOINT_TOP, 0, -buttonTop)
         SetText(preparationTitle, string.format("|cffffcc00%d / %d · %s|r", index, SurvivorConfig.stages, theme.name))
-        SetText(preparationMission, "|cff9bdbc0이번 목표|r\n" .. theme.mission)
-        SetText(preparationHint, "|cffffcc00구역 안내|r\n" .. theme.hint)
+        SetText(preparationMission, mission)
+        SetText(preparationHint, hint)
         SetText(preparationFooter, "") -- Reserved for inventory warnings; the countdown explains the start.
         RenderPreparationVisibility()
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
     function SurvivorUI.HidePanel()
+        ResetActionFeedback()
+        if expeditionRoot then SetVisible(expeditionRoot, false); SetVisible(expeditionText, false) end
         if SurvivorSetupUI then SurvivorSetupUI.Hide() end
         StopIntro()
         gearCallback = nil
@@ -1148,10 +1346,10 @@ do
         for _, pip in ipairs(rerollPips) do BlzFrameSetVisible(pip, visible) end
     end
     local function LayoutCardText(card, evolution)
-        BlzFrameSetSize(card.description, 0.178, evolution and 0.065 or 0.045)
+        BlzFrameSetSize(card.description, 0.178, evolution and 0.085 or 0.075)
         BlzFrameClearAllPoints(card.preview)
-        BlzFrameSetSize(card.preview, 0.18, evolution and 0.015 or 0.035)
-        BlzFrameSetPoint(card.preview, FRAMEPOINT_TOP, card.button, FRAMEPOINT_TOP, 0, evolution and -0.177 or -0.157)
+        BlzFrameSetSize(card.preview, 0.18, evolution and 0.028 or 0.042)
+        BlzFrameSetPoint(card.preview, FRAMEPOINT_TOP, card.button, FRAMEPOINT_TOP, 0, evolution and -0.224 or -0.214)
     end
     function SurvivorUI.ShowGearRewards(offers, stage, callback, title)
         SurvivorUI.HidePanel()
@@ -1195,6 +1393,8 @@ do
         SetVisible(resultBackdrop, not open)
     end
     function SurvivorUI.ShowChoices(offers, rewardLevel, build, remaining, rerollsRemaining)
+        ResetActionFeedback()
+        if expeditionRoot then SetVisible(expeditionRoot, false); SetVisible(expeditionText, false) end
         gearCallback = nil
         restVisible = false
         DisplayDamageBoard(false)
@@ -1235,7 +1435,10 @@ do
                 local weapon = augment.kind == "weapon" or augment.kind == "evolution"
                 LayoutCardText(card, augment.kind == "evolution")
                 BlzFrameSetTexture(card.icon, augment.icon, 0, true)
-                BlzFrameSetText(card.title, (weapon and "|cffffd77d" or "|cff8adbe8") .. (augment.element and ("[" .. augment.element .. "] ") or "") .. augment.name .. "|r")
+                local kind = weapon and (augment.kind == "evolution" and "[무기 진화]" or "[무기]")
+                    or augment.kind == "trinket" and "[장신구]" or "[회복]"
+                BlzFrameSetText(card.title, (weapon and "|cffffd77d" or "|cff8adbe8") .. kind .. "\n"
+                    .. (augment.element and ("[" .. augment.element .. "] ") or "") .. augment.name .. "|r")
                 BlzFrameSetText(card.description, SurvivorAugments.ChoiceLabel(id, build) .. "\n" .. augment.text)
                 BlzFrameSetText(card.preview, augment.kind == "evolution" and "추가 슬롯 필요 없음 · 선택 후 변경 불가" or SurvivorAugments.Preview(id, build))
                 BlzFrameSetText(card.hint, "클릭하여 선택")
@@ -1247,6 +1450,7 @@ do
         BlzFrameSetVisible(panel, true)
     end
     function SurvivorUI.ShowResult(reason, elapsed, kills, stage, bossTime, report, details)
+        ResetActionFeedback()
         StopIntro()
         SurvivorUI.ClearSpeech()
         journalPages, journalIndex, currentResultPage = {}, 1, 1
