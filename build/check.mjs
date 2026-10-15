@@ -2774,10 +2774,17 @@ Show(3)
 local reroll,exclude=frames.HeroSurvivorReroll2,frames.HeroSurvivorExclude2
 local gold,orange,tip=frames.HSRerollHover2,frames.HSExcludeHover2,frames.HSChoiceActionTooltip
 local timerCount=#timers;local width,height=reroll.width,reroll.height
+local card=frames.HeroSurvivorCard2
+Event(card,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+assert(frames.HSCardHover2.alpha==230 and not tip.visible and selected==0,
+    'Hovering a card brightens only its border without selecting it')
+assert(frames.HSCardHover2Top.width<card.width and frames.HSCardHover2Left.height<card.height,
+    'Card borders keep an inset and do not expand the hit area')
 Event(reroll,FRAMEEVENT_MOUSE_ENTER)
 assert(tip.visible and frames.HSChoiceActionTooltipText.text:find('리롤 기회'))
 AdvanceVisualTime(.04);assert(gold.alpha>0 and gold.alpha<230)
 AdvanceVisualTime(.1);assert(gold.alpha==230 and LiveTimers(.02)==0)
+assert(frames.HSCardHover2.alpha==0,'Moving from the card to its action button clears the card highlight')
 assert(reroll.width==width and reroll.height==height and frames.HeroSurvivorRerollText2.textColor.g==220)
 Event(reroll,FRAMEEVENT_MOUSE_DOWN);assert(frames.QuestButtonBaseTemplate202.color.r==165)
 Event(exclude,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
@@ -2805,9 +2812,9 @@ Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.04)
 local feedbackTimer=Local(SurvivorUI.HidePanel,'actionTimer')
 SurvivorUI.HidePanel();feedbackTimer.callback()
 assert(gold.alpha==0 and orange.alpha==0 and not tip.visible and LiveTimers(.02)==0)
-Show(3);Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+Show(3);Event(card,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 ClickFrame(frames.HeroSurvivorCard2)
-assert(selected==1 and gold.alpha==0 and not tip.visible and #timers==timerCount,
+assert(selected==1 and gold.alpha==0 and frames.HSCardHover2.alpha==0 and not tip.visible and #timers==timerCount,
     'Selections and repeated hovers reuse the map-lifetime timer and clear all feedback')
 `);
 

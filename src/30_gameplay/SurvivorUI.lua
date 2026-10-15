@@ -679,18 +679,23 @@ do
         return frame
     end
     local function ActionAvailable(control)
+        if control.key == "available" then return (choosing or gearCallback ~= nil) and control.card.available end
         return choosing and control.card.available and control.card[control.key]
     end
     local function RenderActionFeedback(control)
         local amount = control.pressed and 1 or control.amount
         local color = control.color
         BlzFrameSetAlpha(control.glow, math.floor(amount * (control.pressed and 110 or 230)))
-        BlzFrameSetVertexColor(control.background, BlzConvertColor(255,
-            control.pressed and 165 or 255, control.pressed and 165 or 255, control.pressed and 165 or 255))
-        BlzFrameSetTextColor(control.label, BlzConvertColor(255,
-            math.floor(255 + (color[1] - 255) * amount),
-            math.floor(255 + (color[2] - 255) * amount),
-            math.floor(255 + (color[3] - 255) * amount)))
+        if control.background then
+            BlzFrameSetVertexColor(control.background, BlzConvertColor(255,
+                control.pressed and 165 or 255, control.pressed and 165 or 255, control.pressed and 165 or 255))
+        end
+        if control.label then
+            BlzFrameSetTextColor(control.label, BlzConvertColor(255,
+                math.floor(255 + (color[1] - 255) * amount),
+                math.floor(255 + (color[2] - 255) * amount),
+                math.floor(255 + (color[3] - 255) * amount)))
+        end
     end
     ResetActionFeedback = function()
         -- The handle is allocated for every client in Init; mouse events only
@@ -736,11 +741,14 @@ do
         BlzFrameSetAlpha(glow, 0)
         -- Existing UI textures are solid swatches, so draw a hollow border from
         -- four strips instead of placing a filled rectangle over the button.
-        local width = key == "rerollAvailable" and 0.108 or 0.09
-        for _, edge in ipairs({{"Top", FRAMEPOINT_TOPLEFT, 0.002, -0.002, width - 0.004, 0.0015},
-            {"Bottom", FRAMEPOINT_BOTTOMLEFT, 0.002, 0.002, width - 0.004, 0.0015},
-            {"Left", FRAMEPOINT_TOPLEFT, 0.002, -0.002, 0.0015, 0.026},
-            {"Right", FRAMEPOINT_TOPRIGHT, -0.002, -0.002, 0.0015, 0.026}}) do
+        local isCard = key == "available"
+        local width = isCard and 0.212 or key == "rerollAvailable" and 0.108 or 0.09
+        local height, inset, thickness = isCard and cardHeight or 0.03, isCard and 0.008 or 0.002,
+            isCard and 0.0025 or 0.0015
+        for _, edge in ipairs({{"Top", FRAMEPOINT_TOPLEFT, inset, -inset, width - 2 * inset, thickness},
+            {"Bottom", FRAMEPOINT_BOTTOMLEFT, inset, inset, width - 2 * inset, thickness},
+            {"Left", FRAMEPOINT_TOPLEFT, inset, -inset, thickness, height - 2 * inset},
+            {"Right", FRAMEPOINT_TOPRIGHT, -inset, -inset, thickness, height - 2 * inset}}) do
             local strip = BlzCreateFrameByType("BACKDROP", name .. edge[1], glow, "", 0)
             BlzFrameSetPoint(strip, edge[2], glow, edge[2], edge[3], edge[4])
             BlzFrameSetSize(strip, edge[5], edge[6])
@@ -749,7 +757,7 @@ do
                 key == "excludeAvailable" and 190 or 255, key == "excludeAvailable" and 120 or 255))
             BlzFrameSetEnable(strip, false)
         end
-        BlzFrameSetLevel(label, 2)
+        if label then BlzFrameSetLevel(label, 2) end
         local control = {card = card, key = key, button = button, background = background, label = label,
             glow = glow, color = color, amount = 0, hovered = false, pressed = false}
         actionFeedback[#actionFeedback + 1] = control
@@ -767,10 +775,12 @@ do
                 if wasPressed then RenderActionFeedback(other) end
             end
             control.hovered = true
-            BlzFrameClearAllPoints(actionTooltip)
-            BlzFrameSetPoint(actionTooltip, FRAMEPOINT_BOTTOM, button, FRAMEPOINT_TOP, 0, 0.008)
-            BlzFrameSetText(actionTooltipText, tooltip)
-            BlzFrameSetVisible(actionTooltip, true)
+            if tooltip then
+                BlzFrameClearAllPoints(actionTooltip)
+                BlzFrameSetPoint(actionTooltip, FRAMEPOINT_BOTTOM, button, FRAMEPOINT_TOP, 0, 0.008)
+                BlzFrameSetText(actionTooltipText, tooltip)
+            end
+            BlzFrameSetVisible(actionTooltip, tooltip ~= nil)
             StartActionAnimation()
         end)
         LocalEvent(FRAMEEVENT_MOUSE_LEAVE, function()
@@ -1045,7 +1055,7 @@ do
             local button = BlzCreateFrameByType("BUTTON", "HeroSurvivorCard" .. i, frame, "", 0)
             BlzFrameSetSize(button, 0.212, cardHeight)
             BlzFrameSetPoint(button, FRAMEPOINT_CENTER, frame, FRAMEPOINT_CENTER, 0, 0)
-            -- A plain BUTTON has no template-provided mouse-over glow.
+            -- A shared local feedback control supplies the card's mouse-over border.
             local icon = BlzCreateFrameByType("BACKDROP", "HeroSurvivorIcon" .. i, button, "", 0)
             BlzFrameSetSize(icon, 0.06, 0.06)
             BlzFrameSetPoint(icon, FRAMEPOINT_TOP, button, FRAMEPOINT_TOP, 0, -0.018)
@@ -1069,6 +1079,8 @@ do
                 hint = Text(button, "HeroSurvivorHint" .. i, 0.18, 0.015, 0, -0.263),
                 reroll = reroll,
                 rerollText = Text(reroll, "HeroSurvivorRerollText" .. i, 0.10, 0.03, 0, 0)}
+            BindActionFeedback(cards[i], "available", button, nil, nil,
+                "HSCardHover" .. i, {255, 220, 105}, nil)
             BindActionFeedback(cards[i], "rerollAvailable", reroll, rerollFrame, cards[i].rerollText,
                 "HSRerollHover" .. i, {255, 220, 105}, "|cffffdc69이 후보를 다시 추첨|r\n리롤 기회 1회를 사용합니다.")
             BindActionFeedback(cards[i], "excludeAvailable", exclude, excludeFrame, cards[i].excludeText,
