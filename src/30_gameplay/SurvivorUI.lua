@@ -1393,11 +1393,12 @@ do
         BlzFrameSetVisible(rerollCounter, visible)
         for _, pip in ipairs(rerollPips) do BlzFrameSetVisible(pip, visible) end
     end
-    local function LayoutCardText(card, evolution)
-        BlzFrameSetSize(card.description, 0.178, evolution and 0.085 or 0.075)
+    -- Gear cards show three set lines (element/name, thresholds, linked weapons).
+    local function LayoutCardText(card, evolution, gear)
+        BlzFrameSetSize(card.description, 0.178, evolution and 0.085 or gear and 0.069 or 0.075)
         BlzFrameClearAllPoints(card.preview)
-        BlzFrameSetSize(card.preview, 0.18, evolution and 0.022 or 0.032)
-        BlzFrameSetPoint(card.preview, FRAMEPOINT_TOP, card.button, FRAMEPOINT_TOP, 0, evolution and -0.219 or -0.209)
+        BlzFrameSetSize(card.preview, 0.18, evolution and 0.022 or gear and 0.044 or 0.032)
+        BlzFrameSetPoint(card.preview, FRAMEPOINT_TOP, card.button, FRAMEPOINT_TOP, 0, evolution and -0.219 or gear and -0.203 or -0.209)
     end
     function SurvivorUI.ShowGearRewards(offers, stage, callback, title)
         SurvivorUI.HidePanel()
@@ -1415,7 +1416,7 @@ do
             BlzFrameSetVisible(card.rerollFrame, false)
             BlzFrameSetVisible(card.excludeFrame, false)
             if entry then
-                LayoutCardText(card, false)
+                LayoutCardText(card, false, true)
                 local summary, setSummary = SurvivorEquipment.Summary(entry.id)
                 BlzFrameClearAllPoints(card.frame)
                 BlzFrameSetPoint(card.frame, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, (i - 2) * 0.23, cardTop)

@@ -435,8 +435,9 @@ do
             bolt.lightning = AddLightningEx(jump == 1 and "CLPB" or "CLSB", true, x, y, z, tx, ty, tz)
             objects[bolt] = true
             ALICE_Create(bolt)
+            -- Unattached: an attached effect inherits each unit's model and SetUnitScale size.
             CreateObject({identifier = "hsChainHit", x = tx, y = ty, z = tz,
-                target = target, attachPoint = "chest", life = SurvivorConfig.chainHitDuration,
+                life = SurvivorConfig.chainHitDuration,
                 isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime},
                 SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
             Hit(target, damage, "chainlightning")

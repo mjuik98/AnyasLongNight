@@ -429,7 +429,7 @@ assert(actors[1].visual.alpha==140,'Unrelated blade weapons keep their existing 
 SurvivorCombat.Cleanup()
 `);
 
-suite('chain lightning adds one attached impact per hit, preserves damage and cleans paused or expired visuals', mocks + String.raw`
+suite('chain lightning adds one fixed-size impact per hit, preserves damage and cleans paused or expired visuals', mocks + String.raw`
 function AddLightningEx(kind,visible,x,y,z,tx,ty,tz)return {kind=kind,x=x,y=y,z=z,tx=tx,ty=ty,tz=tz}end
 function AddSpecialEffectTarget(model,unit,point)return {model=model,unit=unit,point=point}end
 function BlzSetSpecialEffectZ(effect,z)assert(not effect.unit,'Attached effects must use native attachment height');effect.z=z end
@@ -448,9 +448,10 @@ for _,actor in ipairs(actors)do
 end
 for i,target in ipairs(targets)do
     assert(hits[i].unit==target and math.abs(hits[i].damage-build.stats.chainDamage*SurvivorConfig.chainFalloff^(i-1))<.00001)
-    assert(impacts[i].visual.unit==target and impacts[i].visual.point=='chest'
+    local tx,ty=GetUnitX(target),GetUnitY(target)
+    assert(impacts[i].visual.unit==nil and impacts[i].visual.x==tx and impacts[i].visual.y==ty and impacts[i].visual.z==impacts[i].z
         and impacts[i].visual.model==SurvivorConfig.chainHitModel and impacts[i].visual.scale==SurvivorConfig.chainHitScale and impacts[i].visual.scale<1
-        and impacts[i].visual.alpha==255,'Ground, flying and lethally hit units all receive a bright native attachment')
+        and impacts[i].visual.alpha==255,'Ground, flying and lethally hit units all receive a bright unscaled impact at the body')
 end
 local impact=impacts[2];local life=impact.life
 state='CHOOSING';impact.selfInteractions(impact);assert(impact.life==life)
@@ -2300,6 +2301,13 @@ local maximum=hero.maxLife;revision=build.revision
 SurvivorEquipment.Init(hero,build)
 assert(build.revision==revision and hero.maxLife==maximum+build.stats.equipmentLife,
     'Initial hero stats apply even when the initial equipment snapshot is empty')
+local _,storm=SurvivorEquipment.Summary("Ht02")
+assert(storm=='|cff80d0ff[번개]|r 성벽 파수꾼의 장구\n2개·4개 세트 효과\n연계: 연쇄 번개·폭풍의 부름·폭풍 구슬',
+    'Set cards name their element and linked weapons')
+local _,ember=SurvivorEquipment.Summary("Ha01")
+assert(ember=='|cffff8040[화염]|r 스트라솔름 인도자의 유산\n3개·5개 세트 효과\n연계: |cff80ff80잿불 화살|r·잿불 발자취·잿불 낙성',
+    'Owned linked weapons are highlighted')
+assert(select(2,SurvivorEquipment.Summary("Hs01"))=='단품 장비 · 세트 없음')
 SurvivorEquipment.Cleanup()
 
 hero,build=NewGear("firebolt",6)
