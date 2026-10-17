@@ -1609,25 +1609,31 @@ do
         end
     end
     function SurvivorCombat.MaintainInventoryPause()
-        if not inventoryFrozen or not Alive(hero) then return end
+        if not frozen or not inventoryVitals or not Alive(hero) then return end
         -- Leave the hero's inventory abilities enabled. Freeze movement/vitals
         -- separately so native equip/unequip orders still work during the pause.
         inventoryVitals.life = math.min(inventoryVitals.life, GetWidgetLife(hero), BlzGetUnitMaxHP(hero))
         inventoryVitals.mana = math.min(inventoryVitals.mana, GetUnitState(hero, UNIT_STATE_MANA), GetUnitState(hero, UNIT_STATE_MAX_MANA))
         SetWidgetLife(hero, inventoryVitals.life)
         SetUnitState(hero, UNIT_STATE_MANA, inventoryVitals.mana)
-        if GetUnitX(hero) ~= inventoryVitals.x then SetUnitX(hero, inventoryVitals.x) end
-        if GetUnitY(hero) ~= inventoryVitals.y then SetUnitY(hero, inventoryVitals.y) end
+        if inventoryFrozen then
+            if GetUnitX(hero) ~= inventoryVitals.x then SetUnitX(hero, inventoryVitals.x) end
+            if GetUnitY(hero) ~= inventoryVitals.y then SetUnitY(hero, inventoryVitals.y) end
+        end
     end
     function SurvivorCombat.SetPaused(enable, reason)
         local interactiveHero = enable and (reason == "INVENTORY" or reason == "STAGE_CLEAR")
-        if frozen == enable and inventoryFrozen == interactiveHero then return end
-        -- PauseUnit alone is insufficient for the interactive inventory hero.
-        -- Suppress the engine rate for every pause reason, before touching UI/units.
-        stats.nativeRegenerationPaused = enable == true
+        local showRegeneration = interactiveHero or enable and RunSession.IsInventoryOpen and RunSession.IsInventoryOpen() == true
+        local suppressRegeneration = enable == true and not showRegeneration
+        if frozen == enable and inventoryFrozen == interactiveHero
+            and stats.nativeRegenerationPaused == suppressRegeneration then return end
+        -- Interactive panels show the real engine rate in ASde. The existing
+        -- inventory timer and final close correction keep actual HP frozen.
+        -- Choice screens suppress it only when no native stats panel is open.
+        stats.nativeRegenerationPaused = suppressRegeneration
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
+        if inventoryVitals then SurvivorCombat.MaintainInventoryPause() end
         if inventoryFrozen then
-            SurvivorCombat.MaintainInventoryPause()
             BlzUnitDisableAbility(hero, FourCC("Amov"), false, false)
         end
         for u, record in pairs(units) do
@@ -1643,12 +1649,14 @@ do
                 if record.cosmetic then BlzSetSpecialEffectTimeScale(record.cosmetic, enable and 0 or 1) end
             end
         end
-        if interactiveHero then
+        if showRegeneration then
             inventoryVitals = {life = GetWidgetLife(hero), mana = GetUnitState(hero, UNIT_STATE_MANA),
                 x = GetUnitX(hero), y = GetUnitY(hero)}
+        else inventoryVitals = nil end
+        if interactiveHero then
             IssueImmediateOrder(hero, "stop")
             BlzUnitDisableAbility(hero, FourCC("Amov"), true, true)
-        else inventoryVitals = nil end
+        end
         frozen, inventoryFrozen = enable, interactiveHero
         for object in pairs(objects) do
             if object.visual ~= nil then BlzSetSpecialEffectTimeScale(object.visual, enable and 0 or 1) end

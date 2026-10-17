@@ -1054,13 +1054,14 @@ assert(not ok and tostring(message):find('native cooldown display'))
 BlzSetAbilityRealLevelField=native;SurvivorNativeLoadout.Cleanup();assert(GetUnitAbilityLevel(hero,'HsCD')==0)
 `);
 
-suite('engine regeneration preserves renewal values, pauses every lifecycle and never stacks Lua healing', mocks + String.raw`
+suite('engine regeneration stays visible in interactive panels while paused HP remains frozen', mocks + String.raw`
 function ALICE_CallPeriodic(fn)periodic=fn;return fn end
 function ALICE_DisableCallback()periodic=nil end
 function ALICE_Halt()halted=true end
 function ALICE_Resume()halted=false end
 -- Deliberately regenerate even on paused units: interactive inventory heroes
--- cannot rely on PauseUnit to freeze HP. The native field must actually be zero.
+-- cannot rely on PauseUnit to freeze HP. Interactive panels must correct their
+-- frozen HP snapshot while keeping the native rate visible to ASde.
 function AdvanceEngine(seconds)
     for _,u in ipairs(world)do
         if not u.removed and u.life>0 then
@@ -1092,22 +1093,43 @@ SurvivorAugments.Apply('renewal',build,hero)
 assert(build.stats.regeneration==2 and Rate()==0,'Learning renewal while choosing must not enable regeneration')
 SurvivorNativeLoadout.Refresh()
 assert(BlzGetAbilityExtendedTooltip('ASpc'):find('초당 2.00',1,true)
-    and BlzGetAbilityExtendedTooltip('ASpc'):find('정지 중 0',1,true))
+    and BlzGetAbilityExtendedTooltip('ASpc'):find('일시정지 중 회복 정지',1,true))
 AdvanceEngine(60);assert(hero.life==105)
-RunSession.SetInventoryOpen(true);RunSession.EndChoice()
-assert(RunSession.GetState()=='INVENTORY'and not hero.paused and Rate()==0)
+RunSession.SetInventoryOpen(true)
+assert(RunSession.GetState()=='CHOOSING'and hero.paused and Rate()==2,
+    'Opening ASde over a growth choice must show regeneration without resuming the hero')
+AdvanceEngine(.025);SurvivorCombat.MaintainInventoryPause();assert(hero.life==105)
+AdvanceEngine(.025);RunSession.SetInventoryOpen(false)
+assert(RunSession.GetState()=='CHOOSING'and hero.life==105 and Rate()==0)
+local excluded=build.excluded;build.excluded={}
+for _,id in ipairs(Local(SurvivorAugments.Roll,'order'))do build.excluded[id]=true end
+SurvivorAugments.Apply('recovery',build,hero)
+build.excluded=excluded
+RunSession.EndChoice()
+assert(hero.life==285 and Rate()==2,'A recovery card must keep its explicit heal when choices resume')
+hero.life=105;RunSession.BeginChoice();RunSession.SetInventoryOpen(true);RunSession.EndChoice()
+assert(RunSession.GetState()=='INVENTORY'and not hero.paused and Rate()==2)
 SurvivorAugments.SetEquipmentBonuses(build,{gear={all={maxLife=50,moveSpeed=10}}},hero)
-assert(hero.life==105 and Rate()==0,'Equipment recalculation while paused must not heal or restart native regeneration')
-AdvanceEngine(60);SurvivorCombat.MaintainInventoryPause();assert(hero.life==105)
+assert(hero.life==105 and Rate()==2,'Equipment recalculation must preserve the displayed rate without healing')
+for i=1,1200 do
+    AdvanceEngine(.05);SurvivorCombat.MaintainInventoryPause()
+    assert(hero.life==105 and Rate()==2,'Every inventory timer tick freezes HP without hiding regeneration')
+end
+-- Close between observer ticks: the final correction must discard this partial tick.
+AdvanceEngine(.025);assert(hero.life>105)
 RunSession.SetInventoryOpen(false);assert(RunSession.IsRunning()and Rate()==2)
+assert(hero.life==105,'Closing the panel must not retain regeneration from the final partial tick')
 AdvanceEngine(5);assert(hero.life==115)
-RunSession.BeginStageClear();assert(Rate()==0)
-AdvanceEngine(60);assert(hero.life==115,'Story and search preparation remain frozen')
+RunSession.BeginStageClear();assert(Rate()==2)
+AdvanceEngine(60);SurvivorCombat.MaintainInventoryPause()
+assert(hero.life==115,'Story and search preparation remain frozen while their interactive hero keeps its rate')
 RunSession.SetInventoryOpen(true)
 SurvivorCombat.BeginStage(2,RunSession.GetElapsed())
 SurvivorAugments.Apply('renewal',build,hero)
-assert(build.stats.regeneration==3 and Rate()==0,'Stage changes and paused upgrades cannot bypass the pause gate')
-RunSession.EndStageClear();assert(RunSession.GetState()=='INVENTORY'and Rate()==0)
+assert(build.stats.regeneration==3 and Rate()==3,'Stage changes and paused upgrades update the visible engine rate')
+local full=hero.life
+AdvanceEngine(.05);SurvivorCombat.MaintainInventoryPause();assert(hero.life==full)
+RunSession.EndStageClear();assert(RunSession.GetState()=='INVENTORY'and Rate()==3)
 RunSession.SetInventoryOpen(false);assert(Rate()==3)
 hero.life=200;AdvanceEngine(.25);assert(hero.life==200.75)
 hero.life=hero.maxLife-1;AdvanceEngine(30);assert(hero.life==hero.maxLife)
@@ -1152,7 +1174,7 @@ for i=1,6 do assert(hero.inventory[i]==slots[i],'A native powerup must not displ
 -- The engine grants an ability, not an event callback we can invent for ATal.
 hero.talentPoints=hero.talentPoints-1;UnitAddAbility(hero,'Ht1C')
 assert(SurvivorNativeLoadout.Refresh()and hero.life==life and hero.maxLife==maximum+100)
-assert(BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==0)
+assert(BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==regen)
 local revision=build.revision
 for _=1,100 do assert(not SurvivorNativeLoadout.Refresh())end
 assert(build.revision==revision and hero.maxLife==maximum+100,'Repeated native polls must not stack a talent')
@@ -1160,7 +1182,7 @@ assert(talentWrites==15,'Refreshes must not append text or keep rewriting the na
 assert(SurvivorNativeLoadout.GrantStageTalent(2))
 hero.talentPoints=hero.talentPoints-1;UnitAddAbility(hero,'Ht2B');SurvivorNativeLoadout.Refresh()
 assert(build.talentTotals.all.rangePct==.12 and build.stats.regeneration==regen
-    and BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==0)
+    and BlzGetUnitRealField(hero,UNIT_RF_HIT_POINTS_REGENERATION_RATE)==regen)
 SurvivorAugments.SetEquipmentBonuses(build,{gear={all={maxLife=50,damagePct=.20}}},hero)
 assert(hero.maxLife==maximum+150 and hero.life==life and build.stats.regeneration==regen)
 local preview=SurvivorAugments.PreviewEquipment(build,{})

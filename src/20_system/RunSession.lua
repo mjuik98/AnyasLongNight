@@ -98,7 +98,14 @@ do
     end
     function RunSession.SetInventoryOpen(open)
         if state == "READY" or state == "FINISHED" then return false end
+        local previous = inventoryOpen
         inventoryOpen = open == true
+        if previous ~= inventoryOpen and state == "CHOOSING" then
+            -- The cards remain paused, but ASde needs its visible regeneration
+            -- and frozen-vitals policy refreshed when a native panel opens/closes.
+            local ok, message = pcall(hooks.pause, state)
+            if not ok then RunSession.Fail(message); return false end
+        end
         return ApplyPauseReasons()
     end
 end

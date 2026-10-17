@@ -371,8 +371,8 @@ do
         return result
     end
     function SurvivorAugments.ApplyHeroRegeneration(hero, stats)
-        -- Combat owns the pause flag; recalculation during a choice or equipment
-        -- transaction must not restart native healing behind the paused UI.
+        -- Combat suppresses regeneration for full unit pauses and teardown.
+        -- Interactive panels retain this rate for ASde and freeze HP separately.
         local rate = stats.nativeRegenerationPaused and 0 or stats.regeneration
         assert(BlzSetUnitRealField(hero, UNIT_RF_HIT_POINTS_REGENERATION_RATE, rate),
             "Could not update native hero regeneration")
