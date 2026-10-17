@@ -1626,6 +1626,8 @@ do
         -- Suppress the engine rate for every pause reason, before touching UI/units.
         stats.nativeRegenerationPaused = enable == true
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
+        -- ASde display passives are real engine modifiers: clear them before resuming.
+        if SurvivorNativeLoadout and SurvivorNativeLoadout.RefreshStatDisplays then SurvivorNativeLoadout.RefreshStatDisplays() end
         if inventoryFrozen then
             SurvivorCombat.MaintainInventoryPause()
             BlzUnitDisableAbility(hero, FourCC("Amov"), false, false)
