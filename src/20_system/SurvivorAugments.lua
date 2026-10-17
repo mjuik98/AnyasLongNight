@@ -4,7 +4,7 @@ SurvivorAugments = {}
 do
     local icons = [[ReplaceableTextures\CommandButtons\]]
     local order = {"firebolt", "flamefield", "chainlightning", "orbitblade", "monsoon", "frontslash", "frostshard", "frostnova", "blizzard", "meteor", "thunderorb", "returnblade",
-        "power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride"}
+        "power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"}
     local catalog = {
         firebolt = {kind = "weapon", name = "잿불 화살", icon = icons .. "BTNFireBolt.blp",
             text = "추적 투사체 · 지상·공중"},
@@ -45,6 +45,8 @@ do
             text = "생명력 재생 증가", statName = "생명력 재생", amount = 1, unit = "/초"},
         stride = {kind = "trinket", name = "발걸음의 인장", icon = icons .. "BTNBoots.blp",
             text = "이동 속도 증가", statName = "이동 속도", amount = 12, unit = ""},
+        armor = {kind = "trinket", name = "수호의 인장", icon = icons .. "BTNHumanArmorUpOne.blp",
+            text = "방어력 증가", statName = "방어력", amount = 2, unit = ""},
         recovery = {kind = "recovery", name = "회복", icon = icons .. "BTNPotionGreenSmall.blp",
             text = "최대 생명력의 30%를 회복합니다."},
     }
@@ -71,6 +73,7 @@ do
         vitality = "무너진 뒤에도 남아 있는 의지.",
         renewal = "다시 일어나 다음 흔적을 좇는다.",
         stride = "돌아갈 곳이 없어도, 향할 곳은 있다.",
+        armor = "무너진 성벽 대신 스스로를 지킨다.",
     }
     for id, text in pairs(flavor) do catalog[id].flavor = text end
     local elements = {firebolt = "화염", flamefield = "화염", meteor = "화염",
@@ -78,7 +81,7 @@ do
         orbitblade = "칼날", frontslash = "칼날", returnblade = "칼날",
         frostshard = "얼음", frostnova = "얼음", blizzard = "얼음"}
     for id, element in pairs(elements) do catalog[id].element = element end
-    local multiCounts, multiDamage = {1, 1, 2, 2, 2}, {0.30, 0.45, 0.30, 0.40, 0.50}
+    local multiCounts, multiDamage = {1, 1, 2, 2, 2, 3, 3}, {0.30, 0.45, 0.30, 0.40, 0.50, 0.35, 0.45}
     -- Each max-level weapon chooses one permanent branch without another equipment requirement.
     local evolutions = {
         {"firebolt", "폭렬 화살", "발사 수 +2 · 피해 -15% · 적중 시 주변 140에 30% 폭발 피해(최대 12명)", {missileDamage = 0.85}, {missileCount = 2}},
@@ -113,18 +116,19 @@ do
             multiply = definition[4], add = definition[5] or {}, set = definition[6] or {}}
         order[#order + 1] = id
     end
-    local missilePower = {1, 1.25, 1.5, 1.875, 2.25}
-    local missileCount = {1, 1, 2, 2, 3}
-    local zonePower = {1, 1.3, 1.6, 2, 2.5}
-    local zoneRadius = {1, 1, 1.15, 1.15, 1.3}
-    local zoneDuration = {0, 0, 0, 1, 1}
-    local chainPower = {1, 1.3, 1.6, 1.9, 2.3}
-    local chainTargets = {3, 4, 5, 6, 7}
-    local bladePower = {1, 1.3, 1.6, 2, 2.5}
-    local bladeCount = {2, 2, 3, 3, 4}
-    local monsoonPower, monsoonCount = {1, 1.3, 1.6, 1.9, 2.3}, {1, 1, 2, 2, 3}
-    local slashPower = {1, 1.3, 1.6, 2, 2.5}
-    local frostPower, frostPierce = {1, 1.3, 1.6, 2, 2.5}, {2, 3, 3, 4, 5}
+    -- Growth tables cover levels 1..7; the seventh level unlocks evolution.
+    local missilePower = {1, 1.25, 1.5, 1.875, 2.25, 2.6, 3}
+    local missileCount = {1, 1, 2, 2, 3, 3, 4}
+    local zonePower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
+    local zoneRadius = {1, 1, 1.15, 1.15, 1.3, 1.3, 1.45}
+    local zoneDuration = {0, 0, 0, 1, 1, 1, 1.5}
+    local chainPower = {1, 1.3, 1.6, 1.9, 2.3, 2.6, 3}
+    local chainTargets = {3, 4, 5, 6, 7, 8, 9}
+    local bladePower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
+    local bladeCount = {2, 2, 3, 3, 4, 4, 5}
+    local monsoonPower, monsoonCount = {1, 1.3, 1.6, 1.9, 2.3, 2.6, 3}, {1, 1, 2, 2, 3, 3, 4}
+    local slashPower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
+    local frostPower, frostPierce = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, {2, 3, 3, 4, 5, 5, 6}
     local bonusKeys = {
         set = {ember = true, storm = true, frost = true, blade = true},
         all = {damagePct = true, speedPct = true, areaPct = true, moveSpeed = true, extraProjectiles = true, duration = true, maxLife = true,
@@ -334,6 +338,7 @@ do
             moveSpeed = math.min(500, math.max(100, c.moveSpeed + Bonus(build, "all", "moveSpeed") + (levels.stride or 0) * catalog.stride.amount)),
             equipmentLife = math.floor(Bonus(build, "all", "maxLife") + (levels.vitality or 0) * catalog.vitality.amount),
             regeneration = c.heroRegeneration + (levels.renewal or 0) * catalog.renewal.amount + Bonus(build, "all", "regeneration"),
+            armorBonus = (levels.armor or 0) * catalog.armor.amount,
             commonCooldownReduction = 1 - 1 / math.max(0.1, 1 + speed),
             sets = {ember = Bonus(build, "set", "ember") >= 1, storm = Bonus(build, "set", "storm") >= 1,
                 frost = Bonus(build, "set", "frost") >= 1, blade = Bonus(build, "set", "blade") >= 1},
@@ -391,6 +396,12 @@ do
                 SetWidgetLife(hero, math.min(life, maximum))
             end
             build.appliedEquipmentLife = nextBonus
+            -- Native armor also mitigates scripted hits (normal damage type).
+            local previousArmor = build.appliedHero == hero and (build.appliedArmor or 0) or 0
+            if previousArmor ~= build.stats.armorBonus then
+                BlzSetUnitArmor(hero, BlzGetUnitArmor(hero) - previousArmor + build.stats.armorBonus)
+            end
+            build.appliedArmor = build.stats.armorBonus
             build.appliedHero = hero
         end
     end
@@ -422,7 +433,7 @@ do
         return true
     end
     function SurvivorAugments.NewBuild(startingWeapon, startingTrinket)
-        assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= 5, "Growth tables support levels 1..5")
+        assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= #chainTargets, "Growth tables support levels 1..7")
         assert(SurvivorConfig.weaponSlots >= 1 and SurvivorConfig.weaponSlots <= 6
             and SurvivorConfig.trinketSlots >= 1 and SurvivorConfig.trinketSlots <= 6, "Growth UI supports 1..6 slots per category")
         local first = startingWeapon or SurvivorConfig.startingWeapon

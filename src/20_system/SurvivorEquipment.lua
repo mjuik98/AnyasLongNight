@@ -175,6 +175,9 @@ do
         Hs18 = "찢어진 여백에도 사용할 주문은 남아 있다.",
     }
     for _, entry in ipairs(catalog) do entry.flavor = entry.flavor or flavor[entry.id] end
+    -- Keyed by each set's first weapon; set tier texts already use these element words.
+    local elementTags = {firebolt = "|cffff8040[화염]|r", chainlightning = "|cff80d0ff[번개]|r",
+        frostshard = "|cff6fa8ff[냉기]|r", orbitblade = "|cffd8d8e0[칼날]|r"}
     local slotNames = {Head = "머리", Chest = "가슴", Gloves = "장갑", Boots = "신발",
         Trinket = "장신구 (장비용)", Ring = "반지 (두 칸 중 하나)", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
@@ -209,12 +212,18 @@ do
         local entry = assert(byId[id], "Unknown gear")
         local rarity = rarities[entry.rarity]
         local set = sets[entry.set]
-        local thresholds = {}
+        local thresholds, linked = {}, {}
         if set then
             for _, tier in ipairs(set.tiers) do thresholds[#thresholds + 1] = tier.count .. "개" end
+            -- Name the set's element and weapons so a new player can see what it supports.
+            for _, weapon in ipairs(set.weapons) do
+                local name = SurvivorAugments.Get(weapon).name
+                linked[#linked + 1] = build and SurvivorAugments.Level(build, weapon) > 0 and "|cff80ff80" .. name .. "|r" or name
+            end
         end
         return rarity.color .. rarity.name .. "|r · " .. slotNames[entry.slot],
-            set and (set.name .. "\n" .. table.concat(thresholds, "·") .. " 세트 효과") or "단품 장비 · 세트 없음"
+            set and (elementTags[set.weapons[1]] .. " " .. set.name .. "\n" .. table.concat(thresholds, "·") .. " 세트 효과\n"
+                .. "연계: " .. table.concat(linked, "·")) or "단품 장비 · 세트 없음"
     end
     local function RollRarity(elite, bossReward)
         local roll = GetRandomInt(1, 100)

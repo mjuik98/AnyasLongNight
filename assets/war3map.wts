@@ -2425,7 +2425,7 @@ STRING 405
 STRING 406
 // 능력: HsW1 (잿불 화살), Tip (설명 - 일반)
 {
-잿불 화살 · MAX
+잿불 화살 · Lv.5
 }
 
 STRING 407
@@ -2491,7 +2491,7 @@ STRING 416
 STRING 417
 // 능력: HsW2 (잿불 발자취), Tip (설명 - 일반)
 {
-잿불 발자취 · MAX
+잿불 발자취 · Lv.5
 }
 
 STRING 418
@@ -2557,7 +2557,7 @@ STRING 427
 STRING 428
 // 능력: HsW3 (연쇄 번개), Tip (설명 - 일반)
 {
-연쇄 번개 · MAX
+연쇄 번개 · Lv.5
 }
 
 STRING 429
@@ -2623,7 +2623,7 @@ STRING 438
 STRING 439
 // 능력: HsW4 (순찰자의 칼날), Tip (설명 - 일반)
 {
-순찰자의 칼날 · MAX
+순찰자의 칼날 · Lv.5
 }
 
 STRING 440
@@ -2689,7 +2689,7 @@ STRING 449
 STRING 450
 // 능력: HsW5 (폭풍의 부름), Tip (설명 - 일반)
 {
-폭풍의 부름 · MAX
+폭풍의 부름 · Lv.5
 }
 
 STRING 451
@@ -2755,7 +2755,7 @@ STRING 460
 STRING 461
 // 능력: HsW6 (그림자 베기), Tip (설명 - 일반)
 {
-그림자 베기 · MAX
+그림자 베기 · Lv.5
 }
 
 STRING 462
@@ -2821,7 +2821,7 @@ STRING 471
 STRING 472
 // 능력: HsW7 (서리 화살), Tip (설명 - 일반)
 {
-서리 화살 · MAX
+서리 화살 · Lv.5
 }
 
 STRING 473
@@ -2887,7 +2887,7 @@ STRING 482
 STRING 483
 // 능력: HsW8 (서리 폭발), Tip (설명 - 일반)
 {
-서리 폭발 · MAX
+서리 폭발 · Lv.5
 }
 
 STRING 484
@@ -2953,7 +2953,7 @@ STRING 493
 STRING 494
 // 능력: HsW9 (묘역의 눈보라), Tip (설명 - 일반)
 {
-납골당의 눈보라 · MAX
+납골당의 눈보라 · Lv.5
 }
 
 STRING 495
@@ -3019,7 +3019,7 @@ STRING 504
 STRING 505
 // 능력: HsWA (잿불 낙성), Tip (설명 - 일반)
 {
-잿불 낙성 · MAX
+잿불 낙성 · Lv.5
 }
 
 STRING 506
@@ -3085,7 +3085,7 @@ STRING 515
 STRING 516
 // 능력: HsWB (폭풍 구슬), Tip (설명 - 일반)
 {
-폭풍 구슬 · MAX
+폭풍 구슬 · Lv.5
 }
 
 STRING 517
@@ -3151,7 +3151,7 @@ STRING 526
 STRING 527
 // 능력: HsWC (귀환 칼날), Tip (설명 - 일반)
 {
-귀환 칼날 · MAX
+귀환 칼날 · Lv.5
 }
 
 STRING 528

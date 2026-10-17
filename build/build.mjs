@@ -57,7 +57,7 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
     try {
         lua.lua_pushjsfunction(state, current => {
             const values = [1,2,3].map(index => to_jsstring(lua.lua_tostring(current,index)));
-            assert((weapons ? /^HsW[1-9ABC]:[1-5]$/ : /^H(?:sT[1-9A]|[seitabnchv]\d{2})$/).test(values[0]) && !catalog.has(values[0]));
+            assert((weapons ? /^HsW[1-9ABC]:[1-7]$/ : /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/).test(values[0]) && !catalog.has(values[0]));
             catalog.set(values[0], {name:values[1],description:values[2].replaceAll('\n','|n')});
             return 0;
         });
@@ -75,14 +75,14 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
 local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC'}
 for id,raw in pairs(ids)do
     local build=SurvivorAugments.NewBuild(id)
-    for level=1,5 do
+    for level=1,SurvivorConfig.growthMaxLevel do
         build.levels[id]=level;SurvivorAugments.Recalculate(build)
-        local name=SurvivorAugments.Get(id).name..' · '..(level==5 and 'MAX' or 'Lv.'..level)
+        local name=SurvivorAugments.Get(id).name..' · '..(level==SurvivorConfig.growthMaxLevel and 'MAX' or 'Lv.'..level)
         EmitItemTooltip(raw..':'..level,name,SurvivorAugments.OwnedTooltip(id,build))
     end
 end
 ` : String.raw`
-local ids={power='HsT1',haste='HsT2',reach='HsT3',velocity='HsT4',magnitude='HsT5',longevity='HsT6',multicast='HsT7',vitality='HsT8',renewal='HsT9',stride='HsTA'}
+local ids={power='HsT1',haste='HsT2',reach='HsT3',velocity='HsT4',magnitude='HsT5',longevity='HsT6',multicast='HsT7',vitality='HsT8',renewal='HsT9',stride='HsTA',armor='HsTB'}
 for id,raw in pairs(ids)do
     EmitItemTooltip(raw,SurvivorAugments.Get(id).name,SurvivorAugments.OwnedTooltip(id,SurvivorAugments.NewBuild('firebolt',id)))
 end
@@ -95,7 +95,7 @@ end
             if(status===lua.LUA_OK)status=lua.lua_pcall(state,0,0,0);
             assert.equal(status,lua.LUA_OK,'Cannot generate item tooltips: '+(status===lua.LUA_OK?'':to_jsstring(lua.lua_tostring(state,-1))));
         }
-        assert.equal(catalog.size,weapons ? 60 : 92,'Unexpected runtime tooltip catalog size');
+        assert.equal(catalog.size,weapons ? 12 * growthLevels : 93,'Unexpected runtime tooltip catalog size');
         return catalog;
     } finally { lua.lua_close(state); }
 }
@@ -424,8 +424,68 @@ export function prepareNativeTalents(map, snapshots = new Map(), preparedAssets 
     }
     return {entries,assets};
 }
+// Weapon/trinket growth ends at level 7 (SurvivorConfig.growthMaxLevel).
+export const growthLevels = 7;
+export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인장',
+    icon: 'ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpOne.blp'};
+// Own only the weapon level count, their zero attribute rows and the armor trinket.
+// Tooltip text is written afterwards by the weapon/item tooltip synchronization.
+export function installGrowthObjects(entries) {
+    const output = new Map(entries);
+    const abilities = parseObjectData(entries.get('war3map.w3a'), 'ability');
+    assert.deepEqual(serializeObjectData(abilities), entries.get('war3map.w3a'), 'Ability reader must round-trip losslessly');
+    const weapons = abilities.tables[1].filter(row => /^HsW[1-9ABC]$/.test(row.newId));
+    assert.equal(weapons.length, 12, 'Missing native weapon objects');
+    for (const row of weapons) {
+        assert.equal(row.oldId, 'Aamk', 'Weapon base collision: ' + row.newId);
+        const levels = row.fields.filter(field => field.id === 'alev');
+        assert(levels.length === 1 && levels[0].type === 0 && levels[0].value >= 1 && levels[0].value <= growthLevels,
+            'Unexpected weapon level field: ' + row.newId);
+        if (levels[0].value !== growthLevels) { delete row.raw; delete levels[0].raw; levels[0].value = growthLevels; }
+        for (let level = 1; level <= growthLevels; level++) for (const [id, column] of [['Iagi', 1], ['Iint', 2], ['Istr', 3]]) {
+            const fields = row.fields.filter(field => field.id === id && field.level === level && field.column === column);
+            assert(fields.length <= 1 && (!fields.length || fields[0].type === 0 && fields[0].value === 0),
+                'Weapon indicators must not grant attributes: ' + row.newId);
+            if (!fields.length) { delete row.raw; row.fields.push({id, type: 0, level, column, value: 0, endId: row.newId}); }
+        }
+    }
+    output.set('war3map.w3a', serializeObjectData(abilities));
+    for (const [name, skin] of [['war3map.w3t', false], ['war3mapSkin.w3t', true]]) {
+        const data = parseObjectData(entries.get(name), 'item');
+        assert.deepEqual(serializeObjectData(data), entries.get(name), 'Item reader must round-trip losslessly');
+        assert(!data.tables[0].some(row => row.oldId === armorTrinket.id), 'Armor trinket collides with a stock item');
+        const rows = data.tables[1].filter(row => row.newId === armorTrinket.id);
+        assert(rows.length <= 1, 'Duplicate armor trinket');
+        if (rows.length) { assert.equal(rows[0].oldId, 'cnob', 'Armor trinket base collision'); continue; }
+        const template = data.tables[1].find(row => row.newId === armorTrinket.template);
+        assert(template && template.oldId === 'cnob', 'Missing trinket template: ' + armorTrinket.template);
+        const text = {unam: armorTrinket.name, utip: armorTrinket.name, utub: armorTrinket.name, ides: armorTrinket.name, iico: armorTrinket.icon};
+        const fields = template.fields.map(field => ({id: field.id, type: field.type, level: field.level, column: field.column,
+            value: text[field.id] ?? field.value, endId: armorTrinket.id}));
+        assert.deepEqual(fields.map(field => field.id).filter(id => text[id]).sort(),
+            (skin ? ['ides', 'iico', 'unam', 'utip', 'utub'] : ['ides', 'utub']), 'Unexpected trinket template fields');
+        data.tables[1].push({oldId: 'cnob', newId: armorTrinket.id, extra: [...template.extra], fields});
+        output.set(name, serializeObjectData(data));
+    }
+    return output;
+}
+export function prepareGrowthObjects(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const names = ['war3map.w3a', 'war3map.w3t', 'war3mapSkin.w3t'];
+    const entries = installGrowthObjects(new Map(names.map(name => [name, map.read(name)])));
+    const sources = new Map(names.map(name => [name, fs.readFileSync(path.join(root, 'assets', name))]));
+    const outputs = installGrowthObjects(new Map(names.map(name => [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])));
+    const assets = new Map();
+    for (const name of names) {
+        const asset = path.join(root, 'assets', name);
+        assert.deepEqual(entries.get(name), outputs.get(name), 'Asset and test map growth objects diverge: ' + name);
+        if (snapshots.has(asset)) assert.deepEqual(snapshots.get(asset), sources.get(name), 'Growth asset changed: ' + name);
+        else snapshots.set(asset, sources.get(name));
+        assets.set(asset, outputs.get(name));
+    }
+    return {entries, assets};
+}
 export function cleanWeaponTooltipEntries(entries, catalog) {
-    assert.equal(catalog.size,60,'Expected twelve five-level weapons');
+    assert.equal(catalog.size,12 * growthLevels,'Expected twelve seven-level weapons');
     const output=new Map(entries),strings=stringTable(entries.get('war3map.wts'));
     const skins=parseObjectData(entries.get('war3mapSkin.w3a'),'ability'),expectedStrings=new Map(),otherReferences=new Set();
     for(const name of ['war3map.w3a','war3mapSkin.w3a']) {
@@ -457,7 +517,7 @@ export function cleanWeaponTooltipEntries(entries, catalog) {
                 }
             };
             setText('anam',0,catalog.get(row.newId+':1').name.replace(/ · Lv\.1$/,''));
-            for(let level=1;level<=5;level++) {
+            for(let level=1;level<=growthLevels;level++) {
                 const expected=catalog.get(row.newId+':'+level);assert(expected);
                 setText('atp1',level,expected.name);setText('aub1',level,expected.description);
             }
@@ -728,7 +788,7 @@ export function cleanItemTooltipEntries(entries, catalog = null) {
     for (const name of ['war3map.w3t', 'war3mapSkin.w3t']) {
         const bytes = entries.get(name), data = parseObjectData(bytes, 'item');
         // The main data must resolve the same text even when a reader skips skins.
-        for (const row of data.tables.flat().filter(row => /^H(?:sT[1-9A]|[seitabnchv]\d{2})$/.test(row.newId))) {
+        for (const row of data.tables.flat().filter(row => /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/.test(row.newId))) {
             const skin = skinItems.tables.flat().find(value => value.newId === row.newId && value.oldId === row.oldId);
             assert(skin, 'Missing owned item skin: ' + row.newId);
             for (const id of ['utub','ides']) {
@@ -746,10 +806,10 @@ export function cleanItemTooltipEntries(entries, catalog = null) {
             if (field.type !== 3) continue;
             const item = catalog?.get(row.newId);
             const descriptionField = ['utub','ides'].includes(field.id);
-            const owned = /^H(?:sT[1-9A]|[seitabnchv]\d{2})$/.test(row.newId)
+            const owned = /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/.test(row.newId)
                 && (descriptionField || item && ['unam','utip'].includes(field.id));
             const expected = owned && item ? (descriptionField ? item.description : item.name) : undefined;
-            const trinket = /^HsT[1-9A]$/.test(row.newId);
+            const trinket = /^HsT[1-9AB]$/.test(row.newId);
             const reference = field.value.match(/^TRIGSTR_(\d+)$/);
             if (reference) {
                 const id = Number(reference[1]);
@@ -1104,7 +1164,7 @@ export function refreshBase(before, base, bundle) {
     const retainedStrings = new Map();
     const trinketStrings = new Set();
     for (const name of ['war3map.w3t','war3mapSkin.w3t']) {
-        for (const row of parseObjectData(test.read(name),'item').tables.flat().filter(row => /^HsT[1-9A]$/.test(row.newId))) {
+        for (const row of parseObjectData(test.read(name),'item').tables.flat().filter(row => /^HsT[1-9AB]$/.test(row.newId))) {
             for (const field of row.fields.filter(field => ['utub','ides'].includes(field.id))) {
                 const match = field.value.match(/^TRIGSTR_(\d+)$/);
                 if (match) trinketStrings.add(Number(match[1]));
@@ -1299,11 +1359,14 @@ function main() {
         'Map experience curve differs from assets; run build with --experience-curve');
     const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots, portraitObjects?.assets) : null;
     if (goldRemoval) patched = openMap(patched).replace(goldRemoval.entries);
-    const itemTooltips = prepareItemTooltipCleanup(openMap(patched), snapshots, goldRemoval?.assets);
+    const growth = prepareGrowthObjects(openMap(patched), snapshots, goldRemoval?.assets);
+    patched = openMap(patched).replace(growth.entries);
+    const grownAssets = new Map([...(goldRemoval?.assets ?? []), ...growth.assets]);
+    const itemTooltips = prepareItemTooltipCleanup(openMap(patched), snapshots, grownAssets);
     patched = openMap(patched).replace(itemTooltips.entries);
     const uiResources = prepareUIResources(openMap(patched), snapshots);
     patched = openMap(patched).replace(uiResources);
-    const interfaceTooltip = prepareInterfaceTooltip(openMap(patched),snapshots,goldRemoval?.assets);
+    const interfaceTooltip = prepareInterfaceTooltip(openMap(patched),snapshots,grownAssets);
     patched = openMap(patched).replace(interfaceTooltip.entries);
     const statDetails = prepareStatDetails(openMap(patched), snapshots, interfaceTooltip.assets);
     patched = openMap(patched).replace(statDetails.entries);
@@ -1313,7 +1376,7 @@ function main() {
     patched = openMap(patched).replace(talents.entries);
     const weaponTooltips = prepareWeaponTooltips(openMap(patched),snapshots,new Map([...itemTooltips.assets,...talents.assets]));
     patched = openMap(patched).replace(weaponTooltips.entries);
-    const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []),
+    const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []), ...growth.assets,
         ...itemTooltips.assets, ...interfaceTooltip.assets, ...statDetails.assets, ...regeneration.assets, ...talents.assets, ...weaponTooltips.assets]);
     // replace() already compacts its own output; this also drops orphaned data an unchanged input carried in.
     const compactStats = {beforeBytes: patched.length};
@@ -1324,7 +1387,7 @@ function main() {
     validatePortraitObjects(preparedMap, bundle);
     validateGoldRemoval(preparedMap);
     const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
-        ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []),
+        ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []), ...growth.entries.keys(),
         ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(),
         ...(map.read('(listfile)').equals(preparedMap.read('(listfile)')) ? [] : ['(listfile)']),
         ...(experience ? ['war3mapMisc.txt'] : [])])];

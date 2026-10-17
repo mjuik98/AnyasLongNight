@@ -65,6 +65,8 @@ function GetWidgetLife(u) return u.life end
 function SetWidgetLife(u,v) u.life=v end
 function BlzGetUnitMaxHP(u) return u.maxLife end
 function BlzSetUnitMaxHP(u,v) u.maxLife=v end
+function BlzGetUnitArmor(u) return u.armor or 0 end
+function BlzSetUnitArmor(u,v) u.armor=v end
 function BlzSetUnitRealField(u,field,value)
     assert(not u.removed);u.realFields=u.realFields or {};u.realFields[field]=value;return true
 end
@@ -254,6 +256,29 @@ for difficulty,weight in pairs({easy=.8,normal=1,hard=1.1})do
 end
 `);
 
+suite('seven-level growth gates evolution at the cap and the armor trinket applies native armor once', mocks,
+    [config,augments], String.raw`
+assert(SurvivorConfig.growthMaxLevel==7)
+local b=SurvivorAugments.NewBuild('chainlightning')
+local previous=0
+for level=2,7 do
+    assert(SurvivorAugments.CanChoose('chainlightning',b) and not SurvivorAugments.CanChoose('evolution5',b))
+    SurvivorAugments.Apply('chainlightning',b);assert(b.levels.chainlightning==level and b.stats.chainDamage>previous)
+    previous=b.stats.chainDamage
+end
+assert(b.stats.chainTargets==9 and not SurvivorAugments.CanChoose('chainlightning',b) and SurvivorAugments.CanChoose('evolution5',b))
+SurvivorAugments.Apply('evolution5',b);assert(b.stats.chainTargets==13,'Storm net adds four targets at level 7')
+b=SurvivorAugments.NewBuild('firebolt','multicast');for _=2,7 do SurvivorAugments.Apply('multicast',b)end
+assert(b.stats.multiCount==3 and math.abs(b.stats.multiDamage-.45)<1e-9)
+local hero=CreateUnit(0,'hero',0,0,0);hero.armor=3
+b=SurvivorAugments.NewBuild('firebolt','armor');SurvivorAugments.Recalculate(b,hero)
+assert(hero.armor==5 and SurvivorAugments.OwnedTooltip('armor',b)=='방어력 +2')
+for _=2,7 do SurvivorAugments.Apply('armor',b,hero)end
+assert(hero.armor==17 and b.stats.armorBonus==14,'Armor is a delta over the base, never restacked')
+SurvivorAugments.Recalculate(b,hero);SurvivorAugments.Recalculate(b,hero);assert(hero.armor==17)
+assert(SurvivorAugments.Preview('armor',SurvivorAugments.NewBuild('firebolt')):find('방어력 0 → ',1,true))
+`);
+
 suite('growth offers preserve guarantees, evolution priority, exclusion fallbacks and exhausted recovery', mocks,
     [config,augments], String.raw`
 GetRandomInt=function(a,b)return a end
@@ -404,7 +429,7 @@ assert(actors[1].visual.alpha==140,'Unrelated blade weapons keep their existing 
 SurvivorCombat.Cleanup()
 `);
 
-suite('chain lightning adds one attached impact per hit, preserves damage and cleans paused or expired visuals', mocks + String.raw`
+suite('chain lightning adds one fixed-size impact per hit, preserves damage and cleans paused or expired visuals', mocks + String.raw`
 function AddLightningEx(kind,visible,x,y,z,tx,ty,tz)return {kind=kind,x=x,y=y,z=z,tx=tx,ty=ty,tz=tz}end
 function AddSpecialEffectTarget(model,unit,point)return {model=model,unit=unit,point=point}end
 function BlzSetSpecialEffectZ(effect,z)assert(not effect.unit,'Attached effects must use native attachment height');effect.z=z end
@@ -423,9 +448,10 @@ for _,actor in ipairs(actors)do
 end
 for i,target in ipairs(targets)do
     assert(hits[i].unit==target and math.abs(hits[i].damage-build.stats.chainDamage*SurvivorConfig.chainFalloff^(i-1))<.00001)
-    assert(impacts[i].visual.unit==target and impacts[i].visual.point=='chest'
-        and impacts[i].visual.model==SurvivorConfig.chainHitModel and impacts[i].visual.scale>1
-        and impacts[i].visual.alpha==255,'Ground, flying and lethally hit units all receive a bright native attachment')
+    local tx,ty=GetUnitX(target),GetUnitY(target)
+    assert(impacts[i].visual.unit==nil and impacts[i].visual.x==tx and impacts[i].visual.y==ty and impacts[i].visual.z==impacts[i].z
+        and impacts[i].visual.model==SurvivorConfig.chainHitModel and impacts[i].visual.scale==SurvivorConfig.chainHitScale and impacts[i].visual.scale<1
+        and impacts[i].visual.alpha==255,'Ground, flying and lethally hit units all receive a bright unscaled impact at the body')
 end
 local impact=impacts[2];local life=impact.life
 state='CHOOSING';impact.selfInteractions(impact);assert(impact.life==life)
@@ -893,7 +919,7 @@ end
 for _,id in ipairs(SurvivorConfig.startingTrinkets)do
     local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild('firebolt',id)
     SurvivorNativeLoadout.Init(hero,build)
-    for level=1,5 do
+    for level=1,SurvivorConfig.growthMaxLevel do
         if level>1 then SurvivorAugments.Apply(id,build,hero);SurvivorNativeLoadout.Refresh()end
         local item=hero.inventory[1]
         local expected=SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n')
@@ -905,9 +931,9 @@ for _,id in ipairs(SurvivorConfig.startingTrinkets)do
         assert(SurvivorAugments.Preview(id,SurvivorAugments.NewBuild('firebolt')):find('→',1,true))
     end
     local item=hero.inventory[1];hero.inventory[1]=nil;RemoveItem(item);hero.paused=true
-    SurvivorNativeLoadout.Refresh();assert(hero.inventory[1]==nil and build.levels[id]==5)
+    SurvivorNativeLoadout.Refresh();assert(hero.inventory[1]==nil and build.levels[id]==SurvivorConfig.growthMaxLevel)
     hero.paused=false;SurvivorNativeLoadout.Refresh()
-    assert(hero.inventory[1]~=item and hero.inventory[1].charges==5)
+    assert(hero.inventory[1]~=item and hero.inventory[1].charges==SurvivorConfig.growthMaxLevel)
     assert(hero.inventory[1].description==SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n'))
     SurvivorNativeLoadout.Cleanup();build=SurvivorAugments.NewBuild('firebolt',id)
     SurvivorNativeLoadout.Init(hero,build);assert(hero.inventory[1].charges==1)
@@ -916,7 +942,7 @@ for _,id in ipairs(SurvivorConfig.startingTrinkets)do
 end
 `);
 
-suite('weapon tooltips stay concise through five levels, all evolutions and native refreshes', mocks + String.raw`
+suite('weapon tooltips stay concise through seven levels, all evolutions and native refreshes', mocks + String.raw`
 SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
 weaponText={}
 local write=BlzSetAbilityExtendedTooltip
@@ -936,10 +962,10 @@ end
 for id in pairs(ids)do
     local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(id)
     SurvivorNativeLoadout.Init(hero,build)
-    for level=1,5 do
+    for level=1,SurvivorConfig.growthMaxLevel do
         if level>1 then SurvivorAugments.Apply(id,build,hero);SurvivorNativeLoadout.Refresh()end
         Check(id,build)
-        assert(BlzGetAbilityTooltip(ids[id])==SurvivorAugments.Get(id).name..' · '..(level==5 and 'MAX'or'Lv.'..level))
+        assert(BlzGetAbilityTooltip(ids[id])==SurvivorAugments.Get(id).name..' · '..(level==SurvivorConfig.growthMaxLevel and 'MAX'or'Lv.'..level))
     end
     local writes=abilityWrites;for _=1,20 do SurvivorNativeLoadout.Refresh()end
     assert(abilityWrites==writes,'Unchanged weapon tooltips must not be rewritten every tick')
@@ -948,10 +974,10 @@ end
 for i=1,24 do
     local evolution='evolution'..i;local entry=SurvivorAugments.Get(evolution)
     local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(entry.weapon)
-    build.levels[entry.weapon]=5;SurvivorAugments.Recalculate(build,hero)
+    build.levels[entry.weapon]=SurvivorConfig.growthMaxLevel;SurvivorAugments.Recalculate(build,hero)
     SurvivorNativeLoadout.Init(hero,build);SurvivorAugments.Apply(evolution,build,hero);SurvivorNativeLoadout.Refresh()
     Check(entry.weapon,build)
-    assert(weaponText[ids[entry.weapon]..':4']:find(entry.text,1,true),'Keep every evolution effect and condition')
+    assert(weaponText[ids[entry.weapon]..':'..(SurvivorConfig.growthMaxLevel-1)]:find(entry.text,1,true),'Keep every evolution effect and condition')
     assert(BlzGetAbilityTooltip(ids[entry.weapon])==entry.name..' · 진화')
     assert(SurvivorAugments.Preview(evolution,build)=='진화 선택 후 변경 불가')
     SurvivorNativeLoadout.Cleanup()
@@ -1396,7 +1422,7 @@ for count=1,#ids*2 do
 end
 for _,id in ipairs(ids)do
     assert(owners[id]==2,'Each owner receives an even share')
-    assert(playerColors[id]=='color12' and playerNames[id]=='Player 12','Owners borrow Neutral Hostile color and name')
+    assert(playerColors[id]=='color12' and playerNames[id]=='적','Owners borrow Neutral Hostile color and show the enemy name')
     assert(alliances[id..'>0:passive']==false and alliances['0>'..id..':passive']==false,'Owners stay hostile to the hero player')
     for _,other in ipairs(ids)do
         if other~=id then assert(alliances[id..'>'..other..':passive']==true,'Enemy owners never fight each other')end
@@ -2297,6 +2323,13 @@ local maximum=hero.maxLife;revision=build.revision
 SurvivorEquipment.Init(hero,build)
 assert(build.revision==revision and hero.maxLife==maximum+build.stats.equipmentLife,
     'Initial hero stats apply even when the initial equipment snapshot is empty')
+local _,storm=SurvivorEquipment.Summary("Ht02")
+assert(storm=='|cff80d0ff[번개]|r 성벽 파수꾼의 장구\n2개·4개 세트 효과\n연계: 연쇄 번개·폭풍의 부름·폭풍 구슬',
+    'Set cards name their element and linked weapons')
+local _,ember=SurvivorEquipment.Summary("Ha01")
+assert(ember=='|cffff8040[화염]|r 스트라솔름 인도자의 유산\n3개·5개 세트 효과\n연계: |cff80ff80잿불 화살|r·잿불 발자취·잿불 낙성',
+    'Owned linked weapons are highlighted')
+assert(select(2,SurvivorEquipment.Summary("Hs01"))=='단품 장비 · 세트 없음')
 SurvivorEquipment.Cleanup()
 
 hero,build=NewGear("firebolt",6)
@@ -5173,7 +5206,7 @@ assert(setupBlack.visible and setupBlack.alpha==255,'Equipment option pages reta
 assert(frames.HeroSurvivorSetupPage.text=='1 / 2' and not frames.HeroSurvivorSetupPrevious.enabled)
 ClickFrame(frames.HeroSurvivorSetupFollowing)
 assert(frames.HeroSurvivorSetupPage.text=='2 / 2' and not frames.HeroSurvivorSetupFollowing.enabled)
-assert(frames.HeroSurvivorSetupOption4.visible and not frames.HeroSurvivorSetupOption5.visible)
+assert(frames.HeroSurvivorSetupOption5.visible and not frames.HeroSurvivorSetupOption6.visible)
 ClickFrame(frames.HeroSurvivorSetupOption4);ClickFrame(frames.HeroSurvivorSetupOption4)
 assert(selects==1 and chosen==SurvivorConfig.startingTrinkets[10] and frames.HeroSurvivorSetupMenu.visible)
 ClickFrame(frames.HeroSurvivorSetupTRINKET)
@@ -5748,7 +5781,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
         .matchAll(/^STRING (\d+)\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n([\s\S]*?)\r?\n\}/gm)].map(match=>[Number(match[1]),match[2]]));
     const mainItems = parseObjectData(prepared.entries.get('war3map.w3t'),'item');
     const skinItems = parseObjectData(prepared.entries.get('war3mapSkin.w3t'),'item');
-    for(const row of mainItems.tables.flat().filter(row=>/^H(?:sT[1-9A]|[seitabnchv]\d{2})$/.test(row.newId))) {
+    for(const row of mainItems.tables.flat().filter(row=>/^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/.test(row.newId))) {
         const skin=skinItems.tables.flat().find(value=>value.newId===row.newId);
         for(const id of ['utub','ides']) {
             const field=row.fields.find(field=>field.id===id),skinField=skin.fields.find(field=>field.id===id);
@@ -5778,6 +5811,8 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.equal(catalog.get('HsT3').name,'추적의 인장');
     assert.equal(catalog.get('HsT4').name,'가속의 인장');
     assert.equal(catalog.get('HsT5').name,'확대의 인장');
+    assert.equal(catalog.get('HsTB').name,'수호의 인장');
+    assert.equal(catalog.get('HsTB').description,'방어력 +2');
     const unwanted=/단계 특성 · 셋 중 하나 선택|이번 수색 동안 유지|자동 적용|레벨업 선택으로 강화|버리기 불가|숫자는 강화 레벨|가방 정리 시 장비가 삭제됩니다|자동 공격 스킬을 새로 부여하지 않습니다|보유 중인 해당 무기에만 적용|기본 능력치는 각각 적용|세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음|확장 인벤토리에서 장착 시 적용|해당 무기 보유 시 적용|장착 시 회복 없음|단독 기준|별도의 장비입니다/;
     for(const filename of [baseMapPath,path.join(root,'dist/AnyasLongNight-playtest.w3x')]) {
         const candidate=openMap(fs.readFileSync(filename));
@@ -5826,7 +5861,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     };
     for(const name of ['war3map.w3a','war3mapSkin.w3a'])assert.deepEqual(strip(installed.get(name)),strip(weaponEntries.get(name)),
         'Weapon tooltip synchronization must preserve every combat field and unrelated ability');
-    console.log('PASS complete original/test audit: 15 talents, 10 trinkets, 82 equipment items and 60 weapon levels match runtime');
+    console.log('PASS complete original/test audit: 15 talents, 11 trinkets, 82 equipment items and 84 weapon levels match runtime');
 }
 {
     const snapshots=new Map(),prepared=prepareNativeTalents(map,snapshots);

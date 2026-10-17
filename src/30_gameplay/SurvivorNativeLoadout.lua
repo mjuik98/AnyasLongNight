@@ -8,7 +8,7 @@ do
         monsoon = "HsW5", frontslash = "HsW6", frostshard = "HsW7",
         frostnova = "HsW8", blizzard = "HsW9", meteor = "HsWA", thunderorb = "HsWB", returnblade = "HsWC"}
     local trinkets = {power = "HsT1", haste = "HsT2", reach = "HsT3", velocity = "HsT4", magnitude = "HsT5", longevity = "HsT6", multicast = "HsT7",
-        vitality = "HsT8", renewal = "HsT9", stride = "HsTA"}
+        vitality = "HsT8", renewal = "HsT9", stride = "HsTA", armor = "HsTB"}
     local weaponPositions = {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {2, 1}, {3, 1}}
     local hero, build
     local ownsStatDetails = false
