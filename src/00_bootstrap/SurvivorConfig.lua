@@ -16,7 +16,7 @@ SurvivorConfig = {
     escapeArrivalModel = [[Abilities\Spells\NightElf\Blink\BlinkTarget.mdl]],
     enemyLife = 100, enemyDamage = 8, enemyMoveSpeed = 220,
     -- Spare slots that own enemies in rotation; see SurvivorCombat NextEnemyOwner.
-    enemyPlayerIds = {18, 19, 20, 21, 22, 23},
+    enemyPlayerIds = {18, 19, 20, 21, 22, 23}, enemyPlayerName = "적",
     -- Chasers re-aim in this many staggered groups, one group per enemy update.
     enemyOrderGroups = 4,
     maxEnemies = 225, stageEnemyCaps = {180, 203, 225, 225, 225}, spawnInterval = 1.0, spawnDistance = 750,
@@ -40,12 +40,12 @@ SurvivorConfig = {
     -- assets/war3map.w3u sets Anya's base attributes and all native gains to 0.
     -- Lua weapon damage grows through augments and equipment.
     -- Native automatic kill XP is suspended; only AwardXP grants rewards.
-    enemyExperience = 40, enemyExperienceByType = {},
+    enemyExperience = 50, enemyExperienceByType = {},
     -- assets/war3mapMisc.txt sets native max level 70 and cumulative XP thresholds.
     -- Levels 2..5 keep the opening pace; each later step costs 200 XP more.
     -- The complete native table, including the late curve, lives in that asset.
     eliteInterval = 45.0, eliteLifeMultiplier = 4, eliteDamageMultiplier = 2,
-    eliteExperience = 120,
+    eliteExperience = 150,
     rangedEnemy = {life = 85, damage = 12,
         speed = 190, range = 550, interval = 2.4, projectileSpeed = 420},
     flyingEnemy = {life = 75, damage = 10,
@@ -57,10 +57,10 @@ SurvivorConfig = {
     bossImpactModel = "Abilities\\Spells\\Orc\\WarStomp\\WarStompCaster.mdl",
     equipmentDropChance = 0.04, equipmentPityKills = 24,
     equipmentPickupRadius = 140, equipmentGroundLimit = 24, equipmentGroundLifetime = 60,
-    weaponSlots = 6, trinketSlots = 6, growthMaxLevel = 5,
+    weaponSlots = 6, trinketSlots = 6, growthMaxLevel = 7,
     rerollsPerRun = 3, rerollCapacity = 5, rerollsPerStage = 1,
     excludesPerRun = 3,
-    startingTrinkets = {"power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride"},
+    startingTrinkets = {"power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"},
     startingWeapon = "firebolt",
     startingWeapons = {"firebolt", "chainlightning", "orbitblade", "frostshard"},
     missileInterval = 0.8, missileDamage = 40, missileSpeed = 850, missileRange = 1000,
@@ -78,7 +78,7 @@ SurvivorConfig = {
     chainInterval = 2.2, chainDamage = 45, chainRange = 750, chainJumpRange = 350,
     chainFalloff = 0.85,
     chainHitModel = [[Abilities\Weapons\Bolt\BoltImpact.mdl]],
-    chainHitScale = 1.35, chainHitDuration = 0.45,
+    chainHitScale = 0.8, chainHitDuration = 0.45,
     bladeDamage = 30, bladeRadius = 180, bladePeriod = 2.4, bladeHitRadius = 65,
     bladeHitInterval = 0.45, bladeInterval = 5.0, bladeDuration = 3.0,
     bladeModel = "Abilities\\Weapons\\GlaiveMissile\\GlaiveMissile.mdl",

@@ -36,7 +36,7 @@ do
     local function HurtHero(source, amount, name, hint)
         local previous = damageContext
         damageContext = {name = name, hint = hint}
-        local ok, message = pcall(UnitDamageTarget, source, hero, amount, false, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC, WEAPON_TYPE_WHOKNOWS)
+        local ok, message = pcall(UnitDamageTarget, source, hero, amount, false, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
         damageContext = previous
         if not ok then error(message) end
     end
@@ -1111,7 +1111,7 @@ do
         return dt
     end
     -- Warcraft queues pathing per player, so one owner with hundreds of units stutters.
-    -- Spread enemies over allied slots that borrow Neutral Hostile's color and name.
+    -- Spread enemies over allied slots that borrow Neutral Hostile's color; all share one display name.
     local function NextEnemyOwner()
         if not enemyOwners then
             local template, heroOwner = Player(PLAYER_NEUTRAL_AGGRESSIVE), Player(SurvivorConfig.playerId)
@@ -1119,7 +1119,7 @@ do
             for _, id in ipairs(SurvivorConfig.enemyPlayerIds) do enemyOwners[#enemyOwners + 1] = Player(id) end
             for _, owner in ipairs(enemyOwners) do
                 SetPlayerColor(owner, GetPlayerColor(template))
-                SetPlayerName(owner, GetPlayerName(template))
+                SetPlayerName(owner, SurvivorConfig.enemyPlayerName)
                 SetPlayerAlliance(owner, heroOwner, ALLIANCE_PASSIVE, false)
                 SetPlayerAlliance(heroOwner, owner, ALLIANCE_PASSIVE, false)
                 SetPlayerAlliance(owner, template, ALLIANCE_PASSIVE, true)
