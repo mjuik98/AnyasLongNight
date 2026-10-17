@@ -239,11 +239,12 @@ export function installInterfaceTooltip(bytes,catalog) {
     const matches=data.tables[0].filter(row=>row.oldId==='ASpc');assert(matches.length<=1,'Duplicate ASpc override');
     let row=matches[0];
     if(!row){row={oldId:'ASpc',newId:'\0\0\0\0',extra:data.version===3?[0]:[],fields:[]};data.tables[0].push(row);}
-    for(const [id,value]of [['atp1',catalog.interface.title],['aub1',catalog.interface.defaultText]]) {
-        const fields=row.fields.filter(field=>field.id===id&&field.level===1&&field.column===0);
-        assert(fields.length<=1,'Duplicate ASpc tooltip: '+id);
-        if(!fields.length){delete row.raw;row.fields.push({id,type:3,level:1,column:0,value,endId:'ASpc'});}
-        else {assert.equal(fields[0].type,3);if(fields[0].value!==value){delete row.raw;delete fields[0].raw;fields[0].value=value;}}
+    for(const [id,type,level,value]of [['atp1',3,1,catalog.interface.title],['aub1',3,1,catalog.interface.defaultText],
+        ['abpx',0,0,3],['abpy',0,0,0]]) {
+        const fields=row.fields.filter(field=>field.id===id&&field.level===level&&field.column===0);
+        assert(fields.length<=1,'Duplicate ASpc interface field: '+id);
+        if(!fields.length){delete row.raw;row.fields.push({id,type,level,column:0,value,endId:'ASpc'});}
+        else {assert.equal(fields[0].type,type);if(fields[0].value!==value){delete row.raw;delete fields[0].raw;fields[0].value=value;}}
     }
     return serializeObjectData(data);
 }
@@ -444,17 +445,21 @@ export function installHeroRegeneration(bytes, skin = false) {
         row = {oldId: 'Uany', newId: '\0\0\0\0', extra: data.version === 3 ? [0] : [], fields: []};
         data.tables[0].push(row);
     }
-    // Always regenerate on any terrain/time. The runtime supplies the complete
-    // current rate (including 0 while paused); do not add an inherited base rate.
-    for (const [id, type, value] of [['uhrt', 0, 1], ['uhpr', 1, 0]]) {
+    // Object data stores regenType as the editor string "always", not the
+    // integer enum accepted by UNIT_IF_HIT_POINTS_REGENERATION_TYPE at runtime.
+    // The runtime supplies the complete rate, including 0 while paused.
+    for (const [id, type, value] of [['uhrt', 3, 'always'], ['uhpr', 1, 0]]) {
         const fields = row.fields.filter(field => field.id === id);
         assert(fields.length <= 1, 'Duplicate Anya regeneration field: ' + id);
         const field = fields[0];
         if (skin && !field) continue;
         if (field) {
-            assert(id === 'uhrt' ? field.type === 0 : [1, 2].includes(field.type), 'Unexpected Anya regeneration type: ' + id);
-            if (field.value === value) continue;
-            delete field.raw; field.value = value;
+            assert(id === 'uhrt'
+                ? field.type === 3 && ['none', 'always', 'blight', 'day', 'night'].includes(field.value)
+                    || field.type === 0 && Number.isInteger(field.value) && field.value >= 0 && field.value <= 4
+                : [1, 2].includes(field.type), 'Unexpected Anya regeneration type: ' + id);
+            if (field.value === value && (id !== 'uhrt' || field.type === type)) continue;
+            delete field.raw; field.type = type; field.value = value;
         } else row.fields.push({id, type, level: 0, column: 0, value, endId: 'Uany'});
         delete row.raw;
     }

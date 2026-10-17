@@ -5818,7 +5818,9 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const prepared = prepareHeroRegeneration(map), source = map.read('war3map.w3u');
     const output = prepared.entries.get('war3map.w3u');
     const row = parseUnits(output).tables[0].find(row => row.oldId === 'Uany');
-    assert.equal(row.fields.find(field => field.id === 'uhrt').value, 1);
+    assert.equal(row.fields.find(field => field.id === 'uhrt').type, 3,
+        'regenType is an editor string, not the runtime UNIT_IF integer enum');
+    assert.equal(row.fields.find(field => field.id === 'uhrt').value, 'always');
     assert.equal(row.fields.find(field => field.id === 'uhpr').value, 0);
     const stripOwned = bytes => {const data = parseUnits(bytes);
         for (const row of data.tables[0]) if (row.oldId === 'Uany') {
@@ -5826,11 +5828,16 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
         }return serializeUnits(data);};
     assert.deepEqual(stripOwned(output),stripOwned(source),'Only native regeneration fields may change on Anya');
     assert.deepEqual(installHeroRegeneration(output),output);
-    for (const version of [1,2,3]) {
+    for (const version of [1,2,3]) for (const [type,value] of [
+        ...['none','always','blight','day','night'].map(value=>[3,value]),
+        ...[0,1,2,3,4].map(value=>[0,value]), // Repair maps published with the wrong runtime enum.
+    ]) {
         const fixture = {version,kind:'unit',tables:[[{oldId:'Uany',newId:'\0\0\0\0',extra:version===3?[0,7]:[],fields:[
-            {id:'uhrt',type:0,value:0,endId:'Uany'}, {id:'uhpr',type:1,value:2,endId:'Uany'},
+            {id:'uhrt',type,value,endId:'Uany'}, {id:'uhpr',type:1,value:2,endId:'Uany'},
             {id:'umdl',type:3,value:'keep-model',endId:'Uany'}]}],[]]};
         const before=serializeUnits(fixture),after=installHeroRegeneration(before);
+        const repaired=parseUnits(after).tables[0][0].fields.find(field=>field.id==='uhrt');
+        assert.deepEqual({type:repaired.type,value:repaired.value},{type:3,value:'always'});
         assert.deepEqual(stripOwned(after),stripOwned(before));
         assert.deepEqual(installHeroRegeneration(before,true),after,'An explicit skin cannot disable always-on regeneration');
         assert.deepEqual(installHeroRegeneration(after),after);
