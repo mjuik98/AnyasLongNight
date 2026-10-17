@@ -179,7 +179,7 @@ do
     local elementTags = {firebolt = "|cffff8040[화염]|r", chainlightning = "|cff80d0ff[번개]|r",
         frostshard = "|cff6fa8ff[냉기]|r", orbitblade = "|cffd8d8e0[칼날]|r"}
     local slotNames = {Head = "머리", Chest = "가슴", Gloves = "장갑", Boots = "신발",
-        Trinket = "장신구 (장비용)", Ring = "반지 (두 칸 중 하나)", Primary = "무기", Offhand = "보조 무기"}
+        Trinket = "장신구 (장비용)", Ring = "반지", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
     for _, entry in ipairs(catalog) do byType[FourCC(entry.id)], byId[entry.id] = entry, entry end
     local hero, build, eventTrigger

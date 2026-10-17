@@ -340,6 +340,10 @@ do
             regeneration = c.heroRegeneration + (levels.renewal or 0) * catalog.renewal.amount + Bonus(build, "all", "regeneration"),
             armorBonus = (levels.armor or 0) * catalog.armor.amount,
             commonCooldownReduction = 1 - 1 / math.max(0.1, 1 + speed),
+            -- ASde rows: only bonuses every weapon (or every projectile) receives.
+            commonDamageBonus = power, commonAreaBonus = area,
+            commonSizeBonus = weaponSize - 1, commonRangeBonus = weaponRange - 1,
+            commonDurationBonus = weaponLife - 1, commonProjectileSpeedBonus = projectileSpeed - 1,
             sets = {ember = Bonus(build, "set", "ember") >= 1, storm = Bonus(build, "set", "storm") >= 1,
                 frost = Bonus(build, "set", "frost") >= 1, blade = Bonus(build, "set", "blade") >= 1},
         }

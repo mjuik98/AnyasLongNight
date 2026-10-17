@@ -66,6 +66,34 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\AnyasLongNight
 
 ## 4. 최근 반영한 사항
 
+### 2026-10-18 능력치 설명 정리·마법 저항력 제거·반지 부위 표기
+
+- 능력치 항목 설명 7개에서 ‘특정 무기·계열만 받는 보너스는 각 무기 설명에서 확인할 수 있습니다.’를 지워 한 문장으로 줄였습니다(`assets/war3mapSkin.txt`).
+- 이 맵은 마법 저항력을 쓰지 않으므로 `ASde`의 표시 목록에서 `AS0F`를 뺐습니다(`statDetailRows`).
+- 반지 장비의 장착 부위 표기를 ‘반지 (두 칸 중 하나)’에서 ‘반지’로 바꿨습니다(`SurvivorEquipment.lua`의 `slotNames`). 빌드가 이 Lua로 `war3map.wts`의 장비 설명을 다시 만들며, 편집용 원본의 설명도 같은 방식으로 갱신했습니다.
+
+### 2026-10-18 ASde에 공통 무기 능력치 6개 추가
+
+- 통합 시 수정: 체력 재생 표시 변경 이후 장비·특성 창에서는 `nativeRegenerationPaused`가 false라서 공통 무기 항목이 0으로 보였습니다. 표시 여부는 모든 정지 사유에서 true인 `stats.combatPaused`(`SurvivorCombat.SetPaused`)로 판단합니다.
+- 엔진의 기존 능력치 항목 이름을 바꿔 다른 뜻으로 씁니다. `assets/war3mapSkin.txt`의 `[FrameDef]`에 `ASxx_LABEL`(이름)과 `ASxx_TOOLTIP`(설명)을 둡니다. 설치된 3.0.0.24268 클라이언트에서 키 17개(`AS01`~`AS11`, `AS0C`처럼 숫자 0)를 확인했습니다. `installGameInterfaceLabel`은 이 파일의 모든 LABEL/TOOLTIP을 반영하고 다른 설정은 보존합니다.
+- **0.1a의 이름 변경은 적용되지 않았습니다.** `AS07_LABEL`을 `[CustomSkin]`에 넣었는데, 그 섹션은 아이콘 등 그림 경로용입니다. World Editor로 저장된 LoTKT 맵의 `war3mapSkin.txt`를 보면 GlobalStrings 덮어쓰기(`GOLD`, `BONUS_*` 등)는 `[FrameDef]`에 들어갑니다. 빌드는 `[CustomSkin]`에 남은 능력치 키를 지우고, 그 섹션에 다른 내용이 없으면 섹션도 지웁니다. 에디터는 값을 `TRIGSTR_번호`로 저장하지만 여기서는 UTF-8 글자를 그대로 쓰며, 게임에서 정상 적용되는 것을 확인했습니다.
+- 값은 숨긴 아이템 능력치 패시브로 넣습니다. 기본 능력과 단위는 설치 클라이언트의 `AbilityMetaData.slk`·`AbilityData.slk`에서 확인했습니다(`build.mjs`의 `statDisplays`).
+
+| 항목 | 새 이름 | 패시브 | 기본 능력 · 필드 | 값 |
+| --- | --- | --- | --- | --- |
+| AS07 | 공통 무기 쿨다운 감소 | `HsCD` | `AIcr` · `Icr1` | `commonCooldownReduction` (전투 중에도 표시) |
+| AS09 | 공통 무기 피해 증가 | `HsDM` | `AIap` · `Isa1` | `commonDamageBonus` |
+| AS0E | 공통 무기 범위 증가 | `HsAR` | `AIlv` · `Ilv1` | `commonAreaBonus` |
+| AS0C | 공통 무기 크기 증가 | `HsSZ` | `AIsv` · `Isv1` | `commonSizeBonus` |
+| AS0A | 공통 무기 사거리 증가 | `HsRG` | `ALs1`(`AIvx`) · `Ivam` | `commonRangeBonus` |
+| AS04 | 공통 무기 지속시간 증가 | `HsDU` | `AIxr` · `Ocr1` | `commonDurationBonus × 100` |
+| AS10 | 공통 투사체 속도 증가 | `HsPS` | `AIsc` · `Ocr1` | `commonProjectileSpeedBonus × 100` |
+
+- `AIap`·`AIlv`·`AIsv`·`ALs1`은 비율(0.12=12%), `AIxr`·`AIsc`는 정수 백분율(10=10%)을 씁니다. 고정값 플래그(`Isa2` 등)와 치명타 배수(`Ixr2`)는 0으로 둡니다.
+- `HsCD`를 뺀 6개는 실제 엔진 효과(능력 증폭·흡혈·결의·생명력 흡수·치명타)입니다. 그래서 `SurvivorCombat.SetPaused`가 정지와 재개마다 `SurvivorNativeLoadout.RefreshStatDisplays`를 호출해, 정지 중에만 값을 넣고 유닛 정지를 풀기 전에 0으로 되돌립니다. 정지 사유(가방·상세 창·레벨업·스토리 등)와 관계없이 같은 규칙입니다. 정지 중 장비 교체는 인벤토리 틱의 `Refresh`가 다시 반영합니다.
+- 추가 투사체(`AS08` 후보)는 넣지 않았습니다. `all.extraProjectiles`가 파이어 투사체 수에만 적용되어 ‘공통’ 항목으로 표시하면 오해를 줍니다. 공통 범위(`all.areaPct`)는 현재 주는 출처가 없어 0%로 표시되며, 계열 장비의 범위 보너스는 각 무기 설명에 남습니다. `AS02`·`AS03`·`AS05`·`AS11`은 엔진이 따로 계산하거나 배수 기본값이 있을 수 있어 쓰지 않았습니다.
+- 전체 `npm test`(166개)를 통과했습니다. 새 모의 검사는 일시정지 중 값, 재개 전 0, 정지 중 장비 변경, 계열 보너스 제외, 정리를 확인합니다. `SetPaused`의 호출을 빼면 실패하는 것도 확인했습니다. 오브젝트 검사는 7개 패시브의 기본 능력·필드 열·값, 충돌 방지, 관계없는 바이트 보존을 확인합니다. 에셋·테스트 맵·편집용 원본(이전 원본: `dist/backups/*-before-stat-displays`, `*-before-sync-base`)에 반영하고 다시 읽어 확인했습니다. 사용자가 실제 Warcraft III에서 7개 항목 이름과 설명, 정지 중 값 표시(예: 피해 12%, 크기 15%)를 확인했습니다. 표시 순서는 `Asdf` 목록 순서가 아니라 엔진이 정합니다. 값이 장비·장신구 합계와 맞는지, 창을 닫은 뒤 전투 중 부작용(흡혈·치명타 등)이 없는지는 아직 따로 확인하지 않았습니다.
+
 ### 2026-10-18 최대 레벨 7, 수호의 인장, 경험치·효과 조정
 
 - `growthMaxLevel`을 7로 올리고 `SurvivorAugments`의 무기별 성장표와 잔향의 인장 표를 7단계로 늘렸습니다. 빌드의 `installGrowthObjects`(`build/build.mjs`)가 무기 표시 능력 HsW1~HsWC의 레벨 수를 7로, 6·7레벨의 능력치 0 행을 추가하며, 기존 툴팁 동기화가 84개 무기 레벨 설명을 씁니다.
@@ -83,7 +111,7 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\AnyasLongNight
 ### 2026-10-17 0.1a 버전 표기와 능력치 항목 이름
 
 - 맵 이름의 색상 코드를 유지한 채 `|cff8080ff포세이큰: 안야의 긴 밤 0.1a|r`로, 로딩 화면 자막을 `포세이큰 왕국 이전의 하룻밤 0.1a`로 변경했습니다. 원본 W3I가 참조하는 WTS 문자열 1·533만 교정하며, 로딩 화면 제목과 본문은 유지합니다.
-- 설치된 클라이언트의 `GlobalStrings.fdf`에서 실제 항목 키 `AS07_LABEL`을 확인했습니다. 게임 인터페이스의 `war3mapSkin.txt` / `[CustomSkin]`을 이용해 기존 ASde 항목 이름을 `공통 무기 쿨다운 감소`로 변경합니다. `assets/war3mapSkin.txt`가 빌드 입력이며, 기존 인터페이스의 다른 설정은 보존합니다.
+- 설치된 클라이언트의 `GlobalStrings.fdf`에서 실제 항목 키 `AS07_LABEL`을 확인했습니다. 게임 인터페이스의 `war3mapSkin.txt` / `[CustomSkin]`을 이용해 기존 ASde 항목 이름을 `공통 무기 쿨다운 감소`로 변경합니다(이 섹션으로는 적용되지 않아 2026-10-18에 `[FrameDef]`로 옮겼습니다). `assets/war3mapSkin.txt`가 빌드 입력이며, 기존 인터페이스의 다른 설정은 보존합니다.
 - 회복의 인장 수정·버튼 이동·ASde 표시 추가와 버전 변경의 사용자용 기록은 [PATCH_NOTES.md](PATCH_NOTES.md)에 정리했습니다. 체력 재생은 사용자가 플레이로 확인했으며, 새 ASde 항목과 이름·버튼 배치는 실제 화면에서 추가 확인이 필요합니다.
 
 ### 2026-10-17 ASde에 공통 무기 쿨다운 감소 표시

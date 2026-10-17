@@ -122,35 +122,55 @@ export function collectSources({profile = 'playtest'} = {}) {
     luaparse.parse(bundle, {luaVersion: '5.3'});
     return {bundle, snapshots, count: order.length, profile};
 }
+// Game-interface text overrides GlobalStrings.fdf keys from [FrameDef], the
+// section World Editor writes (its values are TRIGSTR_ references or literal
+// text). [CustomSkin] only holds art paths, so stat-row keys left there by the
+// 0.1a build are removed. Every other section and line is preserved.
+const statTextKey = /^\s*(AS[0-9A-F]{2}_(?:LABEL|TOOLTIP))\s*=/i;
 export function installGameInterfaceLabel(bytes, definition) {
-    const expected = definition.toString('utf8').match(/^AS07_LABEL=([^\r\n]+)\r?$/m);
-    assert(expected, 'Missing common cooldown interface label');
-    const source = (bytes ?? Buffer.from('[CustomSkin]\n')).toString('utf8');
-    const newline = source.includes('\r\n') ? '\r\n' : '\n';
-    let inCustom = false, sections = 0, written = false;
-    const output = [];
-    const append = () => {
-        if (output.length && !output.at(-1).endsWith('\n')) output.push(newline);
-        output.push('AS07_LABEL=' + expected[1] + newline); written = true;
-    };
-    for (const line of source.split(/(?<=\n)/)) {
+    const expected = new Map();
+    let inDefinition = false;
+    for (const line of definition.toString('utf8').split(/\r?\n/)) {
         const header = line.match(/^\s*\[([^\]]+)\]/);
-        if (header) {
-            if (inCustom && !written) append();
-            inCustom = header[1].toLowerCase() === 'customskin';
-            if (inCustom) assert(++sections === 1, 'Duplicate CustomSkin section');
-        }
-        if (inCustom && /^\s*AS07_LABEL\s*=/i.test(line)) {
-            assert(!written, 'Duplicate AS07_LABEL');
-            output.push(line.replace(/^(\s*AS07_LABEL\s*=)[^\r\n]*/i, (_, prefix) => prefix + expected[1]));
-            written = true;
-        } else output.push(line);
+        if (header) { inDefinition = header[1].toLowerCase() === 'framedef'; continue; }
+        const match = line.match(/^(AS[0-9A-F]{2}_(?:LABEL|TOOLTIP))=(.+)$/);
+        if (!match) continue;
+        assert(inDefinition, 'Interface definitions belong to [FrameDef]: ' + match[1]);
+        assert(!expected.has(match[1]), 'Duplicate interface definition: ' + match[1]);
+        expected.set(match[1], match[2]);
     }
-    if (!sections) {
-        if (output.length && !output.at(-1).endsWith('\n')) output.push(newline);
-        output.push('[CustomSkin]' + newline);
+    assert(expected.has('AS07_LABEL'), 'Missing common cooldown interface label');
+    const source = bytes?.toString('utf8') ?? '';
+    const newline = source.includes('\r\n') ? '\r\n' : '\n';
+    const sections = [{name: null, lines: []}];
+    for (const line of source.split(/(?<=\n)/).filter(Boolean)) {
+        const header = line.match(/^\s*\[([^\]]+)\]/);
+        if (header) sections.push({name: header[1].toLowerCase(), lines: [line]});
+        else sections.at(-1).lines.push(line);
     }
-    if (!written) append();
+    assert(sections.filter(section => section.name === 'framedef').length <= 1, 'Duplicate FrameDef section');
+    for (const section of sections.filter(section => section.name === 'customskin')) {
+        section.lines = section.lines.filter(line => !statTextKey.test(line));
+        if (section.lines.every((line, index) => index === 0 || !line.trim())) section.lines = [];
+    }
+    let frame = sections.find(section => section.name === 'framedef');
+    if (!frame) sections.push(frame = {name: 'framedef', lines: ['[FrameDef]' + newline]});
+    const written = new Set();
+    frame.lines = frame.lines.map(line => {
+        const key = line.match(statTextKey)?.[1].toUpperCase();
+        if (!key || !expected.has(key)) return line;
+        assert(!written.has(key), 'Duplicate ' + key);
+        written.add(key);
+        return line.replace(/^(\s*[^=]+=)[^\r\n]*/, (_, prefix) => prefix + expected.get(key));
+    });
+    let tail = frame.lines.length;
+    while (tail > 1 && !frame.lines[tail - 1].trim()) tail--;
+    const additions = [...expected].filter(([key]) => !written.has(key)).map(([key, value]) => key + '=' + value + newline);
+    if (additions.length && !frame.lines[tail - 1].endsWith('\n')) frame.lines[tail - 1] += newline;
+    frame.lines.splice(tail, 0, ...additions);
+    const output = sections.flatMap(section => section.lines);
+    // Separate a section that follows text without a final newline.
+    for (let i = 1; i < output.length; i++) if (!output[i - 1].endsWith('\n')) output[i - 1] += newline;
     return Buffer.from(output.join(''));
 }
 export function prepareUIResources(map, snapshots = new Map()) {
@@ -295,8 +315,22 @@ function prepareInterfaceTooltip(map,snapshots,preparedAssets=new Map()) {
     return {entries,assets};
 }
 // WC3 3.0.0.24268 AbilityMetaData.slk: repeat=4, data=1 (DataA), not DataD.
-// AS01 = health regeneration, AS07 = ability speed percentage, AS0F = magic resistance.
-// HsCD mirrors only the common Lua cooldown reduction through native AIcr.
+// AS01 = health regeneration stays native; AS0F (magic resistance) is unused here.
+// The other rows are renamed in assets/war3mapSkin.txt and mirror common Lua
+// stats through hidden item-stat passives (AbilityData.slk bases and units:
+// AIcr/AIap/AIlv/AIsv/ALs1 take fractions, AIxr/AIsc take whole percents).
+export const statDetailRows = 'AS01,AS07,AS09,AS0E,AS0C,AS0A,AS04,AS10';
+export const statDisplays = [
+    {id: 'HsCD', base: 'AIcr', name: '공통 무기 쿨다운 감소', value: 'Icr1', zero: ['Icr2']}, // AS07
+    {id: 'HsDM', base: 'AIap', name: '공통 무기 피해 증가', value: 'Isa1', zero: ['Isa2', 'Isa3']}, // AS09
+    {id: 'HsAR', base: 'AIlv', name: '공통 무기 범위 증가', value: 'Ilv1', zero: ['Ilv2']}, // AS0E
+    {id: 'HsSZ', base: 'AIsv', name: '공통 무기 크기 증가', value: 'Isv1', zero: ['Isv2']}, // AS0C
+    {id: 'HsRG', base: 'ALs1', name: '공통 무기 사거리 증가', value: 'Ivam', zero: []}, // AS0A
+    {id: 'HsDU', base: 'AIxr', name: '공통 무기 지속시간 증가', value: 'Ocr1', zero: [], real: ['Ixr2', 'Ixr3']}, // AS04
+    {id: 'HsPS', base: 'AIsc', name: '공통 투사체 속도 증가', value: 'Ocr1', zero: [], real: ['Ixr2']}, // AS10
+];
+// Column = metadata data index: the value is DataA, then DataB, DataC.
+const displayColumns = {Isa3: 3, Ixr3: 3};
 export function installStatDetails(bytes, skin = false) {
     const data = parseObjectData(bytes, 'ability');
     assert.deepEqual(serializeObjectData(data), bytes, 'Ability reader must round-trip losslessly');
@@ -316,37 +350,41 @@ export function installStatDetails(bytes, skin = false) {
         assert(field.type === 3 && field.level === 1 && [1,4].includes(field.column), 'Unexpected ASde supported-stat field layout');
         delete field.raw;
         field.column = 1;
-        field.value = 'AS01,AS07,AS0F';
+        field.value = statDetailRows;
     } else {
-        field = {id: 'Asdf', type: 3, level: 1, column: 1, value: 'AS01,AS07,AS0F', endId: 'ASde'};
+        field = {id: 'Asdf', type: 3, level: 1, column: 1, value: statDetailRows, endId: 'ASde'};
         row.fields.push(field);
     }
     delete row.raw;
-    assert(!data.tables[0].some(row => row.oldId === 'HsCD'), 'Cooldown display collides with a native override');
-    const displays = data.tables[1].filter(row => row.newId === 'HsCD');
-    assert(displays.length <= 1, 'Duplicate cooldown display');
-    let display = displays[0];
-    if (!display) {
-        display = {oldId:'AIcr',newId:'HsCD',extra:data.version===3?[0]:[],fields:[]};
-        data.tables[1].push(display);
-    }
-    assert.equal(display.oldId, 'AIcr', 'Cooldown display base collision');
-    const set = (id, type, value, level = 0, column = 0) => {
-        const fields = display.fields.filter(field => field.id===id && field.level===level && field.column===column);
-        assert(fields.length<=1, 'Duplicate cooldown display field: '+id);
-        if (fields.length) {
-            const field=fields[0]; assert.equal(field.type,type,'Cooldown display field type collision: '+id);
-            if (field.value===value) return;
-            delete field.raw; field.value=value;
-        } else display.fields.push({id,type,level,column,value,endId:'HsCD'});
-        delete display.raw;
-    };
-    set('anam',3,'공통 무기 쿨다운 감소');
-    set('aher',0,0); set('aite',0,0); set('alev',0,2);
-    set('abpx',0,0); set('abpy',0,-11);
-    for (let level=1; level<=2; level++) {
-        set('Icr1',2,0,level,1);
-        set('Icr2',0,0,level,2); // Flat Bonus=false: percentage, never seconds.
+    for (const spec of statDisplays) {
+        assert(!data.tables[0].some(row => row.oldId === spec.id), 'Stat display collides with a native override: ' + spec.id);
+        const displays = data.tables[1].filter(row => row.newId === spec.id);
+        assert(displays.length <= 1, 'Duplicate stat display: ' + spec.id);
+        let display = displays[0];
+        if (!display) {
+            display = {oldId:spec.base,newId:spec.id,extra:data.version===3?[0]:[],fields:[]};
+            data.tables[1].push(display);
+        }
+        assert.equal(display.oldId, spec.base, 'Stat display base collision: ' + spec.id);
+        const set = (id, type, value, level = 0, column = 0) => {
+            const fields = display.fields.filter(field => field.id===id && field.level===level && field.column===column);
+            assert(fields.length<=1, 'Duplicate stat display field: '+spec.id+'.'+id);
+            if (fields.length) {
+                const field=fields[0]; assert.equal(field.type,type,'Stat display field type collision: '+spec.id+'.'+id);
+                if (field.value===value) return;
+                delete field.raw; field.value=value;
+            } else display.fields.push({id,type,level,column,value,endId:spec.id});
+            delete display.raw;
+        };
+        set('anam',3,spec.name);
+        set('aher',0,0); set('aite',0,0); set('alev',0,2);
+        set('abpx',0,0); set('abpy',0,-11);
+        for (let level=1; level<=2; level++) {
+            set(spec.value,2,0,level,1);
+            // Flat Bonus=false keeps percentage rows; crit multipliers stay zero.
+            for (const id of spec.zero) set(id,0,0,level,displayColumns[id] ?? 2);
+            for (const id of spec.real ?? []) set(id,2,0,level,displayColumns[id] ?? 2);
+        }
     }
     return serializeObjectData(data);
 }

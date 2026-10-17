@@ -1632,8 +1632,12 @@ do
         -- inventory timer and final close correction keep actual HP frozen.
         -- Choice screens suppress it only when no native stats panel is open.
         stats.nativeRegenerationPaused = suppressRegeneration
+        -- Every pause reason, including interactive panels that keep regeneration visible.
+        stats.combatPaused = enable == true
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
         if inventoryVitals then SurvivorCombat.MaintainInventoryPause() end
+        -- ASde display passives are real engine modifiers: clear them before resuming.
+        if SurvivorNativeLoadout and SurvivorNativeLoadout.RefreshStatDisplays then SurvivorNativeLoadout.RefreshStatDisplays() end
         if inventoryFrozen then
             BlzUnitDisableAbility(hero, FourCC("Amov"), false, false)
         end
@@ -1854,7 +1858,7 @@ do
         difficulty = assert(SurvivorConfig.difficulties[difficultyId or "normal"], "Invalid combat difficulty")
         hero, stats, bounds, onKill, onDeath = unit, buildStats, arena, killCallback, deathCallback
         units[hero] = {enemy = false, alive = true}
-        stats.nativeRegenerationPaused = false
+        stats.nativeRegenerationPaused, stats.combatPaused = false, false
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
         heightLocation = Location(0, 0)
         queryGroup = CreateGroup()

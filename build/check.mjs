@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import fengari from 'fengari';
 import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo, mapInfo,
     parseUnits, serializeUnits, installPortraitUnits, portraitUnits, validatePortraitObjects, publishTransaction, editorBundle,
-    parseObjectData, serializeObjectData, installStatDetails, prepareStatDetails, installInterfaceTooltip, installHeroRegeneration,
+    parseObjectData, serializeObjectData, installStatDetails, prepareStatDetails, statDisplays, statDetailRows, installInterfaceTooltip, installHeroRegeneration,
     prepareHeroRegeneration, validateStrengthRegeneration, loadTalentCatalog, talentLua, installNativeTalents,
     prepareNativeTalents, loadItemTooltipCatalog, loadWeaponTooltipCatalog, cleanWeaponTooltipEntries,
     cleanItemTooltipText, cleanItemTooltipEntries, prepareItemTooltipCleanup,
@@ -1076,8 +1076,54 @@ SurvivorNativeLoadout.Cleanup();assert(GetUnitAbilityLevel(hero,'HsCD')==0)
 SurvivorNativeLoadout.Init(hero,build);Check(0);SurvivorNativeLoadout.Cleanup()
 local native=BlzSetAbilityRealLevelField;BlzSetAbilityRealLevelField=function()return false end
 local ok,message=pcall(SurvivorNativeLoadout.Init,hero,build)
-assert(not ok and tostring(message):find('native cooldown display'))
+assert(not ok and tostring(message):find('native stat display HsCD'))
 BlzSetAbilityRealLevelField=native;SurvivorNativeLoadout.Cleanup();assert(GetUnitAbilityLevel(hero,'HsCD')==0)
+`);
+
+suite('renamed ASde rows carry common bonuses only while combat is paused and clear before units resume', mocks,
+    [config,metrics,augments,combat,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+local hero,build=NewCombat('firebolt')
+local displays={HsDM={'Isa1','commonDamageBonus',1},HsAR={'Ilv1','commonAreaBonus',1},HsSZ={'Isv1','commonSizeBonus',1},
+    HsRG={'Ivam','commonRangeBonus',1},HsDU={'Ocr1','commonDurationBonus',100},HsPS={'Ocr1','commonProjectileSpeedBonus',100}}
+local function Active(code)
+    local spec=displays[code];local fields=BlzGetUnitAbility(hero,code).realFields[spec[1]]
+    return fields and fields[GetUnitAbilityLevel(hero,code)-1]or 0
+end
+local resuming,resumed=false,0
+local pause=PauseUnit
+PauseUnit=function(u,flag)
+    if resuming and not flag then
+        resumed=resumed+1
+        for code in pairs(displays)do assert(Active(code)==0,'A unit resumed before '..code..' was cleared')end
+    end
+    return pause(u,flag)
+end
+local function Resume()resuming=true;SurvivorCombat.SetPaused(false);resuming=false end
+local function Check(paused)
+    for code,spec in pairs(displays)do
+        assert(GetUnitAbilityLevel(hero,code)>0,'Missing display passive '..code)
+        local expected=paused and build.stats[spec[2]]*spec[3]or 0
+        assert(math.abs(Active(code)-expected)<1e-9,code..' shows '..tostring(Active(code))..' instead of '..expected)
+    end
+end
+SurvivorNativeLoadout.Init(hero,build);Check(false)
+for _,id in ipairs({'power','magnitude','reach','longevity','velocity'})do SurvivorAugments.Apply(id,build,hero)end
+SurvivorNativeLoadout.Refresh();Check(false)
+assert(build.stats.commonDamageBonus>0 and build.stats.commonSizeBonus>0 and build.stats.commonRangeBonus>0
+    and build.stats.commonDurationBonus>0 and build.stats.commonProjectileSpeedBonus>0 and build.stats.commonAreaBonus==0)
+SurvivorCombat.SetPaused(true,'INVENTORY');Check(true)
+assert(math.abs(Active('HsDM')-build.stats.commonDamageBonus)<1e-9 and Active('HsDU')>1,'Crit-based rows take whole percents')
+-- A gear change during the pause is reflected by the inventory tick's refresh.
+SurvivorAugments.SetEquipmentBonuses(build,{ring={all={damagePct=.10,areaPct=.20}},fire={firebolt={damagePct=.30}}},hero)
+SurvivorNativeLoadout.Refresh();Check(true)
+assert(math.abs(build.stats.commonAreaBonus-.20)<1e-9,'Weapon-specific bonuses stay out of the common rows')
+Resume();Check(false);assert(resumed>0,'The resume path must unpause the hero')
+SurvivorCombat.SetPaused(true,'CHOOSING');Check(true)
+Resume();Check(false)
+for _=1,10 do SurvivorNativeLoadout.Refresh()end;Check(false)
+SurvivorNativeLoadout.Cleanup()
+for code in pairs(displays)do assert(GetUnitAbilityLevel(hero,code)==0,'Cleanup keeps '..code)end
+PauseUnit=pause
 `);
 
 suite('engine regeneration stays visible in interactive panels while paused HP remains frozen', mocks + String.raw`
@@ -2151,7 +2197,7 @@ for _,entry in ipairs(SurvivorEquipment.Catalog())do
     assert(description:find(entry.description,1,true),'Retain the actual equipment stats')
     for _,text in ipairs({'가방 정리 시 장비가 삭제됩니다.','자동 공격 스킬을 새로 부여하지 않습니다.',
         '보유 중인 해당 무기에만 적용','기본 능력치는 각각 적용','세트 효과의 추가 피해는',
-        '확장 인벤토리에서 장착 시 적용'})do assert(not description:find(text,1,true))end
+        '확장 인벤토리에서 장착 시 적용','두 칸 중 하나'})do assert(not description:find(text,1,true))end
 end
 SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
 SurvivorAugments.Apply('power',build,hero);SurvivorNativeLoadout.Init(hero,build)
@@ -5909,21 +5955,32 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const row = data.tables[0].find(row => row.oldId === 'ASde');
     assert(row, 'Native ASde must have an explicit supported-stat list');
     const field = row.fields.find(field => field.id === 'Asdf');
-    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS07,AS0F']);
-    const display=data.tables[1].find(row=>row.newId==='HsCD');
-    assert.equal(display.oldId,'AIcr');
-    assert.equal(display.fields.find(field=>field.id==='alev').value,2);
-    assert.equal(display.fields.find(field=>field.id==='abpy').value,-11);
-    for(let level=1;level<=2;level++) {
-        const rate=display.fields.find(field=>field.id==='Icr1'&&field.level===level);
-        const flat=display.fields.find(field=>field.id==='Icr2'&&field.level===level);
-        assert.deepEqual([rate.type,rate.column,rate.value],[2,1,0]);
-        assert.deepEqual([flat.type,flat.column,flat.value],[0,2,0],'Percentage mode must not become flat seconds');
+    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS07,AS09,AS0E,AS0C,AS0A,AS04,AS10']);
+    // Bases and DataA..DataC columns from the installed 3.0.0.24268 AbilityMetaData/AbilityData.
+    const expected={HsCD:['AIcr','Icr1',{Icr2:[0,2]}],HsDM:['AIap','Isa1',{Isa2:[0,2],Isa3:[0,3]}],
+        HsAR:['AIlv','Ilv1',{Ilv2:[0,2]}],HsSZ:['AIsv','Isv1',{Isv2:[0,2]}],HsRG:['ALs1','Ivam',{}],
+        HsDU:['AIxr','Ocr1',{Ixr2:[2,2],Ixr3:[2,3]}],HsPS:['AIsc','Ocr1',{Ixr2:[2,2]}]};
+    assert.deepEqual(statDisplays.map(spec=>spec.id),Object.keys(expected));
+    for(const [id,[base,value,zeros]]of Object.entries(expected)){
+        const display=data.tables[1].find(row=>row.newId===id);
+        assert.equal(display.oldId,base,id);
+        assert.equal(display.fields.find(field=>field.id==='alev').value,2);
+        assert.equal(display.fields.find(field=>field.id==='abpy').value,-11);
+        assert.equal(display.fields.find(field=>field.id==='aite').value,0);
+        assert.equal(display.fields.length,6+2*(1+Object.keys(zeros).length),'No unexpected fields on '+id);
+        for(let level=1;level<=2;level++) {
+            const rate=display.fields.find(field=>field.id===value&&field.level===level);
+            assert.deepEqual([rate.type,rate.column,rate.value],[2,1,0],id+' starts at zero');
+            for(const [zero,[type,column]]of Object.entries(zeros)){
+                const flag=display.fields.find(field=>field.id===zero&&field.level===level);
+                assert.deepEqual([flag.type,flag.column,flag.value],[type,column,0],'Percentage mode and zero multipliers: '+id+'.'+zero);
+            }
+        }
     }
     assert.deepEqual(installStatDetails(output), output, 'ASde installation must be idempotent');
     const stripOwned = bytes => {const d = parseObjectData(bytes, 'ability');
         d.tables[0] = d.tables[0].filter(row => row.oldId !== 'ASde');
-        d.tables[1] = d.tables[1].filter(row => row.newId !== 'HsCD');return serializeObjectData(d);};
+        d.tables[1] = d.tables[1].filter(row => !statDisplays.some(spec => spec.id === row.newId));return serializeObjectData(d);};
     assert.deepEqual(stripOwned(output), stripOwned(source), 'Every unrelated ability record retains its raw bytes');
     for (const version of [1,2,3]) {
         const fixture = {version, kind: 'ability', tables: [[{oldId:'ASde',newId:'\0\0\0\0',extra:version===3?[0]:[],fields:[
@@ -5931,13 +5988,17 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
             {id:'anam',type:3,level:0,column:0,value:'keep native text',endId:'ASde'}]}],[]]};
         const bytes = serializeObjectData(fixture), installed = installStatDetails(bytes);
         const before = parseObjectData(bytes, 'ability').tables[0][0], after = parseObjectData(installed, 'ability').tables[0][0];
-        assert.equal(after.fields[0].value, 'AS01,AS07,AS0F');assert.deepEqual(after.fields[1].raw, before.fields[1].raw);
+        assert.equal(after.fields[0].value, statDetailRows);assert.deepEqual(after.fields[1].raw, before.fields[1].raw);
         assert.deepEqual(installStatDetails(bytes, true), installed, 'A skin override cannot restore unsupported stats');
         fixture.tables[0][0].fields[0].column = 2;
         assert.throws(() => installStatDetails(serializeObjectData(fixture)), /field layout/);
         fixture.tables[0][0].fields[0].column=1;
         fixture.tables[1].push({oldId:'Aamk',newId:'HsCD',extra:version===3?[0]:[],fields:[]});
-        assert.throws(()=>installStatDetails(serializeObjectData(fixture)),/base collision/);
+        assert.throws(()=>installStatDetails(serializeObjectData(fixture)),/base collision: HsCD/);
+        fixture.tables[1][0].oldId='AIcr';fixture.tables[1].push({oldId:'AIcr',newId:'HsRG',extra:version===3?[0]:[],fields:[]});
+        assert.throws(()=>installStatDetails(serializeObjectData(fixture)),/base collision: HsRG/);
+        fixture.tables[1].length=0;fixture.tables[0].push({oldId:'HsDM',newId:'\0\0\0\0',extra:version===3?[0]:[],fields:[]});
+        assert.throws(()=>installStatDetails(serializeObjectData(fixture)),/native override: HsDM/);
     }
     const patched = map.replace(prepared.entries), saved = openMap(patched);
     assert.deepEqual(saved.read('war3map.w3a'), output);
@@ -5945,7 +6006,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     verifyPreserved(original, patched, ['war3map.w3a','war3mapSkin.w3a']);
     assert(snapshots.size===2 && prepared.assets.size===2);
     assert.deepEqual(fs.readFileSync(path.join(root,'assets/war3map.w3a')), source, 'Preparation must not publish assets');
-    console.log('PASS ASde includes common cooldown percentage through a hidden AIcr passive; modes, skins, collisions, raw bytes and MPQ readback are preserved');
+    console.log('PASS ASde shows seven renamed common-stat rows through hidden item-stat passives; bases, columns, modes, skins, collisions, raw bytes and MPQ readback are preserved');
 }
 {
     const prepared = prepareHeroRegeneration(map), source = map.read('war3map.w3u');
@@ -5992,16 +6053,37 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const texture = entries.get('HeroSurvivorUI\\Transparent.tga');
     assert(texture && snapshots.size === 2, 'Texture and game interface labels are guarded build inputs');
     const definition=fs.readFileSync(path.join(root,'assets/war3mapSkin.txt'));
-    for(const before of [undefined,Buffer.from('[CustomSkin]\r\nKeep=unchanged\r\nAS07_LABEL=old label\r\n[Other]\r\nAS07_LABEL=other section\r\n'),
+    const lines=bytes=>bytes.toString('utf8').split(/\r?\n/);
+    const sectionOf=(text,key)=>{let section=null;for(const line of lines(text)){const header=line.match(/^\[([^\]]+)\]/);
+        if(header)section=header[1];else if(line.startsWith(key+'='))return section;}return undefined;};
+    for(const before of [undefined,
+        // The 0.1a build wrongly wrote stat text into [CustomSkin]; it must move to [FrameDef].
+        Buffer.from('[CustomSkin]\nAS07_LABEL=공통 무기 쿨다운 감소\n'),
+        Buffer.from('[CustomSkin]\r\nKeep=unchanged\r\nAS07_LABEL=old label\r\n[FrameDef]\r\nGOLD=TRIGSTR_7\r\nAS09_LABEL=old\r\n\r\n[Other]\r\nAS07_LABEL=other section\r\n'),
         Buffer.from('[CustomSkin]\nKeep=unchanged\n[Other]\nKeep=also unchanged'),Buffer.from('[Other]\nKeep=unchanged')]) {
         const after=installGameInterfaceLabel(before,definition);
-        assert(after.toString('utf8').includes('AS07_LABEL=공통 무기 쿨다운 감소'));
+        const text=after.toString('utf8');
+        for(const [key,name]of [['AS07','공통 무기 쿨다운 감소'],['AS09','공통 무기 피해 증가'],['AS0E','공통 무기 범위 증가'],['AS0C','공통 무기 크기 증가'],
+            ['AS0A','공통 무기 사거리 증가'],['AS04','공통 무기 지속시간 증가'],['AS10','공통 투사체 속도 증가']]){
+            assert.equal(lines(after).filter(line=>line===key+'_LABEL='+name).length,1,key+' label');
+            assert.equal(lines(after).filter(line=>line.startsWith(key+'_TOOLTIP=모든 ')).length,1,key+' tooltip');
+            assert(!lines(after).some(line=>line.startsWith(key+'_TOOLTIP=')&&line.includes('무기 설명에서')),'Stat tooltips stay one sentence: '+key);
+            assert.equal(sectionOf(after,key+'_LABEL'),'FrameDef','GlobalStrings overrides belong to [FrameDef]: '+key);
+            assert.equal(sectionOf(after,key+'_TOOLTIP'),'FrameDef');
+        }
+        assert.equal(lines(after).filter(line=>line==='[FrameDef]').length,1,'One FrameDef section');
+        assert(!/\[CustomSkin\]\r?\n(?:AS|$|\[)/.test(text),'No stat text or empty section remains in CustomSkin');
         assert.deepEqual(installGameInterfaceLabel(after,definition),after);
-        if(before)for(const line of before.toString('utf8').split(/\r?\n/).filter(line=>line.startsWith('Keep=')||line==='AS07_LABEL=other section'))
-            assert(after.toString('utf8').includes(line),'Unrelated interface labels must survive');
+        if(before)for(const line of lines(before).filter(line=>/^(Keep|GOLD)=/.test(line)||line==='AS07_LABEL=other section'))
+            assert(lines(after).includes(line),'Unrelated interface entries must survive');
     }
-    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[CustomSkin]\nAS07_LABEL=a\nAS07_LABEL=b\n'),definition),/Duplicate AS07_LABEL/);
-    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[CustomSkin]\n[CustomSkin]\n'),definition),/Duplicate CustomSkin/);
+    const legacy=installGameInterfaceLabel(Buffer.from('[CustomSkin]\nAS07_LABEL=공통 무기 쿨다운 감소\n'),definition).toString('utf8');
+    assert(legacy.startsWith('[FrameDef]\n')&&!legacy.includes('CustomSkin'),'A section holding only the old label is dropped');
+    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[FrameDef]\nAS07_LABEL=a\nAS07_LABEL=b\n'),definition),/Duplicate AS07_LABEL/);
+    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[FrameDef]\nas09_tooltip=a\nAS09_TOOLTIP=b\n'),definition),/Duplicate AS09_TOOLTIP/);
+    assert.throws(()=>installGameInterfaceLabel(null,Buffer.from('[FrameDef]\nAS07_LABEL=a\nAS07_LABEL=b\n')),/Duplicate interface definition/);
+    assert.throws(()=>installGameInterfaceLabel(null,Buffer.from('[CustomSkin]\nAS07_LABEL=a\n')),/belong to \[FrameDef\]/);
+    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[FrameDef]\n[framedef]\n'),definition),/Duplicate FrameDef/);
     for (let i = 21; i < texture.length; i += 4) assert.equal(texture[i], 0);
     const installed = map.replace(entries), readback = openMap(installed);
     assert.deepEqual(readback.read('HeroSurvivorUI\\Transparent.tga'), texture);
