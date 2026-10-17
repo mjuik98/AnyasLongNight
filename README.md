@@ -66,6 +66,12 @@ C:\Users\mjuik\Downloads\Warcraft III Edit\WorldEdit\AnyasLongNight
 
 ## 4. 최근 반영한 사항
 
+### 2026-10-18 능력치 설명 정리·마법 저항력 제거·반지 부위 표기
+
+- 능력치 항목 설명 7개에서 ‘특정 무기·계열만 받는 보너스는 각 무기 설명에서 확인할 수 있습니다.’를 지워 한 문장으로 줄였습니다(`assets/war3mapSkin.txt`).
+- 이 맵은 마법 저항력을 쓰지 않으므로 `ASde`의 표시 목록에서 `AS0F`를 뺐습니다(`statDetailRows`).
+- 반지 장비의 장착 부위 표기를 ‘반지 (두 칸 중 하나)’에서 ‘반지’로 바꿨습니다(`SurvivorEquipment.lua`의 `slotNames`). 빌드가 이 Lua로 `war3map.wts`의 장비 설명을 다시 만들며, 편집용 원본의 설명도 같은 방식으로 갱신했습니다.
+
 ### 2026-10-18 ASde에 공통 무기 능력치 6개 추가
 
 - 엔진의 기존 능력치 항목 이름을 바꿔 다른 뜻으로 씁니다. `assets/war3mapSkin.txt`의 `[FrameDef]`에 `ASxx_LABEL`(이름)과 `ASxx_TOOLTIP`(설명)을 둡니다. 설치된 3.0.0.24268 클라이언트에서 키 17개(`AS01`~`AS11`, `AS0C`처럼 숫자 0)를 확인했습니다. `installGameInterfaceLabel`은 이 파일의 모든 LABEL/TOOLTIP을 반영하고 다른 설정은 보존합니다.

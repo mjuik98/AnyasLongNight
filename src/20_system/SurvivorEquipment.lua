@@ -176,7 +176,7 @@ do
     }
     for _, entry in ipairs(catalog) do entry.flavor = entry.flavor or flavor[entry.id] end
     local slotNames = {Head = "머리", Chest = "가슴", Gloves = "장갑", Boots = "신발",
-        Trinket = "장신구 (장비용)", Ring = "반지 (두 칸 중 하나)", Primary = "무기", Offhand = "보조 무기"}
+        Trinket = "장신구 (장비용)", Ring = "반지", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
     for _, entry in ipairs(catalog) do byType[FourCC(entry.id)], byId[entry.id] = entry, entry end
     local hero, build, eventTrigger

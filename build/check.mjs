@@ -2149,7 +2149,7 @@ for _,entry in ipairs(SurvivorEquipment.Catalog())do
     assert(description:find(entry.description,1,true),'Retain the actual equipment stats')
     for _,text in ipairs({'가방 정리 시 장비가 삭제됩니다.','자동 공격 스킬을 새로 부여하지 않습니다.',
         '보유 중인 해당 무기에만 적용','기본 능력치는 각각 적용','세트 효과의 추가 피해는',
-        '확장 인벤토리에서 장착 시 적용'})do assert(not description:find(text,1,true))end
+        '확장 인벤토리에서 장착 시 적용','두 칸 중 하나'})do assert(not description:find(text,1,true))end
 end
 SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
 SurvivorAugments.Apply('power',build,hero);SurvivorNativeLoadout.Init(hero,build)
@@ -5898,7 +5898,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const row = data.tables[0].find(row => row.oldId === 'ASde');
     assert(row, 'Native ASde must have an explicit supported-stat list');
     const field = row.fields.find(field => field.id === 'Asdf');
-    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS07,AS09,AS0E,AS0C,AS0A,AS04,AS10,AS0F']);
+    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS07,AS09,AS0E,AS0C,AS0A,AS04,AS10']);
     // Bases and DataA..DataC columns from the installed 3.0.0.24268 AbilityMetaData/AbilityData.
     const expected={HsCD:['AIcr','Icr1',{Icr2:[0,2]}],HsDM:['AIap','Isa1',{Isa2:[0,2],Isa3:[0,3]}],
         HsAR:['AIlv','Ilv1',{Ilv2:[0,2]}],HsSZ:['AIsv','Isv1',{Isv2:[0,2]}],HsRG:['ALs1','Ivam',{}],
@@ -6010,6 +6010,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
             ['AS0A','공통 무기 사거리 증가'],['AS04','공통 무기 지속시간 증가'],['AS10','공통 투사체 속도 증가']]){
             assert.equal(lines(after).filter(line=>line===key+'_LABEL='+name).length,1,key+' label');
             assert.equal(lines(after).filter(line=>line.startsWith(key+'_TOOLTIP=모든 ')).length,1,key+' tooltip');
+            assert(!lines(after).some(line=>line.startsWith(key+'_TOOLTIP=')&&line.includes('무기 설명에서')),'Stat tooltips stay one sentence: '+key);
             assert.equal(sectionOf(after,key+'_LABEL'),'FrameDef','GlobalStrings overrides belong to [FrameDef]: '+key);
             assert.equal(sectionOf(after,key+'_TOOLTIP'),'FrameDef');
         }

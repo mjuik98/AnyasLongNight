@@ -315,11 +315,11 @@ function prepareInterfaceTooltip(map,snapshots,preparedAssets=new Map()) {
     return {entries,assets};
 }
 // WC3 3.0.0.24268 AbilityMetaData.slk: repeat=4, data=1 (DataA), not DataD.
-// AS01 = health regeneration, AS0F = magic resistance; both stay native.
+// AS01 = health regeneration stays native; AS0F (magic resistance) is unused here.
 // The other rows are renamed in assets/war3mapSkin.txt and mirror common Lua
 // stats through hidden item-stat passives (AbilityData.slk bases and units:
 // AIcr/AIap/AIlv/AIsv/ALs1 take fractions, AIxr/AIsc take whole percents).
-export const statDetailRows = 'AS01,AS07,AS09,AS0E,AS0C,AS0A,AS04,AS10,AS0F';
+export const statDetailRows = 'AS01,AS07,AS09,AS0E,AS0C,AS0A,AS04,AS10';
 export const statDisplays = [
     {id: 'HsCD', base: 'AIcr', name: '공통 무기 쿨다운 감소', value: 'Icr1', zero: ['Icr2']}, // AS07
     {id: 'HsDM', base: 'AIap', name: '공통 무기 피해 증가', value: 'Isa1', zero: ['Isa2', 'Isa3']}, // AS09
