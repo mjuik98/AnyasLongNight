@@ -122,6 +122,37 @@ export function collectSources({profile = 'playtest'} = {}) {
     luaparse.parse(bundle, {luaVersion: '5.3'});
     return {bundle, snapshots, count: order.length, profile};
 }
+export function installGameInterfaceLabel(bytes, definition) {
+    const expected = definition.toString('utf8').match(/^AS07_LABEL=([^\r\n]+)\r?$/m);
+    assert(expected, 'Missing common cooldown interface label');
+    const source = (bytes ?? Buffer.from('[CustomSkin]\n')).toString('utf8');
+    const newline = source.includes('\r\n') ? '\r\n' : '\n';
+    let inCustom = false, sections = 0, written = false;
+    const output = [];
+    const append = () => {
+        if (output.length && !output.at(-1).endsWith('\n')) output.push(newline);
+        output.push('AS07_LABEL=' + expected[1] + newline); written = true;
+    };
+    for (const line of source.split(/(?<=\n)/)) {
+        const header = line.match(/^\s*\[([^\]]+)\]/);
+        if (header) {
+            if (inCustom && !written) append();
+            inCustom = header[1].toLowerCase() === 'customskin';
+            if (inCustom) assert(++sections === 1, 'Duplicate CustomSkin section');
+        }
+        if (inCustom && /^\s*AS07_LABEL\s*=/i.test(line)) {
+            assert(!written, 'Duplicate AS07_LABEL');
+            output.push(line.replace(/^(\s*AS07_LABEL\s*=)[^\r\n]*/i, (_, prefix) => prefix + expected[1]));
+            written = true;
+        } else output.push(line);
+    }
+    if (!sections) {
+        if (output.length && !output.at(-1).endsWith('\n')) output.push(newline);
+        output.push('[CustomSkin]' + newline);
+    }
+    if (!written) append();
+    return Buffer.from(output.join(''));
+}
 export function prepareUIResources(map, snapshots = new Map()) {
     const name = 'HeroSurvivorUI\\Transparent.tga';
     const asset = path.join(root, 'assets/war3mapImported/HeroSurvivorUI/Transparent.tga');
@@ -151,7 +182,10 @@ export function prepareUIResources(map, snapshots = new Map()) {
         const header = Buffer.from(imports.subarray(0, 8)); header.writeUInt32LE(count + 1, 4);
         updated = Buffer.concat([header, imports.subarray(8), Buffer.from([13]), Buffer.from(name + '\0')]);
     }
-    return new Map([[name, bytes], ['war3map.imp', updated]]);
+    const skinAsset = path.join(root, 'assets/war3mapSkin.txt'), definition = fs.readFileSync(skinAsset);
+    snapshots.set(skinAsset, definition);
+    const skin = installGameInterfaceLabel(map.read('war3mapSkin.txt'), definition);
+    return new Map([[name, bytes], ['war3map.imp', updated], ['war3mapSkin.txt', skin]]);
 }
 export function replaceBundle(script, bundle) {
     const first = script.indexOf(firstMarker), last = script.indexOf(lastMarker);
@@ -261,8 +295,8 @@ function prepareInterfaceTooltip(map,snapshots,preparedAssets=new Map()) {
     return {entries,assets};
 }
 // WC3 3.0.0.24268 AbilityMetaData.slk: repeat=4, data=1 (DataA), not DataD.
-// AS01 = engine health regeneration, AS0F = native magic resistance.
-// Weapon modifiers remain Lua-owned; native attack speed/amplification would misreport them.
+// AS01 = health regeneration, AS07 = ability speed percentage, AS0F = magic resistance.
+// HsCD mirrors only the common Lua cooldown reduction through native AIcr.
 export function installStatDetails(bytes, skin = false) {
     const data = parseObjectData(bytes, 'ability');
     assert.deepEqual(serializeObjectData(data), bytes, 'Ability reader must round-trip losslessly');
@@ -280,15 +314,40 @@ export function installStatDetails(bytes, skin = false) {
     let field = fields[0];
     if (field) {
         assert(field.type === 3 && field.level === 1 && [1,4].includes(field.column), 'Unexpected ASde supported-stat field layout');
-        if (field.value === 'AS01,AS0F' && field.column === 1) return bytes;
         delete field.raw;
         field.column = 1;
-        field.value = 'AS01,AS0F';
+        field.value = 'AS01,AS07,AS0F';
     } else {
-        field = {id: 'Asdf', type: 3, level: 1, column: 1, value: 'AS01,AS0F', endId: 'ASde'};
+        field = {id: 'Asdf', type: 3, level: 1, column: 1, value: 'AS01,AS07,AS0F', endId: 'ASde'};
         row.fields.push(field);
     }
     delete row.raw;
+    assert(!data.tables[0].some(row => row.oldId === 'HsCD'), 'Cooldown display collides with a native override');
+    const displays = data.tables[1].filter(row => row.newId === 'HsCD');
+    assert(displays.length <= 1, 'Duplicate cooldown display');
+    let display = displays[0];
+    if (!display) {
+        display = {oldId:'AIcr',newId:'HsCD',extra:data.version===3?[0]:[],fields:[]};
+        data.tables[1].push(display);
+    }
+    assert.equal(display.oldId, 'AIcr', 'Cooldown display base collision');
+    const set = (id, type, value, level = 0, column = 0) => {
+        const fields = display.fields.filter(field => field.id===id && field.level===level && field.column===column);
+        assert(fields.length<=1, 'Duplicate cooldown display field: '+id);
+        if (fields.length) {
+            const field=fields[0]; assert.equal(field.type,type,'Cooldown display field type collision: '+id);
+            if (field.value===value) return;
+            delete field.raw; field.value=value;
+        } else display.fields.push({id,type,level,column,value,endId:'HsCD'});
+        delete display.raw;
+    };
+    set('anam',3,'공통 무기 쿨다운 감소');
+    set('aher',0,0); set('aite',0,0); set('alev',0,2);
+    set('abpx',0,0); set('abpy',0,-11);
+    for (let level=1; level<=2; level++) {
+        set('Icr1',2,0,level,1);
+        set('Icr2',0,0,level,2); // Flat Bonus=false: percentage, never seconds.
+    }
     return serializeObjectData(data);
 }
 export function prepareStatDetails(map, snapshots = new Map(), preparedAssets = new Map()) {

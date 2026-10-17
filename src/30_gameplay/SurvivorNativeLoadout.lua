@@ -12,6 +12,7 @@ do
     local weaponPositions = {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {2, 1}, {3, 1}}
     local hero, build
     local ownsStatDetails = false
+    local ownsCooldownDisplay, cooldownDisplayValue = false, nil
     local originalInterfaceText
     local items, textCache = {}, {}
     local descriptions, titles, descriptionRevision = {}, {}, nil
@@ -152,12 +153,40 @@ do
         end
         return item, true
     end
+    local function RefreshCooldownDisplay()
+        local id = FourCC("HsCD")
+        local level = GetUnitAbilityLevel(hero, id)
+        if level == 0 then
+            assert(UnitAddAbility(hero, id), "Missing native cooldown display HsCD")
+            ownsCooldownDisplay, cooldownDisplayValue = true, nil
+            UnitMakeAbilityPermanent(hero, true, id)
+            -- Keep the passive active for ASde, without taking a command-card slot.
+            BlzUnitDisableAbility(hero, id, false, true)
+            level = 1
+        end
+        local value = build.stats.commonCooldownReduction
+        if cooldownDisplayValue == value then return end
+        -- AIcr percentage mode mirrors the common Lua modifier. Automatic weapon
+        -- clocks never read native spell cooldowns, so this cannot apply it twice.
+        -- Suspend the old modifier, populate the inactive rank, then reactivate.
+        -- Updating an ability field alone can leave a cached passive bonus intact.
+        local nextLevel = level == 1 and 2 or 1
+        BlzUnitDisableAbility(hero, id, true, true)
+        local ability = assert(BlzGetUnitAbility(hero, id), "Missing cooldown display handle")
+        assert(BlzSetAbilityRealLevelField(ability, ConvertAbilityRealLevelField(FourCC("Icr1")), nextLevel - 1, value),
+            "Could not update native cooldown display")
+        SetUnitAbilityLevel(hero, id, nextLevel)
+        assert(GetUnitAbilityLevel(hero, id) == nextLevel, "Could not refresh native cooldown display")
+        BlzUnitDisableAbility(hero, id, false, true)
+        cooldownDisplayValue = value
+    end
     function SurvivorNativeLoadout.Refresh()
         if hero == nil or GetUnitTypeId(hero) == 0 then return end
         SurvivorMetrics.Count("loadout.refreshes")
         refreshSerial = refreshSerial + 1
         DeliverTalentPoint()
         local talentsChanged = ReconcileTalents()
+        RefreshCooldownDisplay()
         if descriptionRevision ~= build.revision then
             descriptions, titles, descriptionRevision = {}, {}, build.revision
         end
@@ -221,6 +250,7 @@ do
     function SurvivorNativeLoadout.Init(unit, runBuild)
         assert(hero == nil, "Clean native loadout before initialization")
         hero, build = unit, runBuild
+        assert(GetUnitAbilityLevel(hero, FourCC("HsCD")) == 0, "Cooldown display ID is already in use")
         assert(UnitInventorySize(hero) >= SurvivorConfig.trinketSlots, "Trinkets need the classic hero inventory")
         -- ASde joins the existing ASpc equipment interface; no extra command slot
         -- or custom input surface. build/build.mjs limits its native stat list.
@@ -260,11 +290,13 @@ do
                 SetUnitAbilityLevel(hero, FourCC(talents.base), campaignTalentLevel)
             end
             if ownsStatDetails then UnitRemoveAbility(hero, FourCC("ASde")) end
+            if ownsCooldownDisplay then UnitRemoveAbility(hero, FourCC("HsCD")) end
             UnitRemoveAbility(hero, FourCC("HsAE"))
             for _, code in pairs(weapons) do UnitRemoveAbility(hero, FourCC(code)) end
         end
         hero, build = nil, nil
         ownsStatDetails = false
+        ownsCooldownDisplay, cooldownDisplayValue = false, nil
         ownsTalentController, campaignTalentLevel = false, 0
         deliveringTalent = false
         talentEarned, talentGranted, talentSpent, refreshSerial, talentRetry = 0, 0, 0, 0, 0

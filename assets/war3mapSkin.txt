@@ -1,0 +1,2 @@
+[CustomSkin]
+AS07_LABEL=공통 무기 쿨다운 감소

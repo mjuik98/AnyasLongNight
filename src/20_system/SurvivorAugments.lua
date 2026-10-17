@@ -334,6 +334,7 @@ do
             moveSpeed = math.min(500, math.max(100, c.moveSpeed + Bonus(build, "all", "moveSpeed") + (levels.stride or 0) * catalog.stride.amount)),
             equipmentLife = math.floor(Bonus(build, "all", "maxLife") + (levels.vitality or 0) * catalog.vitality.amount),
             regeneration = c.heroRegeneration + (levels.renewal or 0) * catalog.renewal.amount + Bonus(build, "all", "regeneration"),
+            commonCooldownReduction = 1 - 1 / math.max(0.1, 1 + speed),
             sets = {ember = Bonus(build, "set", "ember") >= 1, storm = Bonus(build, "set", "storm") >= 1,
                 frost = Bonus(build, "set", "frost") >= 1, blade = Bonus(build, "set", "blade") >= 1},
         }

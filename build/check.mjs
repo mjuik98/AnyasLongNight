@@ -12,7 +12,7 @@ import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo
     prepareNativeTalents, loadItemTooltipCatalog, loadWeaponTooltipCatalog, cleanWeaponTooltipEntries,
     cleanItemTooltipText, cleanItemTooltipEntries, prepareItemTooltipCleanup,
     removeGoldObjectData, removeGoldStrings, removeGoldMisc,
-    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, root, baseMapPath} from './build.mjs';
+    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, installGameInterfaceLabel, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
 import {syncBase} from './sync-base.mjs';
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = fengari;
@@ -131,8 +131,17 @@ for _,name in ipairs({"BlzSetSpecialEffectScale","BlzSetSpecialEffectZ","BlzSetS
     "BlzSetItemExtendedTooltip","BlzSetItemDescription","SetItemDroppable","SetItemPawnable","SetItemDropOnDeath"}) do _G[name]=function() end end
 function GetUnitAbilityLevel(u,id) return u.abilities[id] or 0 end
 function UnitAddAbility(u,id) u.abilities[id]=1; return true end
-function UnitRemoveAbility(u,id) u.abilities[id]=nil end
+function UnitRemoveAbility(u,id) u.abilities[id]=nil;if u.abilityHandles then u.abilityHandles[id]=nil end end
 function SetUnitAbilityLevel(u,id,level) u.abilities[id]=level end
+function ConvertAbilityRealLevelField(id)return id end
+function BlzGetUnitAbility(u,id)
+    if GetUnitAbilityLevel(u,id)==0 then return nil end
+    u.abilityHandles=u.abilityHandles or {};u.abilityHandles[id]=u.abilityHandles[id]or{realFields={}}
+    return u.abilityHandles[id]
+end
+function BlzSetAbilityRealLevelField(a,field,level,value)
+    a.realFields[field]=a.realFields[field]or{};a.realFields[field][level]=value;return true
+end
 abilityWrites,abilityTooltips,abilityExtendedTooltips=0,{},{}
 function BlzGetAbilityTooltip(id)return abilityTooltips[id] or ('native '..id)end
 function BlzGetAbilityExtendedTooltip(id)return abilityExtendedTooltips[id] or ('native details '..id)end
@@ -990,6 +999,59 @@ UnitAddItem=function(u,item)inserted=item;u.bag={item};return true end
 assert(SurvivorNativeLoadout.Refresh()==true and displaced.removed and inserted.removed and hero.inventory[1]==nil)
 UnitAddItem=add;assert(SurvivorNativeLoadout.Refresh()==true and hero.inventory[1])
 SurvivorNativeLoadout.Cleanup()
+`);
+
+suite('native cooldown display tracks only common bonuses, refreshes passive ranks and preserves automatic weapon clocks', mocks,
+    [config,metrics,augments,combat,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+local hero,build=NewCombat('firebolt')
+local writes,active=0,0
+local write,rank=BlzSetAbilityRealLevelField,SetUnitAbilityLevel
+local disabled=false
+BlzUnitDisableAbility=function(u,id,disable,hide)
+    if id~='HsCD'then return end
+    assert(hide,'The display passive must not occupy a command slot')
+    disabled=disable
+    if disable then active=0 else
+        local fields=BlzGetUnitAbility(u,id).realFields.Icr1
+        active=fields and fields[GetUnitAbilityLevel(u,id)-1]or 0
+    end
+end
+BlzSetAbilityRealLevelField=function(...)writes=writes+1;return write(...)end
+SetUnitAbilityLevel=function(u,id,level)
+    rank(u,id,level)
+    if id=='HsCD'then
+        assert(disabled,'Suspend the old cached modifier before changing its rank')
+        local fields=BlzGetUnitAbility(u,id).realFields.Icr1
+        assert(fields and fields[level-1]~=nil,'The inactive rank must be populated before activation')
+    end
+end
+local function Check(expected)
+    local interval=build.stats.missileInterval
+    SurvivorNativeLoadout.Refresh()
+    assert(not disabled and math.abs(active-expected)<1e-9 and math.abs(build.stats.commonCooldownReduction-expected)<1e-9)
+    assert(build.stats.missileInterval==interval,'ASde synchronization must not apply cooldown reduction twice')
+end
+SurvivorNativeLoadout.Init(hero,build);Check(0)
+local unchanged=writes;for i=1,30 do Check(0)end;assert(writes==unchanged)
+SurvivorAugments.Apply('haste',build,hero);SurvivorAugments.Apply('haste',build,hero)
+Check(1-1/1.2)
+assert(math.abs(build.stats.missileInterval-SurvivorConfig.missileInterval/1.2)<1e-9)
+SurvivorCombat.SetPaused(true,'INVENTORY')
+SurvivorAugments.SetEquipmentBonuses(build,{ring={all={speedPct=.10}},fire={firebolt={speedPct=.30}}},hero)
+Check(1-1/1.3)
+assert(math.abs(build.stats.missileInterval-SurvivorConfig.missileInterval/1.6)<1e-9,
+    'Weapon-specific bonuses remain in their own weapon clocks')
+SurvivorAugments.SetTalents(build,{[1]='Ht1B'},hero);Check(1-1/1.4)
+SurvivorCombat.SetPaused(false);Check(1-1/1.4)
+SurvivorAugments.SetEquipmentBonuses(build,{},hero);Check(1-1/1.3)
+SurvivorAugments.SetTalents(build,{},hero);build.levels.haste=0;SurvivorAugments.Recalculate(build,hero);Check(0)
+UnitRemoveAbility(hero,'HsCD');Check(0)
+SurvivorNativeLoadout.Cleanup();assert(GetUnitAbilityLevel(hero,'HsCD')==0)
+SurvivorNativeLoadout.Init(hero,build);Check(0);SurvivorNativeLoadout.Cleanup()
+local native=BlzSetAbilityRealLevelField;BlzSetAbilityRealLevelField=function()return false end
+local ok,message=pcall(SurvivorNativeLoadout.Init,hero,build)
+assert(not ok and tostring(message):find('native cooldown display'))
+BlzSetAbilityRealLevelField=native;SurvivorNativeLoadout.Cleanup();assert(GetUnitAbilityLevel(hero,'HsCD')==0)
 `);
 
 suite('engine regeneration preserves renewal values, pauses every lifecycle and never stacks Lua healing', mocks + String.raw`
@@ -5790,10 +5852,21 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const row = data.tables[0].find(row => row.oldId === 'ASde');
     assert(row, 'Native ASde must have an explicit supported-stat list');
     const field = row.fields.find(field => field.id === 'Asdf');
-    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS0F']);
+    assert.deepEqual([field.type, field.level, field.column, field.value], [3, 1, 1, 'AS01,AS07,AS0F']);
+    const display=data.tables[1].find(row=>row.newId==='HsCD');
+    assert.equal(display.oldId,'AIcr');
+    assert.equal(display.fields.find(field=>field.id==='alev').value,2);
+    assert.equal(display.fields.find(field=>field.id==='abpy').value,-11);
+    for(let level=1;level<=2;level++) {
+        const rate=display.fields.find(field=>field.id==='Icr1'&&field.level===level);
+        const flat=display.fields.find(field=>field.id==='Icr2'&&field.level===level);
+        assert.deepEqual([rate.type,rate.column,rate.value],[2,1,0]);
+        assert.deepEqual([flat.type,flat.column,flat.value],[0,2,0],'Percentage mode must not become flat seconds');
+    }
     assert.deepEqual(installStatDetails(output), output, 'ASde installation must be idempotent');
     const stripOwned = bytes => {const d = parseObjectData(bytes, 'ability');
-        d.tables[0] = d.tables[0].filter(row => row.oldId !== 'ASde');return serializeObjectData(d);};
+        d.tables[0] = d.tables[0].filter(row => row.oldId !== 'ASde');
+        d.tables[1] = d.tables[1].filter(row => row.newId !== 'HsCD');return serializeObjectData(d);};
     assert.deepEqual(stripOwned(output), stripOwned(source), 'Every unrelated ability record retains its raw bytes');
     for (const version of [1,2,3]) {
         const fixture = {version, kind: 'ability', tables: [[{oldId:'ASde',newId:'\0\0\0\0',extra:version===3?[0]:[],fields:[
@@ -5801,10 +5874,13 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
             {id:'anam',type:3,level:0,column:0,value:'keep native text',endId:'ASde'}]}],[]]};
         const bytes = serializeObjectData(fixture), installed = installStatDetails(bytes);
         const before = parseObjectData(bytes, 'ability').tables[0][0], after = parseObjectData(installed, 'ability').tables[0][0];
-        assert.equal(after.fields[0].value, 'AS01,AS0F');assert.deepEqual(after.fields[1].raw, before.fields[1].raw);
+        assert.equal(after.fields[0].value, 'AS01,AS07,AS0F');assert.deepEqual(after.fields[1].raw, before.fields[1].raw);
         assert.deepEqual(installStatDetails(bytes, true), installed, 'A skin override cannot restore unsupported stats');
         fixture.tables[0][0].fields[0].column = 2;
         assert.throws(() => installStatDetails(serializeObjectData(fixture)), /field layout/);
+        fixture.tables[0][0].fields[0].column=1;
+        fixture.tables[1].push({oldId:'Aamk',newId:'HsCD',extra:version===3?[0]:[],fields:[]});
+        assert.throws(()=>installStatDetails(serializeObjectData(fixture)),/base collision/);
     }
     const patched = map.replace(prepared.entries), saved = openMap(patched);
     assert.deepEqual(saved.read('war3map.w3a'), output);
@@ -5812,7 +5888,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     verifyPreserved(original, patched, ['war3map.w3a','war3mapSkin.w3a']);
     assert(snapshots.size===2 && prepared.assets.size===2);
     assert.deepEqual(fs.readFileSync(path.join(root,'assets/war3map.w3a')), source, 'Preparation must not publish assets');
-    console.log('PASS native ASde shows only engine regeneration and magic resistance; level/column, skins, unrelated bytes, MPQ readback and idempotence are preserved');
+    console.log('PASS ASde includes common cooldown percentage through a hidden AIcr passive; modes, skins, collisions, raw bytes and MPQ readback are preserved');
 }
 {
     const prepared = prepareHeroRegeneration(map), source = map.read('war3map.w3u');
@@ -5857,7 +5933,18 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
 {
     const snapshots = new Map(), entries = prepareUIResources(map, snapshots);
     const texture = entries.get('HeroSurvivorUI\\Transparent.tga');
-    assert(texture && snapshots.size === 1, 'Container texture is guarded as a build input');
+    assert(texture && snapshots.size === 2, 'Texture and game interface labels are guarded build inputs');
+    const definition=fs.readFileSync(path.join(root,'assets/war3mapSkin.txt'));
+    for(const before of [undefined,Buffer.from('[CustomSkin]\r\nKeep=unchanged\r\nAS07_LABEL=old label\r\n[Other]\r\nAS07_LABEL=other section\r\n'),
+        Buffer.from('[CustomSkin]\nKeep=unchanged\n[Other]\nKeep=also unchanged'),Buffer.from('[Other]\nKeep=unchanged')]) {
+        const after=installGameInterfaceLabel(before,definition);
+        assert(after.toString('utf8').includes('AS07_LABEL=공통 무기 쿨다운 감소'));
+        assert.deepEqual(installGameInterfaceLabel(after,definition),after);
+        if(before)for(const line of before.toString('utf8').split(/\r?\n/).filter(line=>line.startsWith('Keep=')||line==='AS07_LABEL=other section'))
+            assert(after.toString('utf8').includes(line),'Unrelated interface labels must survive');
+    }
+    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[CustomSkin]\nAS07_LABEL=a\nAS07_LABEL=b\n'),definition),/Duplicate AS07_LABEL/);
+    assert.throws(()=>installGameInterfaceLabel(Buffer.from('[CustomSkin]\n[CustomSkin]\n'),definition),/Duplicate CustomSkin/);
     for (let i = 21; i < texture.length; i += 4) assert.equal(texture[i], 0);
     const installed = map.replace(entries), readback = openMap(installed);
     assert.deepEqual(readback.read('HeroSurvivorUI\\Transparent.tga'), texture);
@@ -5867,7 +5954,8 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const oldImports = map.read('war3map.imp'), imports = readback.read('war3map.imp');
     assert.deepEqual(imports.subarray(8, oldImports.length), oldImports.subarray(8), 'Existing import paths and flags are preserved');
     assert(imports.includes(Buffer.from('HeroSurvivorUI\\Transparent.tga\0')), 'The editor must retain the imported texture on save');
-    verifyPreserved(original, installed, ['HeroSurvivorUI\\Transparent.tga', 'war3map.imp', '(listfile)']);
+    assert.deepEqual(readback.read('war3mapSkin.txt'),entries.get('war3mapSkin.txt'));
+    verifyPreserved(original, installed, ['HeroSurvivorUI\\Transparent.tga', 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
     console.log('PASS fully transparent container texture is imported, listed, byte-verified and preserves unrelated map data');
 }
 {
