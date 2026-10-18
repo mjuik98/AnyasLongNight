@@ -1,7 +1,6 @@
 -- Prototype values, not final game balance. Uses stock Blizzard object IDs.
 SurvivorConfig = {
     autoStart = true, debugCommands = HERO_SURVIVOR_PROFILE ~= "release", playerId = 0,
-    heroId = FourCC("Uany"),
     talents = assert(HERO_SURVIVOR_TALENTS, "Missing native talent catalog"),
     stages = 5, heroLife = 300, moveSpeed = 300, heroRegeneration = 0,
     stageTimings = {
@@ -50,11 +49,30 @@ SurvivorConfig = {
         speed = 190, range = 550, interval = 2.4, projectileSpeed = 420},
     flyingEnemy = {life = 75, damage = 10,
         speed = 245, range = 400, interval = 2.0, projectileSpeed = 380},
-    enemyProjectileModel = "Abilities\\Weapons\\FireBallMissile\\FireBallMissile.mdl",
+    -- 3.0 DE-only hidden models keep enemy shots distinct from the meteor weapon.
+    enemyProjectileModel = [[abilities\spells\undead\cultistflame\cultistflamemissile.mdl]],
     bossLife = 2400, bossDamage = 25,
     bossMoveSpeed = 210, bossBlastInterval = 5, bossBlastDelay = 1.25,
     bossBlastRadius = 240, bossBlastDamage = 75,
-    bossImpactModel = "Abilities\\Spells\\Orc\\WarStomp\\WarStompCaster.mdl",
+    bossImpactModel = [[abilities\spells\undead\darkhorizon\darkhorizoncasterred.mdl]],
+    -- Boss/hazard blasts show one ground ring; its scale is radius / warningRingRadius.
+    warningRingModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]], warningRingRadius = 100,
+    specialMarkerModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]],
+    specialSafeMarkerModel = [[abilities\spells\other\spellmarker\spellmarkergreen.mdl]],
+    -- Elite dashes show only their direction: one arrow placed ahead of the elite.
+    -- Arrows repeat every dashArrowSpacing from the first offset to the dash end.
+    dashArrowModel = [[abilities\spells\other\spellmarker\spellarrowred.mdl]], dashArrowScale = 1.2, dashArrowOffset = 150,
+    dashArrowSpacing = 150,
+    -- One effect per role: weapon procs and set effects never share a model.
+    fireBurstModel = [[abilities\spells\other\renault\firenova.mdl]],
+    emberBurstModel = [[Abilities\Spells\Orc\WarStomp\WarStompCaster.mdl]],
+    bladeProcModel = [[abilities\spells\orc\criticalstrike\criticalstriketarget.mdl]],
+    reactionModel = [[doodads\underground\props\poisongas\poisonexplosion.mdl]], reactionScale = 0.08,
+    residueModel = [[doodads\underground\props\poisongas\poisonrise.mdl]],
+    jarExplosionModel = [[Objects\Spawnmodels\NightElf\NightElfLargeDeathExplode\NightElfLargeDeathExplode.mdl]],
+    -- Shown above enemies while the plague jar residue keeps damaging them.
+    jarMarkModel = [[Abilities\Spells\Undead\Curse\CurseTarget.mdl]],
+    soulBurstModel = [[abilities\spells\undead\witheringfire\witheringfireimpact.mdl]],
     equipmentDropChance = 0.04, equipmentPityKills = 24,
     equipmentPickupRadius = 140, equipmentGroundLimit = 24, equipmentGroundLifetime = 60,
     weaponSlots = 6, trinketSlots = 6, growthMaxLevel = 7,
@@ -63,6 +81,116 @@ SurvivorConfig = {
     startingTrinkets = {"power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"},
     startingWeapon = "firebolt",
     startingWeapons = {"firebolt", "chainlightning", "orbitblade", "frostshard"},
+    -- Playable heroes. A locked hero would be listed in setup but could not start a run.
+    defaultHero = "anya", heroOrder = {"anya", "putress"},
+    heroes = {
+        anya = {name = "안야", unitId = FourCC("Uany"), icon = [[ReplaceableTextures\CommandButtons\BTNAnya.blp]],
+            text = "화염·번개·칼날·얼음 무기로 몰려오는 적을 즉시 정리합니다."},
+        putress = {name = "퓨트리스", unitId = FourCC("HsPu"), icon = [[ReplaceableTextures\CommandButtons\BTNPutress.blp]],
+            text = "독·어둠·연금술 무기로 중독과 저주를 쌓아 반응으로 터뜨립니다.",
+            startingWeapons = {"plaguedart", "plaguetrail", "deathcoil", "plaguejar"}},
+    },
+    -- Weapon id -> owning hero, firing engine and catalog traits. weaponOrder is the cast order.
+    weaponOrder = {"frostnova", "blizzard", "meteor", "thunderorb", "returnblade", "orbitblade",
+        "firebolt", "flamefield", "chainlightning", "monsoon", "frontslash", "frostshard",
+        "plaguepool", "plaguejar", "catalyst", "boilingflask", "shadowscythe", "wraithguard",
+        "deathcoil", "plaguetrail", "soulchain", "acidvials", "corrosion", "plaguedart"},
+    weapons = {
+        firebolt = {hero = "anya", engine = "missile", element = "화염", projectile = true},
+        flamefield = {hero = "anya", engine = "zone", element = "화염"},
+        meteor = {hero = "anya", engine = "meteor", element = "화염"},
+        chainlightning = {hero = "anya", engine = "chain", element = "번개"},
+        monsoon = {hero = "anya", engine = "strike", element = "번개"},
+        thunderorb = {hero = "anya", engine = "orb", element = "번개", projectile = true},
+        orbitblade = {hero = "anya", engine = "orbit", element = "칼날"},
+        frontslash = {hero = "anya", engine = "cone", element = "칼날"},
+        returnblade = {hero = "anya", engine = "boomerang", element = "칼날", projectile = true},
+        frostshard = {hero = "anya", engine = "pierce", element = "얼음", projectile = true},
+        frostnova = {hero = "anya", engine = "nova", element = "얼음"},
+        blizzard = {hero = "anya", engine = "field", element = "얼음"},
+        -- Putress: per-level status tables (poison stacks, curse stacks, reaction multiplier).
+        -- thrown = delivered by a Bezier arc that lands on the locked target point; throwModel/throwScale
+        -- pick the flying model (default throw.model), model stays the landing/residue effect.
+        -- modelScale enlarges a profile weapon's own model; opaque keeps it fully visible.
+        -- tint overrides the school tint (a grey fog becomes a green poison pool); throwTint only the flying model.
+        plaguedart = {hero = "putress", engine = "pierce", element = "독", projectile = true,
+            poison = {2, 2, 3, 3, 3, 4, 4}, model = [[Abilities\Weapons\ChimaeraAcidMissile\ChimaeraAcidMissile.mdl]]},
+        plaguetrail = {hero = "putress", engine = "zone", element = "독",
+            poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Units\Undead\PlagueCloud\PlagueCloud.mdl]]},
+        corrosion = {hero = "putress", engine = "cone", element = "독",
+            poison = {3, 3, 4, 4, 4, 5, 5}, model = [[Abilities\Weapons\GreenDragonMissile\GreenDragonMissile.mdl]],
+            hitModel = [[abilities\spells\undead\minddeath\mindcontroldeath.mdl]]},
+        plaguepool = {hero = "putress", engine = "field", element = "독", projectile = true, thrown = true,
+            poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\CloudOfFog\CloudOfFog.mdl]], tint = {120, 255, 90},
+            throwModel = [[abilities\weapons\blightweavermissile\blightweavermissile.mdl]], throwScale = 2.2},
+        deathcoil = {hero = "putress", engine = "missile", element = "어둠", projectile = true,
+            curse = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Undead\DeathCoil\DeathCoilMissile.mdl]]},
+        soulchain = {hero = "putress", engine = "chain", element = "어둠",
+            curse = {1, 1, 1, 1, 1, 1, 1}, lightning = "SPLK", model = [[Abilities\Spells\Undead\Curse\CurseTarget.mdl]]},
+        wraithguard = {hero = "putress", engine = "orbit", element = "어둠",
+            cursedBonus = {0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3}, model = [[Abilities\Weapons\AvengerMissile\AvengerMissile.mdl]]},
+        shadowscythe = {hero = "putress", engine = "boomerang", element = "어둠", projectile = true,
+            curse = {1, 1, 1, 1, 1, 1, 1}, returnBonus = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5},
+            model = [[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]], modelScale = 1.6, opaque = true},
+        plaguejar = {hero = "putress", engine = "meteor", element = "연금술", projectile = true, thrown = true,
+            reaction = {1, 1, 1, 1, 1, 1, 1}, residuePoison = 1,
+            throwModel = [[Abilities\Spells\Other\StrongDrink\BrewmasterMissile.mdl]], throwScale = 2.6, throwTint = {255, 0, 255}},
+        catalyst = {hero = "putress", engine = "nova", element = "연금술",
+            reaction = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}, model = [[abilities\spells\undead\shadownova\shadownova.mdl]]},
+        boilingflask = {hero = "putress", engine = "orb", element = "연금술", projectile = true,
+            reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Weapons\RedDragonBreath\RedDragonMissile.mdl]], modelScale = 1.4},
+        acidvials = {hero = "putress", engine = "strike", element = "연금술", projectile = true, thrown = true,
+            reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]],
+            throwModel = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
+    },
+    -- One colour per weapon school: UI tags use the hex colour; tint multiplies
+    -- that school's effect models so poison (green), dark and alchemy stay apart.
+    elements = {
+        ["화염"] = {color = "ff8040"}, ["번개"] = {color = "80d0ff"}, ["칼날"] = {color = "d8d8e0"},
+        ["얼음"] = {color = "6fa8ff", label = "냉기"}, ["독"] = {color = "80ff60"},
+        ["어둠"] = {color = "b080ff", tint = {190, 130, 255}}, ["연금술"] = {color = "ffa040", tint = {255, 170, 70}},
+    },
+    -- Status effects applied by Putress weapons (draft values).
+    status = {poisonDamage = 6, poisonTick = 0.5, poisonMax = 12, poisonDuration = 4,
+        curseAmp = 0.08, curseMax = 3, curseDuration = 4, reactionDamage = 18, reactionCooldown = 0.5},
+    -- Bezier throws: control point height = distance * arc (clamped); flight time grows with distance.
+    throw = {arc = 0.35, minHeight = 120, maxHeight = 320, minFlight = 0.55, maxFlight = 0.8, flightRange = 800,
+        model = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
+    -- Core-engine Putress weapons override the engine base values below.
+    weaponBases = {
+        plaguedart = {frostDamage = 18, frostInterval = 1.4, frostSlow = 0, frostSlowDuration = 0},
+        plaguetrail = {zoneDamage = 6, zoneInterval = 4.0, zoneRadius = 200},
+        corrosion = {slashDamage = 30, slashInterval = 2.0, slashRange = 300},
+        deathcoil = {missileDamage = 34, missileInterval = 1.0},
+        soulchain = {chainDamage = 36, chainInterval = 2.4},
+        wraithguard = {bladeDamage = 24},
+        acidvials = {monsoonDamage = 40, monsoonInterval = 3.0, monsoonRadius = 130},
+    },
+    -- Engines name the derived stats fields they read. Profile engines read
+    -- stats.extraWeapons[id]; carry keeps overshoot time so zones never drift.
+    -- weapon = the engine's own weapon whose fields live flat on stats; any other
+    -- weapon on that engine reads the same field names from stats.views[id].
+    -- single = the count field reduced to 1 for each multicast extra attack.
+    weaponEngines = {
+        missile = {weapon = "firebolt", cast = "FireMissile", enabled = "missileEnabled", interval = "missileInterval",
+            damage = "missileDamage", single = "missileCount",
+            fields = {"missileEnabled", "missileRange", "missileCount", "missileLifetime", "missileDamage", "missileSpeed", "missileHitRadius", "missileScale", "fireEvolution"}},
+        zone = {weapon = "flamefield", cast = "CreateZone", enabled = "zoneEnabled", interval = "zoneInterval", damage = "zoneDamage", carry = true,
+            fields = {"zoneEnabled", "zoneRadius", "zoneDuration", "zoneDamage", "zonePulse"}},
+        chain = {weapon = "chainlightning", cast = "CastChainLightning", enabled = "chainEnabled", interval = "chainInterval", damage = "chainDamage",
+            fields = {"chainEnabled", "chainDamage", "chainRange", "chainTargets", "chainJumpRange"}},
+        -- Orbit casts its base and extra blades as one volley, so it has no snapshot.
+        orbit = {weapon = "orbitblade", cast = "CastBlades", enabled = "bladeEnabled", interval = "bladeInterval", volley = true},
+        strike = {weapon = "monsoon", cast = "CastMonsoon", enabled = "monsoonEnabled", interval = "monsoonInterval",
+            damage = "monsoonDamage", single = "monsoonCount",
+            fields = {"monsoonEnabled", "monsoonRange", "monsoonCount", "monsoonRadius", "monsoonDelay", "monsoonSpacing", "monsoonDamage"}},
+        cone = {weapon = "frontslash", cast = "CastFrontSlash", enabled = "slashEnabled", interval = "slashInterval", damage = "slashDamage",
+            fields = {"slashEnabled", "slashAngle", "slashRange", "slashSweepTime", "slashDuration", "slashScale", "slashDamage"}},
+        pierce = {weapon = "frostshard", cast = "FireFrostShard", enabled = "frostEnabled", interval = "frostInterval", damage = "frostDamage",
+            fields = {"frostEnabled", "frostRange", "frostSpeed", "frostLifetime", "frostHitRadius", "frostDamage", "frostPierce", "frostSlow", "frostSlowDuration", "frostEvolution", "frostScale"}},
+        nova = {profile = true}, field = {profile = true}, meteor = {profile = true},
+        orb = {profile = true}, boomerang = {profile = true},
+    },
     missileInterval = 0.8, missileDamage = 40, missileSpeed = 850, missileRange = 1000,
     missileLifetime = 5,
     -- World Z = terrain Z + current fly height + model-relative height.
@@ -112,9 +240,35 @@ SurvivorConfig = {
         meteor = {interval = 5.5, damage = 110, radius = 220, range = 800, duration = 2, speed = 1, pulse = 0.5, slow = 0},
         thunderorb = {interval = 3, damage = 20, radius = 150, range = 850, duration = 2.5, speed = 400, pulse = 0.35, slow = 0},
         returnblade = {interval = 2.8, damage = 42, radius = 60, range = 650, duration = 3, speed = 650, pulse = 1, slow = 0},
+        plaguepool = {interval = 5, damage = 8, radius = 220, range = 750, duration = 4, speed = 1, pulse = 0.5, slow = 0.15},
+        plaguejar = {interval = 5, damage = 70, radius = 200, range = 800, duration = 2, speed = 1, pulse = 0.5, slow = 0},
+        catalyst = {interval = 3.5, damage = 45, radius = 200, range = 650, duration = 0.5, speed = 1, pulse = 1, slow = 0},
+        boilingflask = {interval = 3.5, damage = 14, radius = 140, range = 700, duration = 3, speed = 380, pulse = 0.4, slow = 0},
+        shadowscythe = {interval = 3, damage = 38, radius = 60, range = 650, duration = 3, speed = 650, pulse = 1, slow = 0},
     },
     frostModel = "Abilities\\Spells\\Other\\FrostArrows\\NagaColdArrowMissile.mdl",
 }
+
+SurvivorConfig.heroes.anya.startingWeapons = SurvivorConfig.startingWeapons
+do
+    local c, listed = SurvivorConfig, {}
+    for _, id in ipairs(c.weaponOrder) do
+        local weapon = assert(c.weapons[id], "Unregistered weapon " .. id)
+        assert(c.heroes[weapon.hero] and c.weaponEngines[weapon.engine], "Invalid weapon registry entry " .. id)
+        listed[id] = true
+    end
+    for id in pairs(c.weapons) do assert(listed[id], "Weapon missing from cast order " .. id) end
+    for id, weapon in pairs(c.weapons) do
+        local engine = c.weaponEngines[weapon.engine]
+        assert((engine.profile == true) == (c.extraWeapons[id] ~= nil), "Profile engines need an extraWeapons profile " .. id)
+        assert(engine.profile or engine.weapon == id or c.weaponBases[id], "Core-engine weapon needs base overrides " .. id)
+    end
+    for _, profile in pairs(c.heroes) do
+        for _, id in ipairs(profile.startingWeapons) do
+            assert(c.weapons[id] and c.heroes[c.weapons[id].hero] == profile, "Foreign starting weapon " .. id)
+        end
+    end
+end
 
 function SurvivorConfig.EnemyScaling(stage, stageElapsed, isBoss)
     local c = SurvivorConfig

@@ -1071,7 +1071,7 @@ do
             local pip = BlzCreateFrameByType("BACKDROP", "HeroSurvivorRerollPip" .. i, panel, "", 0)
             BlzFrameSetSize(pip, 0.011, 0.011)
             BlzFrameSetPoint(pip, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, 0.08 + (i - 1) * 0.016, -0.382)
-            BlzFrameSetTexture(pip, "ReplaceableTextures\\CommandButtons\\BTNReincarnation.blp", 0, true)
+            BlzFrameSetTexture(pip, "ReplaceableTextures\\CommandButtons\\BTNReplay-Loop.blp", 0, true)
             BlzFrameSetEnable(pip, false)
             BlzFrameSetLevel(pip, 5)
             rerollPips[i] = pip
@@ -1497,8 +1497,9 @@ do
                 BlzFrameSetTexture(card.icon, augment.icon, 0, true)
                 local kind = weapon and (augment.kind == "evolution" and "[무기 진화]" or "[무기]")
                     or augment.kind == "trinket" and "[장신구]" or "[회복]"
-                BlzFrameSetText(card.title, (weapon and "|cffffd77d" or "|cff8adbe8") .. kind .. "\n"
-                    .. (augment.element and ("[" .. augment.element .. "] ") or "") .. augment.name .. "|r")
+                local color = weapon and "|cffffd77d" or "|cff8adbe8"
+                BlzFrameSetText(card.title, color .. kind .. "|r\n"
+                    .. (augment.element and (SurvivorAugments.ElementTag(augment.element) .. " ") or "") .. color .. augment.name .. "|r")
                 BlzFrameSetText(card.description, SurvivorAugments.ChoiceLabel(id, build) .. "\n" .. augment.text)
                 BlzFrameSetText(card.preview, augment.kind == "evolution" and "진화 선택 후 변경 불가" or SurvivorAugments.Preview(id, build))
                 BlzFrameSetText(card.hint, "클릭하여 선택")

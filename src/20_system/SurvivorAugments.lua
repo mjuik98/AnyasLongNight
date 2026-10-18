@@ -4,6 +4,8 @@ SurvivorAugments = {}
 do
     local icons = [[ReplaceableTextures\CommandButtons\]]
     local order = {"firebolt", "flamefield", "chainlightning", "orbitblade", "monsoon", "frontslash", "frostshard", "frostnova", "blizzard", "meteor", "thunderorb", "returnblade",
+        "plaguedart", "plaguetrail", "corrosion", "plaguepool", "deathcoil", "soulchain", "wraithguard", "shadowscythe",
+        "plaguejar", "catalyst", "boilingflask", "acidvials",
         "power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"}
     local catalog = {
         firebolt = {kind = "weapon", name = "잿불 화살", icon = icons .. "BTNFireBolt.blp",
@@ -25,6 +27,18 @@ do
         meteor = {kind = "weapon", name = "잿불 낙성", icon = icons .. "BTNInfernal.blp", text = "적 위치에 운석·잔불 · 지상·공중"},
         thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "전진 후 머무는 지속 타격 구체 · 지상·공중"},
         returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "왕복 칼날 · 구간별 1회 타격 · 지상"},
+        plaguedart = {kind = "weapon", name = "역병 침", icon = icons .. "BTNEnvenomedSpear.blp", text = "관통 투사체·중독 · 지상·공중"},
+        plaguetrail = {kind = "weapon", name = "역병 발자취", icon = icons .. "BTNPlagueCloud.blp", text = "발밑 독구름·중독 · 지상"},
+        corrosion = {kind = "weapon", name = "부식의 숨결", icon = icons .. "BTNCorrosiveBreath.blp", text = "전방 부채꼴·중독 · 지상"},
+        plaguepool = {kind = "weapon", name = "역병 웅덩이", icon = icons .. "BTNOrbOfVenom.blp", text = "포물선 투척 후 독 웅덩이·중독·둔화 · 지상·공중"},
+        deathcoil = {kind = "weapon", name = "죽음의 고리", icon = icons .. "BTNDeathCoil.blp", text = "추적 투사체·저주 · 지상·공중"},
+        soulchain = {kind = "weapon", name = "영혼 사슬", icon = icons .. "BTNCurse.blp", text = "연쇄 공격·저주 · 지상·공중"},
+        wraithguard = {kind = "weapon", name = "망령의 호위", icon = icons .. "BTNUnholyFrenzy.blp", text = "회전 망령·저주 대상 추가 피해 · 지상"},
+        shadowscythe = {kind = "weapon", name = "그림자 낫", icon = icons .. "BTNShadowStrike.blp", text = "왕복 낫·저주 · 지상"},
+        plaguejar = {kind = "weapon", name = "역병 단지", icon = icons .. "BTNUnstableConcoction.blp", text = "포물선 투척 범위·반응·중독 잔여물 · 지상·공중"},
+        catalyst = {kind = "weapon", name = "휘발성 촉매", icon = icons .. "BTNRejuvenationPotion.blp", text = "무작위 적 위치 폭발·강한 반응 · 지상·공중"},
+        boilingflask = {kind = "weapon", name = "끓어오르는 플라스크", icon = icons .. "BTNChemicalRage.blp", text = "전진 후 머무는 구체·반응 · 지상·공중"},
+        acidvials = {kind = "weapon", name = "산성 약병 산포", icon = icons .. "BTNHealingSalve.blp", text = "무작위 포물선 투척·반응 · 지상·공중"},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
             text = "모든 무기 피해 증가", statName = "모든 무기 피해", amount = 0.10},
         haste = {kind = "trinket", name = "신속의 인장", icon = icons .. "BTNGlove.blp",
@@ -63,6 +77,18 @@ do
         frostshard = "차가운 화살은 도주하는 발을 붙든다.",
         frostnova = "남은 흔적을 따라 냉기가 터져 나온다.",
         blizzard = "얼어붙은 납골당의 겨울이 다시 깨어난다.",
+        plaguedart = "작은 상처 하나면 충분하다.",
+        plaguetrail = "지나간 자리마다 역병이 남는다.",
+        corrosion = "숨 한 번에 갑옷도 살도 무르게 녹는다.",
+        plaguepool = "던진 약병이 깨지면 땅이 앓기 시작한다.",
+        deathcoil = "죽음은 망설이는 자부터 고른다.",
+        soulchain = "끊어진 영혼은 다음 영혼을 붙든다.",
+        wraithguard = "저주받은 자에게 망령은 더 가까이 다가선다.",
+        shadowscythe = "낫은 거둔 것을 주인에게 되돌린다.",
+        plaguejar = "봉인을 깨면 실험은 시작된다.",
+        catalyst = "한 방울로 고여 있던 독을 깨운다.",
+        boilingflask = "끓어 넘친 약액은 식을 줄 모른다.",
+        acidvials = "흩뿌린 약병마다 다른 실험 결과.",
         power = "긴 수색을 버틸 힘을 새긴 인장.",
         haste = "망설임보다 빠르게 움직이기 위해.",
         velocity = "놓치기 전에 닿아야 한다.",
@@ -76,11 +102,10 @@ do
         armor = "무너진 성벽 대신 스스로를 지킨다.",
     }
     for id, text in pairs(flavor) do catalog[id].flavor = text end
-    local elements = {firebolt = "화염", flamefield = "화염", meteor = "화염",
-        chainlightning = "번개", monsoon = "번개", thunderorb = "번개",
-        orbitblade = "칼날", frontslash = "칼날", returnblade = "칼날",
-        frostshard = "얼음", frostnova = "얼음", blizzard = "얼음"}
-    for id, element in pairs(elements) do catalog[id].element = element end
+    for id, weapon in pairs(SurvivorConfig.weapons) do
+        assert(catalog[id] and catalog[id].kind == "weapon", "Registered weapon missing from catalog " .. id)
+        catalog[id].element, catalog[id].hero = weapon.element, weapon.hero
+    end
     local multiCounts, multiDamage = {1, 1, 2, 2, 2, 3, 3}, {0.30, 0.45, 0.30, 0.40, 0.50, 0.35, 0.45}
     -- Each max-level weapon chooses one permanent branch without another equipment requirement.
     local evolutions = {
@@ -108,12 +133,39 @@ do
         {"thunderorb", "과부하", "타격 간격 -40% · 피해 +20%", {pulse = 0.6, damage = 1.2}},
         {"returnblade", "윤회 칼날", "지속 +80% · 투사체 속도 +20%", {duration = 1.8, speed = 1.2}},
         {"returnblade", "거인 절단검", "피해 +70% · 타격 크기 +50% · 투사체 속도 -20%", {damage = 1.7, radius = 1.5, size = 1.5, speed = 0.8}},
+        -- Putress. Element 7 adjusts status: poison/curse add stacks, reactionMul multiplies,
+        -- other keys set flags read by combat. mode reuses an Anya engine branch.
+        {"plaguedart", "역병 산탄", "발사 수 +2 · 피해 -15% · 관통 +2", {frostDamage = 0.85}, {frostCount = 2, frostPierce = 2}},
+        {"plaguedart", "괴사 주입", "피해 +100% · 관통 1명 · 중독 +4스택", {frostDamage = 2}, {}, {frostPierce = 1}, {poison = 4}},
+        {"plaguetrail", "역병 행렬", "반경 +45% · 피해 -10%", {zoneRadius = 1.45, zoneDamage = 0.9}},
+        {"plaguetrail", "농축 독무", "타격 간격 -35% · 반경 -15% · 중독 +1스택", {zonePulse = 0.65, zoneRadius = 0.85}, {}, {}, {poison = 1}},
+        {"corrosion", "부식 폭풍", "각도 180도 · 거리 +35%", {slashRange = 1.35}, {}, {slashAngle = 180}},
+        {"corrosion", "녹아내림", "피해 +100% · 각도 60도 고정 · 중독 +2스택", {slashDamage = 2}, {}, {slashAngle = 60}, {poison = 2}},
+        {"plaguepool", "늪지 범람", "반경 +40% · 지속 +30%", {radius = 1.4, duration = 1.3}},
+        {"plaguepool", "맹독 샘", "피해 +50% · 타격 간격 -20% · 반경 -20%", {damage = 1.5, pulse = 0.8, radius = 0.8}},
+        {"deathcoil", "망자의 합창", "발사 수 +2 · 피해 -15% · 저주 +1스택", {missileDamage = 0.85}, {missileCount = 2}, {}, {curse = 1}},
+        {"deathcoil", "최후의 선고", "피해 +80% · 쿨다운 20% 증가 · 저주 3스택 대상 피해 +60%", {missileDamage = 1.8, missileInterval = 1.2}, {}, {}, {maxCurseBonus = 0.6}},
+        {"soulchain", "망령의 그물", "연쇄 대상 +4 · 전이 거리 +35%", {chainJumpRange = 1.35}, {chainTargets = 4}},
+        {"soulchain", "영혼 착취", "피해 +100% · 연쇄 3명 고정 · 저주 +1스택 · 연쇄 증가 효과는 피해 배율로 전환", {chainDamage = 2}, {}, {chainTargets = 3}, {curse = 1}},
+        {"wraithguard", "망령 군단", "망령 +2 · 3초마다 바깥으로 퍼졌다가 돌아옴(최대 반경 165%)", {}, {bladeCount = 2}, {}, {}, "evolution7"},
+        {"wraithguard", "수의 칼날", "전방에 망령을 모아 왕복 베기 · 후방 노출 · 타격 간격 -40% · 반경 -20%", {bladeHitInterval = 0.6, bladeRadius = 0.8}, {}, {}, {}, "evolution8"},
+        {"shadowscythe", "수확의 원", "지속 +80% · 투사체 속도 +20%", {duration = 1.8, speed = 1.2}},
+        {"shadowscythe", "사신의 낫", "피해 +70% · 타격 크기 +50% · 투사체 속도 -20%", {damage = 1.7, radius = 1.5, size = 1.5, speed = 0.8}},
+        {"plaguejar", "연쇄 폭발", "착탄 후 주변 2곳에 작은 단지(피해 40%)", {}, {}, {}, {splitJars = 2}},
+        {"plaguejar", "대역병", "반경 +40% · 잔여물 지속 +100%", {radius = 1.4, duration = 2}},
+        {"catalyst", "불안정 혼합물", "쿨다운 40% 감소 · 반경 -15%", {interval = 0.6, radius = 0.85}},
+        {"catalyst", "임계 반응", "반응 시 중독 전부 소모 · 소모 스택당 피해 +30%", {}, {}, {}, {reactionAll = true, reactionMul = 1.3}},
+        {"boilingflask", "증기 구름", "반경 +45% · 지속 +50% · 투사체 속도 -25%", {radius = 1.45, duration = 1.5, speed = 0.75}},
+        {"boilingflask", "과열", "타격 간격 -40% · 피해 +20%", {pulse = 0.6, damage = 1.2}},
+        {"acidvials", "약병 폭우", "약병 +2개 · 범위 +20%", {monsoonRadius = 1.2}, {monsoonCount = 2}},
+        {"acidvials", "농축 산성", "피해 +300% · 약병 1개 고정 · 개수 증가 효과는 피해 배율로 전환", {monsoonDamage = 4}, {}, {monsoonCount = 1}},
     }
     for i, definition in ipairs(evolutions) do
         local weapon, id = definition[1], "evolution" .. i
         catalog[id] = {kind = "evolution", weapon = weapon, name = definition[2], text = definition[3],
             icon = catalog[weapon].icon, element = catalog[weapon].element,
-            multiply = definition[4], add = definition[5] or {}, set = definition[6] or {}}
+            multiply = definition[4], add = definition[5] or {}, set = definition[6] or {},
+            status = definition[7] or {}, mode = definition[8]}
         order[#order + 1] = id
     end
     -- Growth tables cover levels 1..7; the seventh level unlocks evolution.
@@ -130,7 +182,7 @@ do
     local slashPower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
     local frostPower, frostPierce = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, {2, 3, 3, 4, 5, 5, 6}
     local bonusKeys = {
-        set = {ember = true, storm = true, frost = true, blade = true},
+        set = {ember = true, storm = true, frost = true, blade = true, apothecary = true, gravewarden = true, apprentice = true},
         all = {damagePct = true, speedPct = true, areaPct = true, moveSpeed = true, extraProjectiles = true, duration = true, maxLife = true,
             projectileSpeedPct = true, projectileSizePct = true, projectileRangePct = true, projectileDurationPct = true},
         firebolt = {damagePct = true, speedPct = true, areaPct = true, extraProjectiles = true},
@@ -141,11 +193,24 @@ do
         frontslash = {damagePct = true, speedPct = true, areaPct = true, angle = true},
         frostshard = {damagePct = true, speedPct = true, extraPierce = true, slowDuration = true},
     }
+    for id in pairs(SurvivorConfig.weaponBases) do
+        bonusKeys[id] = {damagePct = true, speedPct = true, areaPct = true, duration = true, extraProjectiles = true,
+            extraStrikes = true, extraPierce = true, angle = true}
+    end
 
     for id in pairs(SurvivorConfig.extraWeapons) do
         bonusKeys[id] = {damagePct = true, speedPct = true, areaPct = true, duration = true, slowDuration = true}
     end
+    -- Putress gear may also add poison stacks or reaction damage to one weapon.
+    for id, weapon in pairs(SurvivorConfig.weapons) do
+        if weapon.hero == "putress" then bonusKeys[id].poison, bonusKeys[id].reactionPct = true, true end
+    end
     function SurvivorAugments.Get(id) return catalog[id] end
+    -- Coloured school tag, e.g. "[독]" in green. labelled: use the gear wording (냉기).
+    function SurvivorAugments.ElementTag(element, labelled)
+        local school = SurvivorConfig.elements[element]
+        return "|cff" .. school.color .. "[" .. (labelled and school.label or element) .. "]|r"
+    end
     function SurvivorAugments.Level(build, id) return build.levels[id] or 0 end
     -- Trailing zeros are dropped so 30.0 reads as 30 and 2.40 as 2.4.
     local function StatNumber(value, decimals)
@@ -170,50 +235,68 @@ do
         assert(kind, "Weapon text must end with its target type")
         local hit = " (" .. target .. ")"
         local rows, notes
-        if id == "firebolt" then
-            rows = {{"투사체 수", stats.missileCount}, {"피해", stats.missileDamage, 1, hit},
-                {"거리", stats.missileRange}, {"범위", stats.missileHitRadius},
-                {"지속 시간", stats.missileLifetime, 2, "초"}, {"쿨다운", stats.missileInterval, 2, "초"},
-                {"투사체 속도", stats.missileSpeed}}
-        elseif id == "flamefield" then
-            rows = {{"피해", stats.zoneDamage, 1, hit}, {"범위", stats.zoneRadius},
-                {"지속 시간", stats.zoneDuration, 2, "초"}, {"쿨다운", stats.zoneInterval, 2, "초"},
-                {"타격 간격", stats.zonePulse, 2, "초"}}
-        elseif id == "chainlightning" then
-            rows = {{"최대 대상", stats.chainTargets}, {"피해", stats.chainDamage, 1, hit},
-                {"거리", stats.chainRange}, {"쿨다운", stats.chainInterval, 2, "초"},
-                {"연쇄 거리", stats.chainJumpRange}}
+        local weapon = SurvivorConfig.weapons[id]
+        local engine, v = weapon.engine, stats.views and stats.views[id] or stats
+        if engine == "missile" then
+            rows = {{"투사체 수", v.missileCount}, {"피해", v.missileDamage, 1, hit},
+                {"거리", v.missileRange}, {"범위", v.missileHitRadius},
+                {"지속 시간", v.missileLifetime, 2, "초"}, {"쿨다운", v.missileInterval, 2, "초"},
+                {"투사체 속도", v.missileSpeed}}
+        elseif engine == "zone" then
+            rows = {{"피해", v.zoneDamage, 1, hit}, {"범위", v.zoneRadius},
+                {"지속 시간", v.zoneDuration, 2, "초"}, {"쿨다운", v.zoneInterval, 2, "초"},
+                {"타격 간격", v.zonePulse, 2, "초"}}
+        elseif engine == "chain" then
+            rows = {{"최대 대상", v.chainTargets}, {"피해", v.chainDamage, 1, hit},
+                {"거리", v.chainRange}, {"쿨다운", v.chainInterval, 2, "초"},
+                {"연쇄 거리", v.chainJumpRange}}
             notes = {"전이마다 피해 -15%"}
-        elseif id == "orbitblade" then
-            rows = {{"투사체 수", stats.bladeCount}, {"피해", stats.bladeDamage, 1, hit},
-                {"범위", stats.bladeRadius}, {"지속 시간", stats.bladeDuration, 2, "초"},
-                {"쿨다운", stats.bladeInterval, 2, "초"}, {"타격 간격", stats.bladeHitInterval, 2, "초"}}
-            notes = {"새 칼날은 기존 칼날과 중첩"}
-        elseif id == "monsoon" then
-            rows = {{"낙뢰 수", stats.monsoonCount}, {"피해", stats.monsoonDamage, 1, hit},
-                {"거리", stats.monsoonRange}, {"범위", stats.monsoonRadius}, {"쿨다운", stats.monsoonInterval, 2, "초"}}
-        elseif id == "frontslash" then
-            rows = {{"피해", stats.slashDamage, 1, hit}, {"거리", stats.slashRange},
-                {"지속 시간", stats.slashDuration, 2, "초"}, {"쿨다운", stats.slashInterval, 2, "초"},
-                {"각도", stats.slashAngle, 0, "도"}}
+        elseif engine == "orbit" then
+            rows = {{"투사체 수", v.bladeCount}, {"피해", v.bladeDamage, 1, hit},
+                {"범위", v.bladeRadius}, {"지속 시간", v.bladeDuration, 2, "초"},
+                {"쿨다운", v.bladeInterval, 2, "초"}, {"타격 간격", v.bladeHitInterval, 2, "초"}}
+            notes = {id == "orbitblade" and "새 칼날은 기존 칼날과 중첩" or "새 망령은 기존 망령과 중첩"}
+        elseif engine == "strike" then
+            rows = {{weapon.thrown and "약병 수" or "낙뢰 수", v.monsoonCount}, {"피해", v.monsoonDamage, 1, hit},
+                {"거리", v.monsoonRange}, {"범위", v.monsoonRadius}, {"쿨다운", v.monsoonInterval, 2, "초"}}
+        elseif engine == "cone" then
+            rows = {{"피해", v.slashDamage, 1, hit}, {"거리", v.slashRange},
+                {"지속 시간", v.slashDuration, 2, "초"}, {"쿨다운", v.slashInterval, 2, "초"},
+                {"각도", v.slashAngle, 0, "도"}}
             notes = {"대상별 1회 타격"}
-        elseif id == "frostshard" then
-            rows = {{"최대 관통", stats.frostPierce}, {"피해", stats.frostDamage, 1, hit},
-                {"거리", stats.frostRange}, {"범위", stats.frostHitRadius},
-                {"지속 시간", stats.frostLifetime, 2, "초"}, {"쿨다운", stats.frostInterval, 2, "초"},
-                {"투사체 속도", stats.frostSpeed},
-                {"둔화", string.format("-%.0f%% · %s초", stats.frostSlow * 100, StatNumber(stats.frostSlowDuration, 2))}}
+        elseif engine == "pierce" then
+            rows = {{"투사체 수", (v.frostCount or 1) > 1 and v.frostCount or 0},
+                {"최대 관통", v.frostPierce}, {"피해", v.frostDamage, 1, hit},
+                {"거리", v.frostRange}, {"범위", v.frostHitRadius},
+                {"지속 시간", v.frostLifetime, 2, "초"}, {"쿨다운", v.frostInterval, 2, "초"},
+                {"투사체 속도", v.frostSpeed}}
+            if v.frostSlow > 0 then
+                rows[#rows + 1] = {"둔화", string.format("-%.0f%% · %s초", v.frostSlow * 100, StatNumber(v.frostSlowDuration, 2))}
+            end
         else
             local w = stats.extraWeapons[id]
             rows = {{"피해", w.damage, 1, hit}, {"거리", w.range}, {"범위", w.radius},
                 {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"}}
             if id == "meteor" then notes = {"잔불: 충돌 피해 20%/타격"}
-            elseif id == "returnblade" then notes = {"귀환 후 남은 시간 동안 재발사"} end
+            elseif id == "plaguejar" then notes = {"잔여물: 충돌 피해 20%/타격"}
+            elseif engine == "boomerang" then notes = {"귀환 후 남은 시간 동안 재발사"} end
+        end
+        local status = stats.status and stats.status[id]
+        if status then
+            rows[#rows + 1] = {"중독", status.poison, 0, "스택/타격"}
+            rows[#rows + 1] = {"저주", status.curse, 0, "스택/타격"}
+            rows[#rows + 1] = {"반응 피해", status.reaction * 100, 0, "%"}
+            rows[#rows + 1] = {"저주 대상 추가 피해", status.cursedBonus * 100, 0, "%"}
+            rows[#rows + 1] = {"귀환 시 저주 대상 추가 피해", status.returnBonus * 100, 0, "%"}
+            if status.reaction > 0 then
+                notes = notes or {}
+                notes[#notes + 1] = status.reactionAll and "반응: 중독 전부 소모" or "반응: 중독 절반 소모"
+            end
         end
         if stats.multiCount > 0 then
             rows[#rows + 1] = {"추가 공격", string.format("%d회 (개별 피해 %.0f%%)", stats.multiCount, stats.multiDamage * 100)}
         end
-        local lines = {kind}
+        local lines = {SurvivorAugments.ElementTag(entry.element) .. " " .. kind}
         StatLines(lines, rows)
         for _, note in ipairs(notes or {}) do lines[#lines + 1] = "※ " .. note end
         return table.concat(lines, "\n")
@@ -259,15 +342,20 @@ do
         local talents = build.talentTotals and build.talentTotals[scope]
         return (values and values[key] or 0) + (talents and talents[key] or 0)
     end
+    local bases = {}
+    for id, overrides in pairs(SurvivorConfig.weaponBases) do
+        bases[id] = setmetatable({}, {__index = function(_, key)
+            local value = overrides[key]
+            if value == nil then value = SurvivorConfig[key] end
+            return value
+        end})
+    end
     local function Calculate(build)
         if not build.equipmentTotals then
             build = {levels = build.levels, evolutions = build.evolutions,
                 equipmentTotals = EquipmentTotals(build.equipmentBonuses), talentTotals = build.talentTotals}
         end
         local c, levels = SurvivorConfig, build.levels
-        local fire, zone = levels.firebolt or 0, levels.flamefield or 0
-        local chain, blade = levels.chainlightning or 0, levels.orbitblade or 0
-        local storm, slash, frost = levels.monsoon or 0, levels.frontslash or 0, levels.frostshard or 0
         local power = (levels.power or 0) * catalog.power.amount + Bonus(build, "all", "damagePct")
         local speed = (levels.haste or 0) * catalog.haste.amount + Bonus(build, "all", "speedPct")
         local area = Bonus(build, "all", "areaPct")
@@ -279,62 +367,78 @@ do
         local projectileSize = math.min(3, math.max(0.1, 1 + (levels.magnitude or 0) * catalog.magnitude.amount + Bonus(build, "all", "projectileSizePct") + Bonus(build, "all", "sizePct")))
         local projectileRange = math.max(0.1, 1 + (levels.reach or 0) * catalog.reach.amount + Bonus(build, "all", "projectileRangePct") + Bonus(build, "all", "rangePct"))
         local projectileLife = math.max(0.1, 1 + (levels.longevity or 0) * catalog.longevity.amount + Bonus(build, "all", "projectileDurationPct") + Bonus(build, "all", "durationPct"))
+        -- Core engines: one formula set serves each engine's own weapon (flat on stats)
+        -- and every other weapon on that engine (stats.views[id]).
+        local function EngineFields(engine, id, level, b)
+            local on = level > 0
+            local damage = math.max(0.1, 1 + power + Bonus(build, id, "damagePct"))
+            local haste = math.max(0.1, 1 + speed + Bonus(build, id, "speedPct"))
+            local areaBonus = math.max(0.1, 1 + area + Bonus(build, id, "areaPct"))
+            if engine == "missile" then
+                return {missileEnabled = on,
+                    missileSpeed = math.min(4000, b.missileSpeed * projectileSpeed),
+                    missileScale = 0.8 * projectileSize, missileHitRadius = b.missileHitRadius * projectileSize,
+                    missileLifetime = math.min(20, b.missileLifetime * projectileLife),
+                    missileDamage = on and b.missileDamage * missilePower[level] * damage or 0,
+                    missileInterval = math.max(0.15, b.missileInterval / haste),
+                    missileCount = on and math.min(12, math.max(1, missileCount[level]
+                        + math.floor(Bonus(build, "all", "extraProjectiles") + Bonus(build, id, "extraProjectiles")))) or 0,
+                    missileRange = math.min(2500, b.missileRange * projectileRange * areaBonus)}
+            elseif engine == "zone" then
+                return {zoneEnabled = on,
+                    zoneDamage = on and b.zoneDamage * zonePower[level] * damage or 0,
+                    zoneInterval = math.max(0.5, b.zoneInterval / haste),
+                    zonePulse = math.max(0.1, b.zonePulse),
+                    zoneRadius = math.min(900, b.zoneRadius * weaponSize * weaponRange * (on and zoneRadius[level] or 1) * areaBonus),
+                    zoneDuration = math.max(0.5, (b.zoneDuration + (on and zoneDuration[level] or 0)
+                        + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife)}
+            elseif engine == "chain" then
+                return {chainEnabled = on,
+                    chainDamage = on and b.chainDamage * chainPower[level] * damage or 0,
+                    chainTargets = on and math.min(20, math.ceil(chainTargets[level] * weaponLife)) or 0,
+                    chainInterval = math.max(0.4, b.chainInterval / haste),
+                    chainRange = math.min(2500, b.chainRange * weaponRange * areaBonus),
+                    chainJumpRange = math.min(1200, b.chainJumpRange * weaponSize * weaponRange * areaBonus)}
+            elseif engine == "orbit" then
+                return {bladeEnabled = on,
+                    bladeDamage = on and b.bladeDamage * bladePower[level] * damage or 0,
+                    bladeCount = on and bladeCount[level] or 0,
+                    bladeHitRadius = b.bladeHitRadius * weaponSize, bladeScale = 0.85 * weaponSize,
+                    bladeHitInterval = b.bladeHitInterval,
+                    bladeInterval = math.max(1, b.bladeInterval / haste),
+                    bladeDuration = b.bladeDuration * weaponLife,
+                    bladeRadius = math.min(450, b.bladeRadius * weaponRange * areaBonus),
+                    bladePeriod = math.max(0.6, b.bladePeriod)}
+            elseif engine == "strike" then
+                return {monsoonEnabled = on,
+                    monsoonDamage = on and b.monsoonDamage * monsoonPower[level] * damage or 0,
+                    monsoonCount = on and math.min(8, math.max(1, math.ceil((monsoonCount[level]
+                        + math.floor(Bonus(build, id, "extraStrikes"))) * weaponLife))) or 0,
+                    monsoonInterval = math.max(0.5, b.monsoonInterval / haste),
+                    monsoonDelay = 0.12, monsoonSpacing = 0.18,
+                    monsoonRange = math.min(2500, b.monsoonRange * weaponRange * areaBonus),
+                    monsoonRadius = math.min(600, b.monsoonRadius * weaponSize * areaBonus)}
+            elseif engine == "cone" then
+                return {slashEnabled = on,
+                    slashDamage = on and b.slashDamage * slashPower[level] * damage or 0,
+                    slashInterval = math.max(0.3, b.slashInterval / haste),
+                    slashScale = weaponSize, slashSweepTime = 0.24,
+                    slashDuration = math.max(0, 0.6 * (weaponLife - 1)),
+                    slashRange = math.min(750, b.slashRange * weaponSize * weaponRange * areaBonus),
+                    slashAngle = math.min(180, math.max(20, b.slashAngle + math.max(0, level - 1) * 10 + Bonus(build, id, "angle")))}
+            end
+            assert(engine == "pierce", "Unknown core engine")
+            return {frostEnabled = on,
+                frostDamage = on and b.frostDamage * frostPower[level] * damage or 0,
+                frostPierce = on and math.min(12, math.max(1, frostPierce[level] + math.floor(Bonus(build, id, "extraPierce")))) or 0,
+                frostInterval = math.max(0.25, b.frostInterval / haste),
+                frostSpeed = math.min(4000, b.frostSpeed * projectileSpeed), frostScale = projectileSize,
+                frostRange = math.min(2500, b.frostRange * projectileRange), frostHitRadius = b.frostHitRadius * projectileSize,
+                frostLifetime = math.min(20, b.frostLifetime * projectileLife), frostSlow = b.frostSlow, frostCount = 1,
+                frostSlowDuration = math.max(0.1, (b.frostSlowDuration + Bonus(build, id, "slowDuration")) * weaponLife)}
+        end
         local result = {
             multiCount = multiCounts[levels.multicast or 0] or 0, multiDamage = multiDamage[levels.multicast or 0] or 0,
-            missileEnabled = fire > 0, zoneEnabled = zone > 0,
-            chainEnabled = chain > 0, bladeEnabled = blade > 0,
-            monsoonEnabled = storm > 0, slashEnabled = slash > 0, frostEnabled = frost > 0,
-            missileSpeed = math.min(4000, c.missileSpeed * projectileSpeed),
-            missileScale = 0.8 * projectileSize, missileHitRadius = c.missileHitRadius * projectileSize,
-            missileLifetime = math.min(20, c.missileLifetime * projectileLife),
-            missileDamage = fire > 0 and c.missileDamage * missilePower[fire]
-                * math.max(0.1, 1 + power + Bonus(build, "firebolt", "damagePct")) or 0,
-            missileInterval = math.max(0.15, c.missileInterval / math.max(0.1, 1 + speed + Bonus(build, "firebolt", "speedPct"))),
-            missileCount = fire > 0 and math.min(12, math.max(1, missileCount[fire]
-                + math.floor(Bonus(build, "all", "extraProjectiles") + Bonus(build, "firebolt", "extraProjectiles")))) or 0,
-            missileRange = math.min(2500, c.missileRange * projectileRange * math.max(0.1, 1 + area + Bonus(build, "firebolt", "areaPct"))),
-            zoneDamage = zone > 0 and c.zoneDamage * zonePower[zone]
-                * math.max(0.1, 1 + power + Bonus(build, "flamefield", "damagePct")) or 0,
-            zoneInterval = math.max(0.5, c.zoneInterval / math.max(0.1, 1 + speed + Bonus(build, "flamefield", "speedPct"))),
-            zonePulse = math.max(0.1, c.zonePulse),
-            zoneRadius = math.min(900, c.zoneRadius * weaponSize * weaponRange * (zone > 0 and zoneRadius[zone] or 1)
-                * math.max(0.1, 1 + area + Bonus(build, "flamefield", "areaPct"))),
-            zoneDuration = math.max(0.5, (c.zoneDuration + (zone > 0 and zoneDuration[zone] or 0)
-                + Bonus(build, "all", "duration") + Bonus(build, "flamefield", "duration")) * weaponLife),
-            chainDamage = chain > 0 and c.chainDamage * chainPower[chain]
-                * math.max(0.1, 1 + power + Bonus(build, "chainlightning", "damagePct")) or 0,
-            chainTargets = chain > 0 and math.min(20, math.ceil(chainTargets[chain] * weaponLife)) or 0,
-            chainInterval = math.max(0.4, c.chainInterval / math.max(0.1, 1 + speed + Bonus(build, "chainlightning", "speedPct"))),
-            chainRange = math.min(2500, c.chainRange * weaponRange * math.max(0.1, 1 + area + Bonus(build, "chainlightning", "areaPct"))),
-            chainJumpRange = math.min(1200, c.chainJumpRange * weaponSize * weaponRange * math.max(0.1, 1 + area + Bonus(build, "chainlightning", "areaPct"))),
-            bladeDamage = blade > 0 and c.bladeDamage * bladePower[blade]
-                * math.max(0.1, 1 + power + Bonus(build, "orbitblade", "damagePct")) or 0,
-            bladeCount = blade > 0 and bladeCount[blade] or 0,
-            bladeHitRadius = c.bladeHitRadius * weaponSize, bladeScale = 0.85 * weaponSize,
-            bladeHitInterval = c.bladeHitInterval,
-            bladeInterval = math.max(1, c.bladeInterval / math.max(0.1, 1 + speed + Bonus(build, "orbitblade", "speedPct"))),
-            bladeDuration = c.bladeDuration * weaponLife,
-            bladeRadius = math.min(450, c.bladeRadius * weaponRange * math.max(0.1, 1 + area + Bonus(build, "orbitblade", "areaPct"))),
-            bladePeriod = math.max(0.6, c.bladePeriod),
-            monsoonDamage = storm > 0 and c.monsoonDamage * monsoonPower[storm] * math.max(0.1, 1 + power + Bonus(build, "monsoon", "damagePct")) or 0,
-            monsoonCount = storm > 0 and math.min(8, math.max(1, math.ceil((monsoonCount[storm] + math.floor(Bonus(build, "monsoon", "extraStrikes"))) * weaponLife))) or 0,
-            monsoonInterval = math.max(0.5, c.monsoonInterval / math.max(0.1, 1 + speed + Bonus(build, "monsoon", "speedPct"))),
-            monsoonDelay = 0.12, monsoonSpacing = 0.18,
-            monsoonRange = math.min(2500, c.monsoonRange * weaponRange * math.max(0.1, 1 + area + Bonus(build, "monsoon", "areaPct"))),
-            monsoonRadius = math.min(600, c.monsoonRadius * weaponSize * math.max(0.1, 1 + area + Bonus(build, "monsoon", "areaPct"))),
-            slashDamage = slash > 0 and c.slashDamage * slashPower[slash] * math.max(0.1, 1 + power + Bonus(build, "frontslash", "damagePct")) or 0,
-            slashInterval = math.max(0.3, c.slashInterval / math.max(0.1, 1 + speed + Bonus(build, "frontslash", "speedPct"))),
-            slashScale = weaponSize, slashSweepTime = 0.24,
-            slashDuration = math.max(0, 0.6 * (weaponLife - 1)),
-            slashRange = math.min(750, c.slashRange * weaponSize * weaponRange * math.max(0.1, 1 + area + Bonus(build, "frontslash", "areaPct"))),
-            slashAngle = math.min(180, math.max(20, c.slashAngle + math.max(0, slash - 1) * 10 + Bonus(build, "frontslash", "angle"))),
-            frostDamage = frost > 0 and c.frostDamage * frostPower[frost] * math.max(0.1, 1 + power + Bonus(build, "frostshard", "damagePct")) or 0,
-            frostPierce = frost > 0 and math.min(12, math.max(1, frostPierce[frost] + math.floor(Bonus(build, "frostshard", "extraPierce")))) or 0,
-            frostInterval = math.max(0.25, c.frostInterval / math.max(0.1, 1 + speed + Bonus(build, "frostshard", "speedPct"))),
-            frostSpeed = math.min(4000, c.frostSpeed * projectileSpeed), frostScale = projectileSize,
-            frostRange = math.min(2500, c.frostRange * projectileRange), frostHitRadius = c.frostHitRadius * projectileSize,
-            frostLifetime = math.min(20, c.frostLifetime * projectileLife), frostSlow = c.frostSlow,
-            frostSlowDuration = math.max(0.1, (c.frostSlowDuration + Bonus(build, "frostshard", "slowDuration")) * weaponLife),
             moveSpeed = math.min(500, math.max(100, c.moveSpeed + Bonus(build, "all", "moveSpeed") + (levels.stride or 0) * catalog.stride.amount)),
             equipmentLife = math.floor(Bonus(build, "all", "maxLife") + (levels.vitality or 0) * catalog.vitality.amount),
             regeneration = c.heroRegeneration + (levels.renewal or 0) * catalog.renewal.amount + Bonus(build, "all", "regeneration"),
@@ -344,9 +448,41 @@ do
             commonDamageBonus = power, commonAreaBonus = area,
             commonSizeBonus = weaponSize - 1, commonRangeBonus = weaponRange - 1,
             commonDurationBonus = weaponLife - 1, commonProjectileSpeedBonus = projectileSpeed - 1,
-            sets = {ember = Bonus(build, "set", "ember") >= 1, storm = Bonus(build, "set", "storm") >= 1,
-                frost = Bonus(build, "set", "frost") >= 1, blade = Bonus(build, "set", "blade") >= 1},
+            sets = {},
         }
+        for set in pairs(bonusKeys.set) do result.sets[set] = Bonus(build, "set", set) >= 1 end
+        for engine, definition in pairs(c.weaponEngines) do
+            if definition.weapon then
+                local fields = EngineFields(engine, definition.weapon, levels[definition.weapon] or 0, c)
+                for key, value in pairs(fields) do result[key] = value end
+            end
+        end
+        result.views = {}
+        for id, base in pairs(bases) do
+            local weapon = c.weapons[id]
+            local view = EngineFields(weapon.engine, id, levels[id] or 0, base)
+            view.weaponId, view.model, view.thrown, view.lightning = id, weapon.model, weapon.thrown, weapon.lightning
+            view.throwSpeed = weapon.thrown and projectileSpeed or nil
+            view.throwModel, view.throwScale, view.hitModel = weapon.throwModel, weapon.throwScale, weapon.hitModel
+            result.views[id] = view
+        end
+        -- Putress status per owned weapon; evolutions below may adjust it.
+        result.status = {}
+        result.poisonDamage = c.status.poisonDamage * math.max(0.1, 1 + power)
+        for id, weapon in pairs(c.weapons) do
+            local level = levels[id] or 0
+            if level > 0 and weapon.hero == "putress" then
+                local function At(list) return list and list[level] or 0 end
+                local poison = At(weapon.poison)
+                if poison > 0 then poison = poison + math.floor(Bonus(build, id, "poison")) end
+                -- tickPower: poison ticks scale with this weapon's own damage bonuses.
+                result.status[id] = {poison = poison, curse = At(weapon.curse),
+                    reaction = At(weapon.reaction) * math.max(0.1, 1 + Bonus(build, id, "reactionPct")),
+                    cursedBonus = At(weapon.cursedBonus), returnBonus = At(weapon.returnBonus),
+                    residuePoison = weapon.residuePoison or 0, maxCurseBonus = 0,
+                    tickPower = math.max(0.1, 1 + power + Bonus(build, id, "damagePct"))}
+            end
+        end
         result.extraWeapons = {}
         for id, profile in pairs(c.extraWeapons) do
             local level = levels[id] or 0
@@ -355,10 +491,13 @@ do
                 enabled = level > 0,
                 damage = level > 0 and profile.damage * (1 + 0.35 * (level - 1)) * math.max(0.1, 1 + power + Bonus(build, id, "damagePct")) or 0,
                 interval = math.max(0.5, profile.interval / math.max(0.1, 1 + speed + Bonus(build, id, "speedPct"))),
-                radius = math.min(900, profile.radius * size * (id == "frostnova" and weaponRange or 1)),
+                radius = math.min(900, profile.radius * size * (c.weapons[id].engine == "nova" and weaponRange or 1)),
                 range = math.min(2500, profile.range * weaponRange), size = weaponSize,
                 duration = math.min(20, math.max(0.1, profile.duration + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife),
-                speed = profile.speed * ((id == "thunderorb" or id == "returnblade") and projectileSpeed or 1),
+                speed = profile.speed * (c.weapons[id].projectile and projectileSpeed or 1),
+                model = c.weapons[id].model, thrown = c.weapons[id].thrown,
+                throwModel = c.weapons[id].throwModel, throwScale = c.weapons[id].throwScale,
+                modelScale = c.weapons[id].modelScale, opaque = c.weapons[id].opaque,
                 pulse = math.max(0.1, profile.pulse),
                 slow = profile.slow, delay = 0.8,
                 slowDurationBonus = Bonus(build, id, "slowDuration"),
@@ -366,13 +505,20 @@ do
         end
         for weapon, id in pairs(build.evolutions or {}) do
             local entry = catalog[id]
-            local target = result.extraWeapons[weapon] or result
+            local target = result.extraWeapons[weapon] or result.views[weapon] or result
             for key, value in pairs(entry.multiply) do target[key] = target[key] * value end
             for key, value in pairs(entry.add) do target[key] = target[key] + value end
             -- Fixed-count branches retain the value of duration/count bonuses as damage.
-            if entry.set.chainTargets then target.chainDamage = target.chainDamage * target.chainTargets / chainTargets[levels.chainlightning] end
-            if entry.set.monsoonCount then target.monsoonDamage = target.monsoonDamage * target.monsoonCount / monsoonCount[levels.monsoon] end
+            if entry.set.chainTargets then target.chainDamage = target.chainDamage * target.chainTargets / chainTargets[levels[weapon]] end
+            if entry.set.monsoonCount then target.monsoonDamage = target.monsoonDamage * target.monsoonCount / monsoonCount[levels[weapon]] end
             for key, value in pairs(entry.set) do target[key] = value end
+            if entry.mode then target.bladeEvolution = entry.mode end
+            local status = result.status[weapon]
+            for key, value in pairs(entry.status) do
+                if key == "poison" or key == "curse" then status[key] = status[key] + value
+                elseif key == "reactionMul" then status.reaction = status.reaction * value
+                else status[key] = value end
+            end
         end
         result.fireEvolution = build.evolutions and build.evolutions.firebolt
         result.bladeEvolution = build.evolutions and build.evolutions.orbitblade
@@ -436,13 +582,14 @@ do
         SurvivorAugments.Recalculate(build, hero)
         return true
     end
-    function SurvivorAugments.NewBuild(startingWeapon, startingTrinket)
+    function SurvivorAugments.NewBuild(startingWeapon, startingTrinket, heroId)
         assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= #chainTargets, "Growth tables support levels 1..7")
         assert(SurvivorConfig.weaponSlots >= 1 and SurvivorConfig.weaponSlots <= 6
             and SurvivorConfig.trinketSlots >= 1 and SurvivorConfig.trinketSlots <= 6, "Growth UI supports 1..6 slots per category")
-        local first = startingWeapon or SurvivorConfig.startingWeapon
+        local first, owner = startingWeapon or SurvivorConfig.startingWeapon, heroId or SurvivorConfig.defaultHero
         assert(catalog[first] and catalog[first].kind == "weapon", "Invalid starting weapon")
-        local build = {levels = {[first] = 1}, weapons = {first}, trinkets = {}, stats = {}, equipmentBonuses = {},
+        assert(catalog[first].hero == owner, "Starting weapon belongs to another hero")
+        local build = {hero = owner, levels = {[first] = 1}, weapons = {first}, trinkets = {}, stats = {}, equipmentBonuses = {},
             evolutions = {}, excluded = {}, excludesRemaining = SurvivorConfig.excludesPerRun}
         if startingTrinket then
             assert(catalog[startingTrinket] and catalog[startingTrinket].kind == "trinket", "Invalid starting trinket")
@@ -454,21 +601,25 @@ do
     end
     function SurvivorAugments.HasProjectileWeapon(build)
         for _, id in ipairs(build.weapons) do
-            if id == "firebolt" or id == "frostshard" or id == "thunderorb" or id == "returnblade" then return true end
+            if SurvivorConfig.weapons[id].projectile then return true end
         end
         return false
     end
     function SurvivorAugments.CanChoose(id, build)
         local entry = catalog[id]
         if not entry or entry.kind == "recovery" or build.excluded[id] then return false end
+        local heroId = build.hero or SurvivorConfig.defaultHero
         if id == "velocity" and not SurvivorAugments.HasProjectileWeapon(build) then
             if #build.weapons >= SurvivorConfig.weaponSlots then return false end
             local future = false
-            for _, weapon in ipairs({"firebolt", "frostshard", "thunderorb", "returnblade"}) do
-                if not build.excluded[weapon] then future = true end
+            for weapon, profile in pairs(SurvivorConfig.weapons) do
+                if profile.projectile and profile.hero == heroId and not build.excluded[weapon] then future = true end
             end
             if not future then return false end
         end
+        -- Weapons and their evolutions belong to one hero; trinkets are shared.
+        local owner = entry.kind == "evolution" and catalog[entry.weapon].hero or entry.hero
+        if owner and owner ~= heroId then return false end
         if entry.kind == "evolution" then
             return SurvivorAugments.Level(build, entry.weapon) == SurvivorConfig.growthMaxLevel and not build.evolutions[entry.weapon]
         end
@@ -604,34 +755,38 @@ do
         for key, value in pairs(build.levels) do preview.levels[key] = value end
         preview.levels[id] = (preview.levels[id] or 0) + 1
         local old, new = build.stats, Calculate(preview)
+        local engine = SurvivorConfig.weapons[id].engine
         if SurvivorConfig.extraWeapons[id] then
             local a, b = old.extraWeapons[id], new.extraWeapons[id]
             return Delta("피해", a.damage, b.damage, 1) .. "\n" .. string.format("쿨다운 %.2f초 · 지속 %.1f초", b.interval, b.duration)
-        elseif id == "firebolt" then
+        end
+        old, new = old.views and old.views[id] or old, new.views[id] or new
+        if engine == "missile" then
             return Delta("피해", old.missileDamage, new.missileDamage, 1) .. "\n"
                 .. Delta("발사 수", old.missileCount, new.missileCount)
-        elseif id == "flamefield" then
+        elseif engine == "zone" then
             if SurvivorAugments.Level(build, id) == 0 then
                 return string.format("피해 %.1f / 반경 %.0f\n%.1f초 지속 · 쿨다운 %.2f초", new.zoneDamage, new.zoneRadius, new.zoneDuration, new.zoneInterval)
             end
             return Delta("피해", old.zoneDamage, new.zoneDamage, 1) .. "\n"
                 .. Delta("반경", old.zoneRadius, new.zoneRadius) .. "\n"
                 .. Delta("지속", old.zoneDuration, new.zoneDuration, 1, "초")
-        elseif id == "chainlightning" then
+        elseif engine == "chain" then
             return Delta("첫 피해", old.chainDamage, new.chainDamage, 1) .. "\n"
                 .. Delta("최대 대상", old.chainTargets, new.chainTargets) .. "\n대상별 1회 타격"
-        elseif id == "orbitblade" then
+        elseif engine == "orbit" then
             return Delta("피해", old.bladeDamage, new.bladeDamage, 1) .. "\n"
-                .. Delta("칼날 수", old.bladeCount, new.bladeCount) .. "\n영웅과 함께 이동"
-        elseif id == "monsoon" then
+                .. Delta(id == "orbitblade" and "칼날 수" or "망령 수", old.bladeCount, new.bladeCount) .. "\n영웅과 함께 이동"
+        elseif engine == "strike" then
             return Delta("피해", old.monsoonDamage, new.monsoonDamage, 1) .. "\n"
-                .. Delta("낙뢰 수", old.monsoonCount, new.monsoonCount)
-        elseif id == "frontslash" then
+                .. Delta(SurvivorConfig.weapons[id].thrown and "약병 수" or "낙뢰 수", old.monsoonCount, new.monsoonCount)
+        elseif engine == "cone" then
             return Delta("피해", old.slashDamage, new.slashDamage, 1) .. "\n"
                 .. Delta("베기 각도", old.slashAngle, new.slashAngle, 0, "도")
-        elseif id == "frostshard" then
+        elseif engine == "pierce" then
             return Delta("피해", old.frostDamage, new.frostDamage, 1) .. "\n"
-                .. Delta("최대 관통", old.frostPierce, new.frostPierce) .. "\n이동 속도 30% 감소"
+                .. Delta("최대 관통", old.frostPierce, new.frostPierce)
+                .. (new.frostSlow > 0 and "\n이동 속도 30% 감소" or "")
         end
         return entry.text
     end

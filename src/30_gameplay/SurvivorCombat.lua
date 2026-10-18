@@ -3,7 +3,7 @@
 SurvivorCombat = {}
 do
     local hero, heightLocation, deathTrigger = nil, nil, nil
-    local units, objects, statusUnits, frostStackUnits = {}, {}, {}, {}
+    local units, objects, statusUnits, frostStackUnits, poisonUnits = {}, {}, {}, {}, {}
     local stats, onKill, onDeath, bounds = nil, nil, nil, nil
     local enemyCount, frozen = 0, false
     local inventoryFrozen, inventoryVitals = false, nil
@@ -11,7 +11,8 @@ do
     local escapeLines = {"위험했네… 여기서 벗어나자.", "불길이 코앞이었어. 빠지자.", "냉기가 스며들기 전에 물러나자.",
         "포위됐어. 길을 다시 열자.", "물길로 빠지자. 아직 끝나지 않았어."}
     local difficulty = SurvivorConfig.difficulties.normal
-    local Slow, SetHit, ExpireEmber, ZoneLifetime
+    local Slow, SetHit, ExpireEmber, ZoneLifetime, ApplyStatus, Throw, StatusDeath, Residue
+    local soulReady, inStatusProc = 0, false
     local stormHits, stormReady, bladeReady = 0, 0, 0
     local boss, bossDefeated = nil, false
     local damageTrigger, escapeEffect = nil, nil
@@ -182,7 +183,7 @@ do
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function FriendlyEffectAlpha(object, warning)
-        if object.identifier == "hsChainHit" then return warning and 110 or 255 end
+        if object.identifier == "hsChainHit" or object.opaque then return warning and 110 or 255 end
         if object.identifier == "hsEscapeDeparture" or object.identifier == "hsEscapeArrival" then return 255 end
         -- Solid metal needs more opacity than luminous spell particles at night.
         if object.readableBlade then return warning and 150 or 255 end
@@ -203,7 +204,12 @@ do
             object.alpha = FriendlyEffectAlpha(object, RunSession.GetElapsed() < warningUntil)
             BlzSetSpecialEffectAlpha(object.visual, object.alpha)
         end
-        if object.readableBlade then
+        local weapon = object.weapon and SurvivorConfig.weapons[object.weapon]
+        local tint = object.tint
+        if tint == nil then tint = weapon and (weapon.tint or SurvivorConfig.elements[weapon.element].tint) end
+        if tint then
+            BlzSetSpecialEffectColor(object.visual, tint[1], tint[2], tint[3])
+        elseif object.readableBlade then
             BlzSetSpecialEffectColor(object.visual, 235, 245, 255)
         elseif object.identifier == "hsReturnBlade" then
             BlzSetSpecialEffectColor(object.visual, 190, 165, 225)
@@ -212,8 +218,20 @@ do
         end
         ALICE_Create(object)
     end
-    local function Hit(target, amount, weapon, setProc, secondary)
+    -- Putress curse stacks amplify every hero hit, including poison ticks and reactions.
+    local function CurseStacks(record)
+        return RunSession.GetElapsed() < (record.curseUntil or 0) and record.curse or 0
+    end
+    -- status = the weapon's live status entry; statusOverride replaces it (residues, ticks).
+    local function Hit(target, amount, weapon, setProc, secondary, statusScale, statusOverride)
         if RunSession.IsRunning() and Alive(hero) and Enemy(target) then
+            local status = statusOverride or stats.status and stats.status[weapon]
+            local curse = CurseStacks(units[target])
+            if curse > 0 then
+                amount = amount * (1 + SurvivorConfig.status.curseAmp * curse + (status and status.cursedBonus or 0)
+                    + (status and curse >= SurvivorConfig.status.curseMax and status.maxCurseBonus or 0))
+            end
+            units[target].lastHit, units[target].lastWeapon = amount, weapon
             local before = math.max(0, GetWidgetLife(target))
             local isBoss = units[target].boss
             local previous = hitSecondary
@@ -228,6 +246,7 @@ do
                 if isBoss then data.bossDamage = data.bossDamage + actual end
             end
             if not setProc and not secondary and actual > 0 then SetHit(target, amount, weapon) end
+            if status and not setProc and not secondary then ApplyStatus(target, weapon, status, statusScale or 1) end
         end
     end
     local function MoveMissile(missile)
@@ -267,10 +286,10 @@ do
                 damage = damage * (1 + math.min(4, stacks) * 0.15)
                 record.fireFocus, record.fireFocusUntil = math.min(4, stacks + 1), now + 3
             end
-            Hit(target, damage, "firebolt")
+            Hit(target, damage, missile.weapon, nil, nil, missile.statusScale)
             if evolution == "evolution1" and RunSession.IsRunning() then
                 CreateObject({identifier = "hsFireBurst", x = x, y = y, z = z, life = 0.4,
-                    isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.bossImpactModel, 0.55)
+                    isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.fireBurstModel, 0.7)
                 local victims = {}
                 local candidates = Candidates(x, y, x, y, 140, "firebolt.area")
                 for _, u in ipairs(candidates) do
@@ -371,7 +390,7 @@ do
         if not RunSession.IsRunning() or zone.cleaned or zone.life <= 0 then return interval end
         if GroundEnemy(enemy) then
             local dx, dy = GetUnitX(enemy) - zone.x, GetUnitY(enemy) - zone.y
-            if dx * dx + dy * dy <= zone.radius * zone.radius then Hit(enemy, zone.damage, "flamefield") end
+            if dx * dx + dy * dy <= zone.radius * zone.radius then Hit(enemy, zone.damage, zone.weapon, nil, nil, zone.statusScale) end
         end
         return interval
     end
@@ -390,18 +409,18 @@ do
                 function(u) return Enemy(u) and not selected[u] and SurvivorStage.LineClear(x, y, GetUnitX(u), GetUnitY(u)) end) or primary
             selected[target] = true
             local offset = (shot - (stats.missileCount + 1) / 2) * 18
-            local missile = {identifier = "hsMissile",
+            local missile = {identifier = "hsMissile", weapon = stats.weaponId or "firebolt", statusScale = stats.statusScale,
                 x = x - math.sin(yaw) * offset, y = y + math.cos(yaw) * offset, z = z, yaw = yaw,
                 owner = GetOwningPlayer(hero), target = target, life = stats.missileLifetime, damage = stats.missileDamage,
                 speed = stats.missileSpeed, hitRadius = stats.missileHitRadius, remaining = stats.missileRange, evolution = stats.fireEvolution,
                 selfInteractions = MoveMissile, isAnonymous = true}
-            CreateObject(missile, SurvivorConfig.missileModel, stats.missileScale)
+            CreateObject(missile, stats.model or SurvivorConfig.missileModel, stats.missileScale)
             local tx, ty, tz = ImpactPoint(target)
             FaceMissile(missile, tx - missile.x, ty - missile.y, tz - missile.z)
         end
     end
     local function SpreadPoint(x, y, distance, shot)
-        if shot then
+        if shot and shot.index then
             local angle = GetUnitFacing(hero) * bj_DEGTORAD + (shot.index == 1 and -1 or 1) * math.pi / 2
             return x + math.cos(angle) * distance, y + math.sin(angle) * distance
         end
@@ -412,17 +431,18 @@ do
         if not RunSession.IsRunning() or not Alive(hero) or not stats.zoneEnabled then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
         x, y = SpreadPoint(x, y, stats.zoneRadius * 0.8, shot)
-        CreateObject({identifier = "hsZone", x = x, y = y, z = Height(x, y),
+        CreateObject({identifier = "hsZone", weapon = stats.weaponId or "flamefield", statusScale = stats.statusScale, x = x, y = y, z = Height(x, y),
             owner = GetOwningPlayer(hero), radius = stats.zoneRadius, isStationary = true,
             life = stats.zoneDuration, damage = stats.zoneDamage, pulse = stats.zonePulse,
             selfInteractions = ZoneLifetime, interactions = {hsEnemy = ZoneDamage}},
-            SurvivorConfig.zoneModel, stats.zoneRadius / 230)
+            stats.model or SurvivorConfig.zoneModel, stats.zoneRadius / 230)
     end
     function SurvivorCombat.CastChainLightning(shot)
         local stats = shot and shot.stats or stats
         if not RunSession.IsRunning() or not Alive(hero) or not stats.chainEnabled then return end
         local x, y, z = ImpactPoint(hero)
         local visited, damage, range = {}, stats.chainDamage, stats.chainRange
+        local weapon = stats.weaponId or "chainlightning"
         for jump = 1, stats.chainTargets do
             local target = ALICE_GetClosestObject(x, y, "hsEnemy", range,
                 function(u) return Enemy(u) and not visited[u] end)
@@ -432,15 +452,15 @@ do
             local bolt = {identifier = "hsLightning", x = x, y = y, z = z,
                 life = 0.22, isStationary = true, isAnonymous = true,
                 selfInteractions = ZoneLifetime, destroy = DestroyObject}
-            bolt.lightning = AddLightningEx(jump == 1 and "CLPB" or "CLSB", true, x, y, z, tx, ty, tz)
+            bolt.lightning = AddLightningEx(stats.lightning or (jump == 1 and "CLPB" or "CLSB"), true, x, y, z, tx, ty, tz)
             objects[bolt] = true
             ALICE_Create(bolt)
             -- Unattached: an attached effect inherits each unit's model and SetUnitScale size.
-            CreateObject({identifier = "hsChainHit", x = tx, y = ty, z = tz,
+            CreateObject({identifier = "hsChainHit", weapon = stats.weaponId, x = tx, y = ty, z = tz,
                 life = SurvivorConfig.chainHitDuration,
                 isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime},
-                SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
-            Hit(target, damage, "chainlightning")
+                stats.model or SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
+            Hit(target, damage, weapon, nil, nil, stats.statusScale)
             x, y, z, range = tx, ty, tz, stats.chainJumpRange
             damage = damage * SurvivorConfig.chainFalloff
         end
@@ -472,35 +492,37 @@ do
         BlzSetSpecialEffectYaw(blade.visual, blade.angle + math.pi / 2)
         local now = RunSession.GetElapsed()
         for u, expiry in pairs(blade.hitTimes) do if expiry <= now or not Enemy(u) then blade.hitTimes[u] = nil end end
-        local candidates = Candidates(oldX, oldY, blade.x, blade.y, blade.hitRadius, "orbitblade")
+        local candidates = Candidates(oldX, oldY, blade.x, blade.y, blade.hitRadius, blade.weapon)
         for _, u in ipairs(candidates) do
             if blade.cleaned or not RunSession.IsRunning() then break end
             if GroundEnemy(u) and not blade.hitTimes[u]
                 and SegmentDistanceSquared(GetUnitX(u), GetUnitY(u), oldX, oldY, blade.x, blade.y) <= blade.hitRadius ^ 2 then
                 blade.hitTimes[u] = now + blade.hitInterval
-                Hit(u, blade.damage, "orbitblade")
+                Hit(u, blade.damage, blade.weapon)
             end
         end
         ReleaseCandidates(candidates)
         return dt
     end
-    function SurvivorCombat.CastBlades()
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.bladeEnabled then return end
+    function SurvivorCombat.CastBlades(shot)
+        local view = shot and shot.stats or stats
+        if not RunSession.IsRunning() or not Alive(hero) or not view.bladeEnabled then return end
         -- One activation is one evenly spaced ring, including multicast blades.
         -- Older rings keep their own lifetime, damage and per-enemy hit history.
-        local count, phase = stats.bladeCount + stats.multiCount, RunSession.GetElapsed()
+        local count, phase = view.bladeCount + stats.multiCount, RunSession.GetElapsed()
         local centerX, centerY = GetUnitX(hero), GetUnitY(hero)
+        local weapon = view.weaponId or "orbitblade"
         for i = 1, count do
             local angle = 2 * math.pi * (i - 1) / count + phase
             local offset = (i - (count + 1) / 2) / math.max(1, count - 1) * 0.8
-            if stats.bladeEvolution == "evolution8" then angle = GetUnitFacing(hero) * bj_DEGTORAD + offset end
-            local x, y = centerX + math.cos(angle) * stats.bladeRadius, centerY + math.sin(angle) * stats.bladeRadius
-            local damage = stats.bladeDamage * (i > stats.bladeCount and stats.multiDamage or 1)
-            CreateObject({identifier = "hsBlade", x = x, y = y, z = Height(x, y) + 65,
-                angle = angle, orbit = stats.bladeRadius, period = stats.bladePeriod, damage = damage,
-                age = 0, offset = offset, evolution = stats.bladeEvolution,
-                life = stats.bladeDuration, hitRadius = stats.bladeHitRadius, hitInterval = stats.bladeHitInterval,
-                hitTimes = {}, isAnonymous = true, selfInteractions = MoveBlade}, SurvivorConfig.bladeModel, stats.bladeScale)
+            if view.bladeEvolution == "evolution8" then angle = GetUnitFacing(hero) * bj_DEGTORAD + offset end
+            local x, y = centerX + math.cos(angle) * view.bladeRadius, centerY + math.sin(angle) * view.bladeRadius
+            local damage = view.bladeDamage * (i > view.bladeCount and stats.multiDamage or 1)
+            CreateObject({identifier = view.weaponId and "hsWraith" or "hsBlade", weapon = weapon, x = x, y = y, z = Height(x, y) + 65,
+                angle = angle, orbit = view.bladeRadius, period = view.bladePeriod, damage = damage,
+                age = 0, offset = offset, evolution = view.bladeEvolution,
+                life = view.bladeDuration, hitRadius = view.bladeHitRadius, hitInterval = view.bladeHitInterval,
+                hitTimes = {}, isAnonymous = true, selfInteractions = MoveBlade}, view.model or SurvivorConfig.bladeModel, view.bladeScale)
         end
     end
     function SurvivorCombat.UpdateWeapons(dt)
@@ -510,6 +532,26 @@ do
         local now = RunSession.GetElapsed()
         if ward > 0 and now >= wardUntil then ward, wardUntil = 0, 0 end
         if escapeUntil > 0 and now >= escapeUntil then ClearEscape() end
+        -- Poison ticks: snapshot due units first, because a tick may kill and clean records.
+        if next(poisonUnits) then
+            local config, due = SurvivorConfig.status, {}
+            for u in pairs(poisonUnits) do
+                local record = units[u]
+                if not record or not record.alive or not Enemy(u) or now >= (record.poisonUntil or 0) or record.poison <= 0 then
+                    poisonUnits[u] = nil
+                    if record then record.poison = 0 end
+                elseif now >= record.poisonNext then due[#due + 1] = u end
+            end
+            for _, u in ipairs(due) do
+                local record = units[u]
+                if Enemy(u) and RunSession.IsRunning() then
+                    record.poisonNext = record.poisonNext + config.poisonTick
+                    local status = stats.status and stats.status[record.poisonWeapon]
+                    local power = status and status.tickPower or stats.poisonDamage / config.poisonDamage
+                    Hit(u, record.poison * config.poisonDamage * power * config.poisonTick, record.poisonWeapon, true)
+                end
+            end
+        end
         -- Passive frost stacks need no per-tick update after their slow expires.
         -- Keep the stacks, and reset all of them when the set is unequipped.
         if not stats.sets.frost then
@@ -575,18 +617,18 @@ do
         local x, y, z, radius, damage = strike.x, strike.y, strike.z, strike.radius, strike.damage
         ALICE_Kill(strike)
         if not Alive(hero) then return dt end
-        CreateObject({identifier = "hsMonsoonEffect", x = x, y = y, z = z, life = 0.9,
-            isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.monsoonModel, radius / 150)
+        CreateObject({identifier = "hsMonsoonEffect", weapon = strike.weapon, x = x, y = y, z = z, life = 0.9,
+            isAnonymous = true, selfInteractions = ZoneLifetime}, strike.model or SurvivorConfig.monsoonModel, radius / 150)
         -- A column of lightning hits ground and flying enemies at the locked point.
         local started, checked = SurvivorMetrics.Begin(), 0
         SurvivorMetrics.Count("monsoon.area.calls")
-        local candidates = AreaCandidates(x, y, radius, "monsoon")
+        local candidates = AreaCandidates(x, y, radius, strike.weapon)
         for _, u in ipairs(candidates) do
             if not RunSession.IsRunning() or not Alive(hero) then break end
             if Enemy(u) then
                 checked = checked + 1
                 local dx, dy = GetUnitX(u) - x, GetUnitY(u) - y
-                if dx * dx + dy * dy <= radius * radius then Hit(u, damage, "monsoon") end
+                if dx * dx + dy * dy <= radius * radius then Hit(u, damage, strike.weapon, nil, nil, strike.statusScale) end
             end
         end
         ReleaseCandidates(candidates)
@@ -607,8 +649,15 @@ do
             selected[target] = true
             local tx, ty, tz = ImpactPoint(target)
             tx, ty = SpreadPoint(tx, ty, stats.monsoonRadius * 0.7, shot)
-            local strike = {identifier = "hsMonsoon", x = tx, y = ty, z = tz,
-                life = stats.monsoonDelay + (i - 1) * stats.monsoonSpacing, radius = stats.monsoonRadius, damage = stats.monsoonDamage,
+            local life = stats.monsoonDelay + (i - 1) * stats.monsoonSpacing
+            if stats.thrown then
+                -- A vial lands exactly when its strike resolves; the strike owns the damage.
+                local hx, hy, hz = ImpactPoint(hero)
+                life = Throw(hx, hy, hz, tx, ty, tz, stats.throwSpeed, (i - 1) * stats.monsoonSpacing, nil, stats.throwScale, stats.throwModel, stats.weaponId)
+            end
+            local strike = {identifier = "hsMonsoon", weapon = stats.weaponId or "monsoon", model = stats.model,
+                statusScale = stats.statusScale, x = tx, y = ty, z = tz,
+                life = life, radius = stats.monsoonRadius, damage = stats.monsoonDamage,
                 isAnonymous = true, isStationary = true, selfInteractions = StrikeMonsoon, destroy = DestroyObject}
             objects[strike] = true
             ALICE_Create(strike)
@@ -628,7 +677,7 @@ do
     end
     local function HitSlash(area)
         local cosine = math.cos(area.arc / 2)
-        local candidates = Candidates(area.x, area.y, area.x, area.y, area.radius, "frontslash")
+        local candidates = Candidates(area.x, area.y, area.x, area.y, area.radius, area.weapon)
         for _, u in ipairs(candidates) do
             if area.cleaned or not RunSession.IsRunning() or not Alive(hero) then break end
             if GroundEnemy(u) and not area.hitTimes[u] then
@@ -639,8 +688,8 @@ do
                     area.hitTimes[u] = true
                     local tx, ty, tz = ImpactPoint(u)
                     CreateObject({identifier = "hsSlashHit", x = tx, y = ty, z = tz, life = 0.4,
-                        isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.slashModel, area.scale)
-                    Hit(u, area.damage, "frontslash")
+                        isAnonymous = true, selfInteractions = ZoneLifetime}, area.hitModel or SurvivorConfig.slashModel, area.scale)
+                    Hit(u, area.damage, area.weapon, nil, nil, area.statusScale)
                 end
             end
         end
@@ -662,13 +711,14 @@ do
         local facing, arc = GetUnitFacing(hero) * bj_DEGTORAD, stats.slashAngle * bj_DEGTORAD
         local radius = stats.slashRange
         local sweepRadius, startAngle = radius * 0.7, facing - arc / 2
-        CreateObject({identifier = "hsSlash", originX = x, originY = y,
+        CreateObject({identifier = stats.weaponId and "hsBreath" or "hsSlash", weapon = stats.weaponId, originX = x, originY = y,
             x = x + math.cos(startAngle) * sweepRadius, y = y + math.sin(startAngle) * sweepRadius,
             z = Height(x, y) + 65, facing = facing, arc = arc, radius = sweepRadius,
             life = math.max(stats.slashSweepTime, stats.slashDuration), sweepTime = stats.slashSweepTime, sweepElapsed = 0,
-            isAnonymous = true, selfInteractions = SweepSlash}, SurvivorConfig.bladeModel, 1.3 * stats.slashScale)
+            isAnonymous = true, selfInteractions = SweepSlash}, stats.model or SurvivorConfig.bladeModel, 1.3 * stats.slashScale)
         -- Snapshot origin/facing/damage for the whole cast. A lingering cone hits each enemy once.
-        local area = {identifier = "hsSlashArea", x = x, y = y, z = Height(x, y),
+        local area = {identifier = "hsSlashArea", weapon = stats.weaponId or "frontslash", statusScale = stats.statusScale,
+            hitModel = stats.hitModel, x = x, y = y, z = Height(x, y),
             facing = facing, arc = arc, radius = radius, damage = stats.slashDamage, scale = stats.slashScale,
             life = stats.slashDuration, hitTimes = {}, isAnonymous = true, isStationary = true,
             selfInteractions = LingerSlash, destroy = DestroyObject}
@@ -702,13 +752,83 @@ do
         PauseUnit(target, true)
         return true
     end
-    local function ProcVisual(x, y, z, model, scale)
-        CreateObject({identifier = "hsSetEffect", x = x, y = y, z = z, life = 0.7,
+    local function ProcVisual(x, y, z, model, scale, weapon)
+        CreateObject({identifier = "hsSetEffect", weapon = weapon, x = x, y = y, z = z, life = 0.7,
             isAnonymous = true, selfInteractions = ZoneLifetime}, model, scale)
     end
+    -- Putress statuses. Reaction consumes poison before this hit adds new stacks.
+    -- scale < 1 (multicast) applies a reduced, never zero, number of stacks.
+    ApplyStatus = function(target, weapon, status, scale)
+        if not Enemy(target) then return end
+        local config, record, now = SurvivorConfig.status, units[target], RunSession.GetElapsed()
+        local life = 1 + (stats.commonDurationBonus or 0)
+        local function Stacks(value)
+            value = value or 0
+            if value <= 0 or scale >= 1 then return value end
+            return math.max(1, math.floor(value * scale))
+        end
+        if (status.reaction or 0) > 0 and (record.poison or 0) > 0 and now < (record.poisonUntil or 0)
+            and now >= (record.reactionReady or 0) then
+            local consumed = status.reactionAll and record.poison or math.ceil(record.poison / 2)
+            record.poison, record.reactionReady = record.poison - consumed, now + config.reactionCooldown
+            local x, y, z = ImpactPoint(target)
+            ProcVisual(x, y, z, SurvivorConfig.reactionModel, SurvivorConfig.reactionScale, weapon)
+            Hit(target, consumed * config.reactionDamage * status.reaction * stats.poisonDamage / config.poisonDamage
+                * (stats.sets.apprentice and 1.6 or 1), weapon, true)
+            if not Enemy(target) then
+                -- Apprentice set: a reaction kill leaves a short poison residue.
+                if stats.sets.apprentice and RunSession.IsRunning() then Residue(weapon, x, y) end
+                return
+            end
+        end
+        local poison = Stacks(status.poison)
+        if poison > 0 then
+            if now >= (record.poisonUntil or 0) then record.poison, record.poisonNext = 0, now + config.poisonTick end
+            record.poison = math.min(config.poisonMax + (stats.sets.apothecary and 4 or 0), record.poison + poison)
+            record.poisonUntil, record.poisonWeapon = now + config.poisonDuration * life, weapon
+            poisonUnits[target] = true
+        end
+        local curse = Stacks(status.curse)
+        if curse > 0 then
+            record.curse = math.min(config.curseMax, CurseStacks(record) + curse)
+            record.curseUntil = now + config.curseDuration * life
+        end
+    end
+    -- Quadratic Bezier throw: P0 = launch, P2 = locked landing point, P1 = midpoint raised by height.
+    local function MoveThrow(throw)
+        local dt = ALICE_Config.MIN_INTERVAL
+        if not RunSession.IsRunning() or throw.cleaned then return dt end
+        if not Alive(hero) then ALICE_Kill(throw); return dt end
+        throw.age = throw.age + dt
+        local t = math.max(0, math.min(1, throw.age / throw.flight))
+        local u = 1 - t
+        throw.x = u * u * throw.x0 + 2 * u * t * throw.cx + t * t * throw.x1
+        throw.y = u * u * throw.y0 + 2 * u * t * throw.cy + t * t * throw.y1
+        throw.z = u * u * throw.z0 + 2 * u * t * throw.cz + t * t * throw.z1
+        BlzSetSpecialEffectPosition(throw.visual, throw.x, throw.y, throw.z)
+        if t >= 1 then
+            local land = throw.onLand
+            ALICE_Kill(throw)
+            if land and Alive(hero) then land() end
+        end
+        return dt
+    end
+    -- Returns delay + flight time so callers can resolve damage on landing.
+    Throw = function(x0, y0, z0, x1, y1, z1, speed, delay, onLand, scale, model, weapon)
+        local config = SurvivorConfig.throw
+        local distance = math.sqrt((x1 - x0) ^ 2 + (y1 - y0) ^ 2)
+        local height = math.min(config.maxHeight, math.max(config.minHeight, distance * config.arc))
+        local flight = (config.minFlight + (config.maxFlight - config.minFlight) * math.min(1, distance / config.flightRange))
+            / math.max(0.1, speed or 1)
+        CreateObject({identifier = "hsThrow", weapon = weapon, tint = weapon and SurvivorConfig.weapons[weapon].throwTint,
+            x = x0, y = y0, z = z0, x0 = x0, y0 = y0, z0 = z0, x1 = x1, y1 = y1, z1 = z1,
+            cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2 + height, age = -(delay or 0), flight = flight,
+            onLand = onLand, isAnonymous = true, selfInteractions = MoveThrow}, model or config.model, scale or 1)
+        return (delay or 0) + flight
+    end
     ExpireEmber = function(zone)
-        if not stats or not stats.sets.ember or not Alive(hero) then return end
-        ProcVisual(zone.x, zone.y, zone.z, SurvivorConfig.bossImpactModel, zone.radius / 240)
+        if not stats or not stats.sets.ember or zone.weapon ~= "flamefield" or not Alive(hero) then return end
+        ProcVisual(zone.x, zone.y, zone.z, SurvivorConfig.emberBurstModel, zone.radius / 240)
         local candidates = AreaCandidates(zone.x, zone.y, zone.radius, "ember")
         for _, u in ipairs(candidates) do
             if GroundEnemy(u) then
@@ -750,7 +870,7 @@ do
         elseif stats.sets.blade and now >= bladeReady and (weapon == "orbitblade" or weapon == "frontslash" or weapon == "returnblade") then
             bladeReady = now + 8
             local x, y = GetUnitX(target), GetUnitY(target)
-            ProcVisual(x, y, Height(x, y) + 65, SurvivorConfig.bladeModel, 1.5)
+            ProcVisual(x, y, Height(x, y) + 65, SurvivorConfig.bladeProcModel, 1.5)
             local candidates = AreaCandidates(x, y, 220, "bladeSet")
             for _, u in ipairs(candidates) do
                 if GroundEnemy(u) then
@@ -760,6 +880,23 @@ do
             end
             ReleaseCandidates(candidates)
         end
+    end
+    -- One mark per enemy stays attached while repeated hits keep refreshing it.
+    local function MarkLifetime(mark)
+        local dt = ALICE_Config.MIN_INTERVAL
+        if not RunSession.IsRunning() or mark.cleaned then return dt end
+        mark.life = mark.life - dt
+        if mark.life <= 0 or not Enemy(mark.unit) then ALICE_Kill(mark) end
+        return dt
+    end
+    local function MarkUnit(u, model, duration)
+        local record = units[u]
+        local mark = record.dotMark
+        if mark and not mark.cleaned then mark.life = math.max(mark.life, duration); return end
+        mark = {identifier = "hsDotMark", target = u, unit = u, attachPoint = "overhead", x = GetUnitX(u), y = GetUnitY(u), z = 0,
+            life = duration, tint = false, isAnonymous = true, selfInteractions = MarkLifetime}
+        record.dotMark = mark
+        CreateObject(mark, model, 1)
     end
     local function AreaHit(object, amount)
         local weapon, checked = object.weapon, 0
@@ -774,7 +911,8 @@ do
                 local dx, dy = x - object.x, y - object.y
                 local dz = object.spherical and z - object.z or 0
                 if dx * dx + dy * dy + dz * dz <= object.radius ^ 2 then
-                    Hit(u, amount, object.weapon)
+                    Hit(u, amount, object.weapon, nil, nil, object.statusScale, object.status)
+                    if object.markModel and Enemy(u) then MarkUnit(u, object.markModel, object.pulse + 0.15) end
                     if object.slow > 0 then Slow(u, object.slow, object.slowDuration, object.weapon) end
                 end
             end
@@ -804,13 +942,51 @@ do
         end
         return dt
     end
-    local function NewZone(id, x, y, w, damage)
+    local function NewZone(id, x, y, w, damage, status)
         local model = id == "blizzard" and [[Abilities\Spells\Human\Blizzard\BlizzardTarget.mdl]]
-            or id == "meteor" and SurvivorConfig.meteorImpactModel or SurvivorConfig.zoneModel
-        CreateObject({identifier = "hsExtraZone", weapon = id, x = x, y = y, z = Height(x, y),
+            or id == "meteor" and SurvivorConfig.meteorImpactModel or w.model or SurvivorConfig.zoneModel
+        CreateObject({identifier = "hsExtraZone", weapon = id, status = status, statusScale = w.statusScale,
+            tint = w.tint, markModel = w.markModel, x = x, y = y, z = Height(x, y),
             radius = w.radius, damage = damage, life = w.duration, pulse = w.pulse, pulseClock = w.pulse,
             slow = w.slow, slowDuration = math.max(0.5, w.duration / 3) + (w.slowDurationBonus or 0), isStationary = true, isAnonymous = true,
             selfInteractions = ExtraZone}, model, math.min(2.5, w.radius / 230))
+    end
+    Residue = function(weapon, x, y)
+        NewZone(weapon, x, y, {radius = 150, duration = 2, pulse = 0.5, slow = 0,
+            model = SurvivorConfig.residueModel}, 0, {poison = 1, curse = 0, reaction = 0})
+    end
+    -- Putress 4-piece set effects that trigger when a statused enemy dies.
+    StatusDeath = function(dead, record)
+        if not stats or inStatusProc or not Alive(hero) then return end
+        local now, config = RunSession.GetElapsed(), SurvivorConfig.status
+        local x, y, z = ImpactPoint(dead)
+        local function Nearby(radius, limit)
+            local list, chosen = Candidates(x, y, x, y, radius, "statusDeath"), {}
+            for _, u in ipairs(list) do
+                local distance = (GetUnitX(u) - x) ^ 2 + (GetUnitY(u) - y) ^ 2
+                if u ~= dead and Enemy(u) and distance <= radius * radius then chosen[#chosen + 1] = {unit = u, distance = distance} end
+            end
+            ReleaseCandidates(list)
+            table.sort(chosen, function(a, b) return a.distance < b.distance
+                or a.distance == b.distance and GetHandleId(a.unit) < GetHandleId(b.unit) end)
+            for i = #chosen, (limit or #chosen) + 1, -1 do chosen[i] = nil end
+            return chosen
+        end
+        inStatusProc = true
+        if stats.sets.apothecary and (record.poison or 0) >= 8 and now < (record.poisonUntil or 0) then
+            for _, target in ipairs(Nearby(300, 3)) do
+                ApplyStatus(target.unit, record.poisonWeapon, {poison = math.floor(record.poison / 2)}, 1)
+            end
+        end
+        if stats.sets.gravewarden and CurseStacks(record) >= config.curseMax and now >= soulReady then
+            soulReady = now + 1
+            ProcVisual(x, y, z, SurvivorConfig.soulBurstModel, 1.2, record.lastWeapon)
+            for _, target in ipairs(Nearby(200)) do
+                Hit(target.unit, (record.lastHit or 0) * 1.5, record.lastWeapon, true)
+                if Enemy(target.unit) then ApplyStatus(target.unit, record.lastWeapon, {curse = 1}, 1) end
+            end
+        end
+        inStatusProc = false
     end
     local function FallMeteor(meteor)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -823,7 +999,7 @@ do
             local w, x, y = meteor.profile, meteor.x, meteor.y
             ALICE_Kill(meteor)
             NewZone("meteor", x, y, w, w.damage * 0.2)
-            AreaHit({x = x, y = y, z = meteor.groundZ, radius = w.radius, slow = 0, weapon = "meteor"}, w.damage)
+            AreaHit({x = x, y = y, z = meteor.groundZ, radius = w.radius, slow = 0, weapon = "meteor", statusScale = w.statusScale}, w.damage)
         end
         return dt
     end
@@ -855,13 +1031,19 @@ do
         BlzSetSpecialEffectPosition(blade.visual, blade.x, blade.y, blade.z)
         BlzSetSpecialEffectYaw(blade.visual, Atan2(dy, dx))
         local leg = blade.leg
-        local candidates = Candidates(oldX, oldY, blade.x, blade.y, blade.radius, "returnblade")
+        local candidates = Candidates(oldX, oldY, blade.x, blade.y, blade.radius, blade.weapon)
         for _, u in ipairs(candidates) do
             if blade.cleaned or not RunSession.IsRunning() then break end
             if GroundEnemy(u) and blade.hitTimes[u] ~= leg
                 and SegmentDistanceSquared(GetUnitX(u), GetUnitY(u), oldX, oldY, blade.x, blade.y) <= blade.radius ^ 2 then
                 blade.hitTimes[u] = leg
-                Hit(u, blade.damage, "returnblade")
+                -- Putress scythes curse on the way out and punish cursed enemies on the way back.
+                local status, damage = stats.status and stats.status[blade.weapon], blade.damage
+                if status and blade.returning then
+                    if CurseStacks(units[u]) > 0 then damage = damage * (1 + status.returnBonus) end
+                    status = {cursedBonus = status.cursedBonus, maxCurseBonus = status.maxCurseBonus, poison = 0, curse = 0, reaction = 0}
+                end
+                Hit(u, damage, blade.weapon, nil, nil, blade.statusScale, status)
             end
         end
         ReleaseCandidates(candidates)
@@ -887,7 +1069,8 @@ do
         local w = stats.extraWeapons[id]
         if not w or not w.enabled or not RunSession.IsRunning() or not Alive(hero) then return end
         local x, y, z = ImpactPoint(hero)
-        if id == "frostnova" then
+        local engine = SurvivorConfig.weapons[id].engine
+        if engine == "nova" then
             -- Reservoir sampling gives every living enemy in range the same chance.
             local target, count = nil, 0
             local candidates = AreaCandidates(x, y, w.range, "frostnovaSelection")
@@ -903,31 +1086,54 @@ do
             ReleaseCandidates(candidates)
             if not target then return end
             x, y, z = ImpactPoint(target)
-            CreateObject({identifier = "hsNova", x = x, y = y, z = Height(x, y) + GetUnitFlyHeight(target), life = 0.6,
-                isAnonymous = true, selfInteractions = ZoneLifetime}, [[Abilities\Spells\Undead\FrostNova\FrostNovaTarget.mdl]], w.radius / 150)
-            AreaHit({x = x, y = y, z = z, radius = w.radius, slow = w.slow,
+            CreateObject({identifier = "hsNova", weapon = id, x = x, y = y, z = Height(x, y) + GetUnitFlyHeight(target), life = 0.6,
+                isAnonymous = true, selfInteractions = ZoneLifetime}, w.model or [[Abilities\Spells\Undead\FrostNova\FrostNovaTarget.mdl]], w.radius / 150)
+            AreaHit({x = x, y = y, z = z, radius = w.radius, slow = w.slow, statusScale = w.statusScale,
                 slowDuration = w.duration + (w.slowDurationBonus or 0), weapon = id}, w.damage)
             return
         end
-        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, id == "returnblade" and GroundEnemy or Enemy)
+        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, engine == "boomerang" and GroundEnemy or Enemy)
         if not target then return end
         local tx, ty, tz = ImpactPoint(target)
-        if id == "blizzard" or id == "meteor" then tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot) end
-        if id == "blizzard" then NewZone(id, tx, ty, w, w.damage); return end
-        if id == "meteor" then
+        if engine == "field" or engine == "meteor" then tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot) end
+        if w.thrown then
+            -- Thrown profiles lock the landing point now and resolve on impact.
+            local status = stats.status and stats.status[id]
+            local function Land(lx, ly, lz, scale, split)
+                if engine == "field" then NewZone(id, lx, ly, w, w.damage * scale); return end
+                local residue = {radius = w.radius, duration = w.duration, pulse = w.pulse, slow = 0, statusScale = w.statusScale,
+                    model = SurvivorConfig.jarExplosionModel, tint = false, markModel = SurvivorConfig.jarMarkModel}
+                NewZone(id, lx, ly, residue, w.damage * 0.2 * scale, {poison = status and status.residuePoison or 0, curse = 0, reaction = 0})
+                AreaHit({x = lx, y = ly, z = lz, radius = w.radius * (split and 1 or 0.6), slow = 0, weapon = id, statusScale = w.statusScale}, w.damage * scale)
+                for k = 1, split and status and status.splitJars or 0 do
+                    local angle = GetUnitFacing(hero) * bj_DEGTORAD + (k - 0.5) * 2 * math.pi / status.splitJars
+                    local sx, sy = lx + math.cos(angle) * 150, ly + math.sin(angle) * 150
+                    Throw(lx, ly, lz, sx, sy, Height(sx, sy), w.speed, 0, function() Land(sx, sy, Height(sx, sy), 0.4, false) end,
+                        0.6 * (w.throwScale or 1), w.throwModel, id)
+                end
+            end
+            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() Land(tx, ty, tz, 1, true) end, w.throwScale, w.throwModel, id)
+            return
+        end
+        if engine == "field" then NewZone(id, tx, ty, w, w.damage); return end
+        if engine == "meteor" then
             CreateObject({identifier = "hsMeteor", x = tx, y = ty, z = tz + 750, groundZ = tz,
                 profile = w, life = w.delay, delay = w.delay, isAnonymous = true, selfInteractions = FallMeteor}, SurvivorConfig.meteorModel, 1.8 * w.size)
             return
         end
-        local dx, dy, dz = tx - x, ty - y, id == "returnblade" and 0 or tz - z
+        local orb = engine == "orb"
+        local dx, dy, dz = tx - x, ty - y, orb and tz - z or 0
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance < 1 then dx, dy, dz, distance = math.cos(GetUnitFacing(hero) * bj_DEGTORAD), math.sin(GetUnitFacing(hero) * bj_DEGTORAD), 0, 1 end
-        local object = {identifier = id == "thunderorb" and "hsOrb" or "hsReturnBlade", weapon = id,
+        -- Putress models keep their own colours; only Anya's glaive is tinted.
+        local object = {identifier = orb and "hsOrb" or w.model and "hsScythe" or "hsReturnBlade", weapon = id, opaque = w.opaque,
             x = x, y = y, z = z, dx = dx / distance, dy = dy / distance, dz = dz / distance,
             life = w.duration, remaining = w.range, range = w.range, leg = 1, speed = w.speed, radius = w.radius, damage = w.damage,
             pulse = w.pulse, pulseClock = 0, spherical = true, slow = 0, hitTimes = {},
-            isAnonymous = true, selfInteractions = id == "thunderorb" and MoveOrb or MoveReturnBlade}
-        CreateObject(object, id == "thunderorb" and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel, w.size)
+            isAnonymous = true, selfInteractions = orb and MoveOrb or MoveReturnBlade}
+        object.statusScale = w.statusScale
+        CreateObject(object, w.model or (orb and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel),
+            w.size * (w.modelScale or 1))
     end
     local function MoveFrost(shard)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -937,7 +1143,7 @@ do
         local dx, dy, dz = shard.dx * step, shard.dy * step, shard.dz * step
         if not SurvivorStage.LineClear(shard.x, shard.y, shard.x + dx, shard.y + dy) then ALICE_Kill(shard); return dt end
         local length, hits = dx * dx + dy * dy + dz * dz, {}
-        local candidates = Candidates(shard.x, shard.y, shard.x + dx, shard.y + dy, shard.hitRadius, "frostshard")
+        local candidates = Candidates(shard.x, shard.y, shard.x + dx, shard.y + dy, shard.hitRadius, shard.weapon or "frostshard")
         for _, u in ipairs(candidates) do
             if Enemy(u) and not shard.hitTimes[u] then
                 local tx, ty, tz = ImpactPoint(u)
@@ -954,9 +1160,9 @@ do
             local u = hit.unit
             if Enemy(u) then
                 shard.hitTimes[u] = true
-                Hit(u, shard.damage, "frostshard", false, shard.secondary)
+                Hit(u, shard.damage, shard.weapon or "frostshard", false, shard.secondary, shard.statusScale)
                 if shard.cleaned or not RunSession.IsRunning() then return dt end
-                Slow(u, shard.slow, shard.slowDuration, "frostshard")
+                if shard.slow > 0 then Slow(u, shard.slow, shard.slowDuration, "frostshard") end
                 if Enemy(u) and shard.evolution == "evolution14" and not shard.secondary then
                     local record = units[u]
                     record.spearHits = math.min(3, (record.spearHits or 0) + 1)
@@ -982,14 +1188,22 @@ do
         local dx, dy, dz = tx - x, ty - y, tz - z
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance < 1 then dx, dy, dz, distance = math.cos(GetUnitFacing(hero) * bj_DEGTORAD), math.sin(GetUnitFacing(hero) * bj_DEGTORAD), 0, 1 end
-        local shard = {identifier = "hsFrostShard", x = x, y = y, z = z, yaw = 0,
-            dx = dx / distance, dy = dy / distance, dz = dz / distance, speed = stats.frostSpeed,
-            life = stats.frostLifetime, remaining = stats.frostRange, hitRadius = stats.frostHitRadius,
-            damage = stats.frostDamage, pierces = stats.frostPierce, hitTimes = {},
-            slow = stats.frostSlow, slowDuration = stats.frostSlowDuration, evolution = stats.frostEvolution,
-            isAnonymous = true, selfInteractions = MoveFrost}
-        CreateObject(shard, SurvivorConfig.frostModel, stats.frostScale)
-        FaceMissile(shard, dx, dy, dz)
+        dx, dy, dz = dx / distance, dy / distance, dz / distance
+        local count = stats.frostCount or 1
+        for k = 1, count do
+            -- Extra shards fan out horizontally around the aimed direction.
+            local turn = (k - (count + 1) / 2) * 0.17
+            local cos, sin = math.cos(turn), math.sin(turn)
+            local sx, sy = dx * cos - dy * sin, dx * sin + dy * cos
+            local shard = {identifier = "hsFrostShard", weapon = stats.weaponId, statusScale = stats.statusScale, x = x, y = y, z = z, yaw = 0,
+                dx = sx, dy = sy, dz = dz, speed = stats.frostSpeed,
+                life = stats.frostLifetime, remaining = stats.frostRange, hitRadius = stats.frostHitRadius,
+                damage = stats.frostDamage, pierces = stats.frostPierce, hitTimes = {},
+                slow = stats.frostSlow, slowDuration = stats.frostSlowDuration, evolution = stats.frostEvolution,
+                isAnonymous = true, selfInteractions = MoveFrost}
+            CreateObject(shard, stats.model or SurvivorConfig.frostModel, stats.frostScale)
+            FaceMissile(shard, sx, sy, dz)
+        end
     end
     Shatter = function(dead, record)
         local now = RunSession.GetElapsed()
@@ -1027,23 +1241,19 @@ do
             FaceMissile(shard, dx, dy, dz)
         end
     end
-    local castMethods = {firebolt = "FireMissile", flamefield = "CreateZone", chainlightning = "CastChainLightning",
-        orbitblade = "CastBlades", monsoon = "CastMonsoon", frontslash = "CastFrontSlash", frostshard = "FireFrostShard"}
-    local enabledFields = {firebolt = "missileEnabled", flamefield = "zoneEnabled", chainlightning = "chainEnabled",
-        orbitblade = "bladeEnabled", monsoon = "monsoonEnabled", frontslash = "slashEnabled", frostshard = "frostEnabled"}
-    local snapshotFields = {
-        firebolt = {"missileEnabled", "missileRange", "missileCount", "missileLifetime", "missileDamage", "missileSpeed", "missileHitRadius", "missileScale", "fireEvolution"},
-        flamefield = {"zoneEnabled", "zoneRadius", "zoneDuration", "zoneDamage", "zonePulse"},
-        chainlightning = {"chainEnabled", "chainDamage", "chainRange", "chainTargets", "chainJumpRange"},
-        monsoon = {"monsoonEnabled", "monsoonRange", "monsoonCount", "monsoonRadius", "monsoonDelay", "monsoonSpacing", "monsoonDamage"},
-        frontslash = {"slashEnabled", "slashAngle", "slashRange", "slashSweepTime", "slashDuration", "slashScale", "slashDamage"},
-        frostshard = {"frostEnabled", "frostRange", "frostSpeed", "frostLifetime", "frostHitRadius", "frostDamage", "frostPierce", "frostSlow", "frostSlowDuration", "frostEvolution", "frostScale"},
-    }
-    local snapshotDamage = {firebolt = "missileDamage", flamefield = "zoneDamage", chainlightning = "chainDamage",
-        monsoon = "monsoonDamage", frontslash = "slashDamage", frostshard = "frostDamage"}
+    local function EngineOf(id)
+        local weapon = SurvivorConfig.weapons[id]
+        return weapon and SurvivorConfig.weaponEngines[weapon.engine]
+    end
+    -- An engine's own weapon reads stats directly; other weapons on it read stats.views[id].
+    local function ViewOf(id, engine)
+        return engine.weapon == id and stats or stats.views and stats.views[id]
+    end
     local function DispatchWeapon(id, shot)
-        local method = castMethods[id]
-        if method then SurvivorCombat[method](shot) else SurvivorCombat.CastExtra(id, shot) end
+        local engine = EngineOf(id)
+        if engine.profile then SurvivorCombat.CastExtra(id, shot); return end
+        if not shot and engine.weapon ~= id then shot = {stats = ViewOf(id, engine)} end
+        SurvivorCombat[engine.cast](shot)
     end
     local function ExtraAttack(pending)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1057,29 +1267,36 @@ do
     end
     function SurvivorCombat.CastWeapon(id)
         if not RunSession.IsRunning() or not Alive(hero) then return end
-        local enabled = enabledFields[id]
-        if enabled and not stats[enabled] or not enabled and (not stats.extraWeapons[id] or not stats.extraWeapons[id].enabled) then return end
-        if id == "orbitblade" then
-            SurvivorCombat.CastBlades() -- Spawn base and extra blades together; no delayed single-blade casts.
+        local engine = EngineOf(id)
+        if not engine then return end
+        local view = not engine.profile and ViewOf(id, engine)
+        if engine.profile and (not stats.extraWeapons[id] or not stats.extraWeapons[id].enabled)
+            or not engine.profile and not (view and view[engine.enabled]) then return end
+        if engine.volley then
+            -- Spawn base and extra blades together; no delayed single-blade casts.
+            SurvivorCombat[engine.cast](view ~= stats and {stats = view} or nil)
             return
         end
         DispatchWeapon(id)
         if not RunSession.IsRunning() or not stats or stats.multiCount == 0 then return end
         local snapshot = {}
-        local fields = snapshotFields[id]
-        if fields then
-            for _, key in ipairs(fields) do snapshot[key] = stats[key] end
-            local damage = snapshotDamage[id]
-            snapshot[damage] = snapshot[damage] * stats.multiDamage
-        else
+        if engine.profile then
             local copy = {}
             for key, value in pairs(stats.extraWeapons[id]) do copy[key] = value end
             copy.damage = copy.damage * stats.multiDamage
+            copy.statusScale = 0.5 -- Extra attacks apply half the status stacks (at least one).
             snapshot.extraWeapons = {[id] = copy}
+        elseif view ~= stats then
+            for key, value in pairs(view) do snapshot[key] = value end
+            snapshot[engine.damage] = snapshot[engine.damage] * stats.multiDamage
+            if engine.single then snapshot[engine.single] = 1 end
+            snapshot.statusScale = 0.5
+        else
+            for _, key in ipairs(engine.fields) do snapshot[key] = stats[key] end
+            snapshot[engine.damage] = snapshot[engine.damage] * stats.multiDamage
+            -- Add individual projectiles/strikes, not copies of an entire existing volley.
+            if engine.single then snapshot[engine.single] = 1 end
         end
-        -- Add individual projectiles/blades/strikes, not copies of an entire existing volley.
-        if id == "firebolt" then snapshot.missileCount = 1
-        elseif id == "monsoon" then snapshot.monsoonCount = 1 end
         for i = 1, stats.multiCount do
             local pending = {identifier = "hsExtraAttack", x = GetUnitX(hero), y = GetUnitY(hero), z = 0,
                 weapon = id, shot = {stats = snapshot, index = i}, life = i * 0.18,
@@ -1182,16 +1399,11 @@ do
             life = delay, markers = {}, isStationary = true, isAnonymous = true,
             selfInteractions = ResolveBossBlast, destroy = DestroyObject}
         objects[blast] = true
-        for i = 1, 20 do
-            local angle = 2 * math.pi * i / 20
-            local mx, my = x + math.cos(angle) * blast.radius, y + math.sin(angle) * blast.radius
-            local marker = AddSpecialEffect(SurvivorConfig.warningModel, mx, my)
-            blast.markers[#blast.markers + 1] = marker
-            BlzSetSpecialEffectZ(marker, Height(mx, my) + 95)
-            BlzSetSpecialEffectScale(marker, 0.5)
-            local color = SurvivorStage.Get(stage).warning
-            BlzSetSpecialEffectColor(marker, color[1], color[2], color[3])
-        end
+        -- One red ground ring sized to the blast radius marks the whole danger area.
+        local marker = AddSpecialEffect(SurvivorConfig.warningRingModel, x, y)
+        blast.markers[1] = marker
+        BlzSetSpecialEffectZ(marker, blast.z + 5)
+        BlzSetSpecialEffectScale(marker, blast.radius / SurvivorConfig.warningRingRadius)
         ALICE_Create(blast)
     end
     function SurvivorCombat.WarnLava()
@@ -1211,12 +1423,11 @@ do
         end
     end
     local function SpecialMarker(self, x, y, green)
-        local effect = AddSpecialEffect(SurvivorConfig.warningModel, x, y)
+        -- Red spell markers outline danger; green ones mark the safe gaps.
+        local effect = AddSpecialEffect(green and SurvivorConfig.specialSafeMarkerModel or SurvivorConfig.specialMarkerModel, x, y)
         self.markers[#self.markers + 1] = effect
         BlzSetSpecialEffectScale(effect, green and 0.55 or 0.38)
-        BlzSetSpecialEffectZ(effect, Height(x, y) + 55)
-        local color = SurvivorStage.Get(stage).warning
-        BlzSetSpecialEffectColor(effect, green and 70 or color[1], green and 255 or color[2], green and 90 or color[3])
+        BlzSetSpecialEffectZ(effect, Height(x, y) + 5)
         return effect
     end
     local function ClearMarkers(self)
@@ -1329,9 +1540,23 @@ do
             self.bx = math.max(bounds.minX + 32, math.min(bounds.maxX - 32, x + math.cos(angle) * self.distance))
             self.by = math.max(bounds.minY + 32, math.min(bounds.maxY - 32, y + math.sin(angle) * self.distance))
             self.distance = math.max(1, math.sqrt((self.bx - x)^2 + (self.by - y)^2))
-            for i = 0, 8 do
-                local px, py = x + (self.bx - x) * i / 8, y + (self.by - y) * i / 8
-                for side = -1, 1, 2 do SpecialMarker(self, px - math.sin(angle) * self.width * side, py + math.cos(angle) * self.width * side) end
+            if record.elite then
+                -- Arrows along the path show the direction and how far the dash reaches.
+                local c, distance = SurvivorConfig, SurvivorConfig.dashArrowOffset
+                repeat
+                    local px, py = x + math.cos(angle) * distance, y + math.sin(angle) * distance
+                    local arrow = AddSpecialEffect(c.dashArrowModel, px, py)
+                    self.markers[#self.markers + 1] = arrow
+                    BlzSetSpecialEffectScale(arrow, c.dashArrowScale)
+                    BlzSetSpecialEffectYaw(arrow, angle)
+                    BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
+                    distance = distance + c.dashArrowSpacing
+                until distance > self.distance
+            else
+                for i = 0, 8 do
+                    local px, py = x + (self.bx - x) * i / 8, y + (self.by - y) * i / 8
+                    for side = -1, 1, 2 do SpecialMarker(self, px - math.sin(angle) * self.width * side, py + math.cos(angle) * self.width * side) end
+                end
             end
         elseif kind == "wave" then
             self.gap, self.gapWidth, self.angles = angle + math.pi / 2, math.pi / 2, {}
@@ -1528,6 +1753,7 @@ do
         if not record then return end
         statusUnits[unit] = nil
         frostStackUnits[unit] = nil
+        poisonUnits[unit] = nil
         if record.alive then enemyCount = enemyCount - 1; ALICE_RemoveIdentifier(unit, "hsEnemy") end
         if record.cosmetic then DestroyEffect(record.cosmetic) end
         units[unit] = nil
@@ -1707,6 +1933,7 @@ do
         if not record or not record.enemy then return end
         statusUnits[u] = nil
         frostStackUnits[u] = nil
+        poisonUnits[u] = nil
         if record.cosmetic then DestroyEffect(record.cosmetic); record.cosmetic = nil end
         if record.alive then enemyCount = math.max(0, enemyCount - 1) end
         units[u] = nil
@@ -1820,7 +2047,7 @@ do
         if oldDamage then CleanupCall(errors, "damage trigger", function() DestroyTrigger(oldDamage) end) end
         if oldDeath then CleanupCall(errors, "death trigger", function() DestroyTrigger(oldDeath) end) end
         local pendingObjects, pendingUnits = objects, units
-        objects, units, statusUnits, frostStackUnits = {}, {}, {}, {}
+        objects, units, statusUnits, frostStackUnits, poisonUnits = {}, {}, {}, {}, {}
         for object in pairs(pendingObjects) do
             if not CleanupCall(errors, "actor", function() ALICE_Kill(object) end) then
                 -- ALICE_Kill clears its actor only after the object's destroy method.
@@ -1917,13 +2144,14 @@ do
             record.alive = false
             statusUnits[dead] = nil
             frostStackUnits[dead] = nil
+            poisonUnits[dead] = nil
             if record.cosmetic then DestroyEffect(record.cosmetic); record.cosmetic = nil end
             if record.enemy then
                 enemyCount = enemyCount - 1
                 record.removeAt = RunSession.GetElapsed() + 2.0
                 ALICE_RemoveIdentifier(dead, "hsEnemy")
                 if record.boss then bossDefeated = true end
-                if RunSession.IsRunning() then Shatter(dead, record) end
+                if RunSession.IsRunning() then Shatter(dead, record); StatusDeath(dead, record) end
                 -- Finish is deferred to Step; never tear down combat during a Hit loop.
                 if RunSession.IsRunning() and onKill then onKill(dead, record.elite, record.boss) end
             elseif onDeath then onDeath() end
