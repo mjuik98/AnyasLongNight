@@ -304,6 +304,15 @@ function SurvivorConfig.StageTiming(stage)
     return assert(SurvivorConfig.stageTimings[stage], "Invalid stage timing")
 end
 
+-- The playing hero's id and profile, read from its unit type (default hero otherwise).
+function SurvivorConfig.HeroOf(unit)
+    local typeId = unit and GetUnitTypeId(unit)
+    for _, id in ipairs(SurvivorConfig.heroOrder) do
+        if SurvivorConfig.heroes[id].unitId == typeId then return id, SurvivorConfig.heroes[id] end
+    end
+    return SurvivorConfig.defaultHero, SurvivorConfig.heroes[SurvivorConfig.defaultHero]
+end
+
 function SurvivorConfig.SpawnRate(difficultyId, stage, stageElapsed)
     local difficulty = SurvivorConfig.difficulties[difficultyId]
     assert(difficulty and SurvivorConfig.stageSpawnRates[stage], "Invalid spawn profile")

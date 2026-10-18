@@ -537,6 +537,18 @@ Receive(hero,nil,100)
 assert(hero.x==0 and hero.y==0)
 SurvivorCombat.ClearBattlefield();assert(hero.invulnerable,'Do not remove pre-existing invulnerability')
 SurvivorCombat.Cleanup()
+
+-- The escape line belongs to the playing hero.
+local said={};SurvivorUI.Say=function(speaker,text)said[#said+1]={speaker,text}end
+IsTerrainPathable=function()return false end
+hero,build,units=NewCombat('firebolt');hero.maxLife,hero.life=1000,100
+assert(Receive(hero,nil,100)==0 and said[1][1]=='안야')
+local anyaLine=said[1][2];SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('firebolt');hero.maxLife,hero.life=1000,100
+hero.id=SurvivorConfig.heroes.putress.unitId
+assert(Receive(hero,nil,100)==0 and said[2][1]=='퓨트리스' and said[2][2]~='' and said[2][2]~=anyaLine,
+    'Putress speaks its own escape line')
+SurvivorCombat.Cleanup()
 `);
 
 suite('bounded cleanup, frozen time, completion once, and restart cancellation', mocks, [config, metrics, augments, combat], String.raw`
@@ -1786,6 +1798,34 @@ SurvivorExpedition.OnKill(objective.courier,false)
 assert(#speech==2 and speech[1]:find('지원 요청') and speech[2]==SurvivorExpedition.GetReply(4),'Courier line precedes the reply')
 assert(SurvivorExpedition.GetSceneReply(4) and SurvivorExpedition.GetSceneReply(4)~=SurvivorExpedition.GetReply(4))
 SurvivorExpedition.Reset()
+-- The playing hero speaks the subtitles; Putress has a full line set of its own.
+local chapters=Local(SurvivorExpedition.BeginStage,'chapters')
+for index,chapter in ipairs(chapters)do
+    local own=assert(chapter.putress,'Putress lines for chapter '..index)
+    assert(#own.beats==#chapter.beats,'Putress beats match chapter '..index)
+    for _,key in ipairs({'insight','reply','riskLine'})do
+        assert(type(own[key])=='string' and own[key]~='' and own[key]~=chapter[key],'Putress '..key..' for chapter '..index)
+    end
+    for i,line in ipairs(own.beats)do assert(line~=''and line~=chapter.beats[i])end
+end
+local voiced={};SurvivorUI.Say=function(speaker,text)voiced[#voiced+1]={speaker,text}end
+local anyaHero=hero
+hero=CreateUnit(0,SurvivorConfig.heroes.putress.unitId,0,0,0)
+Begin(4,6500);hero.x,hero.y=0,0;now=6520;SurvivorExpedition.Step(.02,now)
+objective=Local(SurvivorExpedition.Step,'objective')
+SurvivorExpedition.OnKill(objective.courier,false)
+assert(#voiced==2 and voiced[1][1]=='퓨트리스' and voiced[1][2]==chapters[4].putress.beats[1]
+    and voiced[2][1]=='퓨트리스' and voiced[2][2]==chapters[4].putress.reply,'Putress speaks its own courier and reply lines')
+assert(SurvivorExpedition.GetReply(4)==chapters[4].reply,'Story scenes keep the original reply text')
+assert(SurvivorExpedition.UseAdvantage(4) and voiced[3][1]=='퓨트리스' and voiced[3][2]==chapters[4].putress.insight)
+SurvivorExpedition.Reset()
+voiced={};hero=anyaHero
+Begin(4,6800);hero.x,hero.y=0,0;now=6820;SurvivorExpedition.Step(.02,now)
+objective=Local(SurvivorExpedition.Step,'objective')
+SurvivorExpedition.OnKill(objective.courier,false)
+assert(voiced[1][1]=='안야' and voiced[1][2]==chapters[4].beats[1] and voiced[2][2]==chapters[4].reply,'Anya keeps her lines')
+SurvivorExpedition.Reset()
+SurvivorUI.Say=function(speaker,text)speech[#speech+1]=text end
 for index=1,5 do
     speech={};Begin(index,7000+index*1000);hero.x,hero.y=0,0
     local opens=Local(SurvivorExpedition.RiskOffer,'RiskWindow')()
