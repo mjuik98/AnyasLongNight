@@ -15,10 +15,6 @@ do
         if kind == "DIFFICULTY" then return SurvivorConfig.difficulties[id] end
         return SurvivorAugments.Get(id)
     end
-    local function Icon(kind, entry)
-        -- Hero icons come from the map's own portrait units.
-        return kind == "HERO" and BlzGetAbilityIcon(entry.portraitId) or entry.icon
-    end
     local function Text(parent, name, width, height, x, y)
         local text = BlzCreateFrameByType("TEXT", name, parent, "", 0)
         BlzFrameSetSize(text, width, height)
@@ -94,7 +90,7 @@ do
                 local entry = Entry(category, id)
                 card.locked = entry.locked == true
                 BlzFrameSetEnable(card.button, not card.locked)
-                BlzFrameSetTexture(card.icon, Icon(category, entry), 0, true)
+                BlzFrameSetTexture(card.icon, entry.icon, 0, true)
                 BlzFrameSetText(card.name, card.locked and "|cff888888" .. entry.name .. " · 준비 중|r"
                     or (id == selectedId and "|cff80ff80[선택됨] " or "|cffffcc00") .. entry.name .. "|r")
                 local text = entry.text
@@ -220,7 +216,7 @@ do
             local entry = id and Entry(kind, id)
             local row = menuButtons[i]
             BlzFrameSetVisible(row.icon, entry ~= nil)
-            if entry then BlzFrameSetTexture(row.icon, Icon(kind, entry), 0, true) end
+            if entry then BlzFrameSetTexture(row.icon, entry.icon, 0, true) end
             BlzFrameSetText(row.value, entry and "|cff80ff80" .. entry.name .. "|r" or "|cffcccccc선택하세요|r")
         end
         startButton.ready = difficulty ~= nil and weapon ~= nil and trinket ~= nil

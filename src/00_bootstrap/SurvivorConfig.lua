@@ -65,9 +65,9 @@ SurvivorConfig = {
     -- Playable heroes. A locked hero is listed in setup but cannot start a run yet.
     defaultHero = "anya", heroOrder = {"anya", "putress"},
     heroes = {
-        anya = {name = "안야", unitId = FourCC("Uany"), portraitId = FourCC("hsPA"),
+        anya = {name = "안야", unitId = FourCC("Uany"), icon = [[ReplaceableTextures\CommandButtons\BTNAnya.blp]],
             text = "화염·번개·칼날·얼음 무기로 몰려오는 적을 즉시 정리합니다."},
-        putress = {name = "퓨트리스", portraitId = FourCC("hsPP"), locked = true,
+        putress = {name = "퓨트리스", icon = [[ReplaceableTextures\CommandButtons\BTNPutress.blp]], locked = true,
             text = "독·어둠·연금술 무기로 상태이상을 쌓아 터뜨립니다. (준비 중)", startingWeapons = {}},
     },
     -- Weapon id -> owning hero, firing engine and catalog traits. weaponOrder is the cast order.

@@ -40,7 +40,6 @@ UNIT_TYPE_FLYING, EVENT_PLAYER_UNIT_DEATH, EVENT_PLAYER_UNIT_DAMAGED = "flying",
 UNIT_STATE_MANA, UNIT_STATE_MAX_MANA = "mana", "maxMana"
 UNIT_RF_HIT_POINTS_REGENERATION_RATE = 'uhpr'
 function FourCC(x) return x end
-function BlzGetAbilityIcon(id) return 'BTN' .. tostring(id) .. '.blp' end
 function Player(x) return x end
 playerColors, playerNames, alliances, ALLIANCE_PASSIVE = {}, {}, {}, 'passive'
 function GetPlayerColor(p) return playerColors[p] or 'color' .. tostring(p) end
