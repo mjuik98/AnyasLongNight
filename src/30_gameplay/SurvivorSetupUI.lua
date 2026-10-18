@@ -4,7 +4,7 @@
 SurvivorSetupUI = {}
 do
     local root, shade, title, listTitle, heroName, description, descriptionTitle
-    local previewName, status, startButton, resetButton, summaryToggle
+    local status, startButton, resetButton, summaryToggle
     local heroButton, categoryButtons, cards, triggers = nil, {}, {}, {}
     local visible, category, hovered = false, "HERO", nil
     local selected = {}
@@ -273,7 +273,6 @@ do
         SetIcon(heroButton, hero)
         BlzFrameSetVisible(heroButton.active, category == "HERO")
         BlzFrameSetText(heroName, "|cffffcc00" .. hero.name .. "|r")
-        BlzFrameSetText(previewName, "|cffffcc00" .. hero.name .. "|r")
         StartPreview(hero)
         for _, kind in ipairs(kinds) do
             local tile, entry = categoryButtons[kind], Entry(kind, selected[kind])
@@ -382,8 +381,6 @@ do
         descriptionTitle = LeftText(center, "HeroSurvivorSetupDescriptionTitle", summaryWidth - margin * 2, 0.02, margin, -0.204)
         description = LeftText(center, "HeroSurvivorSetupDescription", summaryWidth - margin * 2, 0.15, margin, -0.226)
         BlzFrameSetTextAlignment(description, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
-
-        previewName = Text(preview, "HeroSurvivorSetupPreviewName", previewWidth - 0.04, 0.022, 0, -0.016)
 
         local actionWidth = previewWidth - margin * 2
         local buttonWidth = (actionWidth - 0.006) / 2
