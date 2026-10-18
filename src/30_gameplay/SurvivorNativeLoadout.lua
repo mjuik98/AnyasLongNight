@@ -6,7 +6,10 @@ SurvivorNativeLoadout = {}
 do
     local weapons = {firebolt = "HsW1", flamefield = "HsW2", chainlightning = "HsW3", orbitblade = "HsW4",
         monsoon = "HsW5", frontslash = "HsW6", frostshard = "HsW7",
-        frostnova = "HsW8", blizzard = "HsW9", meteor = "HsWA", thunderorb = "HsWB", returnblade = "HsWC"}
+        frostnova = "HsW8", blizzard = "HsW9", meteor = "HsWA", thunderorb = "HsWB", returnblade = "HsWC",
+        plaguedart = "HsWD", plaguetrail = "HsWE", corrosion = "HsWF", plaguepool = "HsWG",
+        deathcoil = "HsWH", soulchain = "HsWI", wraithguard = "HsWJ", shadowscythe = "HsWK",
+        plaguejar = "HsWL", catalyst = "HsWM", boilingflask = "HsWN", acidvials = "HsWO"}
     local trinkets = {power = "HsT1", haste = "HsT2", reach = "HsT3", velocity = "HsT4", magnitude = "HsT5", longevity = "HsT6", multicast = "HsT7",
         vitality = "HsT8", renewal = "HsT9", stride = "HsTA", armor = "HsTB"}
     local weaponPositions = {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {2, 1}, {3, 1}}
@@ -232,7 +235,7 @@ do
         if textCache.escape ~= state .. shield then
             textCache.escape = state .. shield
             BlzSetAbilityTooltip(passive, "그림자 탈출 · " .. state, 0)
-            BlzSetAbilityExtendedTooltip(passive, "안야의 자동 생존 능력 · 스테이지당 1회|n치명적인 피해를 무효화하고 생명력을 최소 30%로 보장합니다.|n주변 적이 적은 방향으로 최대 400 거리 순간 이동하고, 2.5초 동안 무적 상태가 됩니다.|n이동 가능한 경로가 없으면 제자리에서 보호받습니다.|n|n성장 선택·인벤토리·스토리 중에는 보호 시간이 줄지 않습니다.|n다음 스테이지에서 재충전 · 직접 누를 필요 없음|n|n현재: " .. state .. shield, 0)
+            BlzSetAbilityExtendedTooltip(passive, SurvivorConfig.heroes[build.hero or SurvivorConfig.defaultHero].name .. "의 자동 생존 능력 · 스테이지당 1회|n치명적인 피해를 무효화하고 생명력을 최소 30%로 보장합니다.|n주변 적이 적은 방향으로 최대 400 거리 순간 이동하고, 2.5초 동안 무적 상태가 됩니다.|n이동 가능한 경로가 없으면 제자리에서 보호받습니다.|n|n성장 선택·인벤토리·스토리 중에는 보호 시간이 줄지 않습니다.|n다음 스테이지에서 재충전 · 직접 누를 필요 없음|n|n현재: " .. state .. shield, 0)
         end
         for slot, id in ipairs(build.weapons) do
             local code = weapons[id]

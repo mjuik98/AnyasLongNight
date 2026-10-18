@@ -277,10 +277,12 @@ do
         local due = {}
         for _, id in ipairs(SurvivorConfig.weaponOrder) do
             local engine = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[id].engine]
+            -- An engine's own weapon is flat on stats; other weapons on it use stats.views.
             local profile = engine.profile and stats.extraWeapons[id]
-            local enabled = engine.profile and profile and profile.enabled or not engine.profile and stats[engine.enabled]
+            local view = not engine.profile and (engine.weapon == id and stats or stats.views and stats.views[id])
+            local enabled = profile and profile.enabled or view and view[engine.enabled]
             local clock = enabled and (weaponClocks[id] or 0) + dt or 0
-            local interval = enabled and (profile and profile.interval or stats[engine.interval])
+            local interval = enabled and (profile and profile.interval or view[engine.interval])
             if enabled and clock >= interval then
                 clock = engine.carry and clock - interval or 0
                 due[#due + 1] = id

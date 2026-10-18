@@ -10,6 +10,7 @@ import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo
     parseObjectData, serializeObjectData, installStatDetails, prepareStatDetails, statDisplays, statDetailRows, installInterfaceTooltip, installHeroRegeneration,
     prepareHeroRegeneration, validateStrengthRegeneration, loadTalentCatalog, talentLua, installNativeTalents,
     prepareNativeTalents, loadItemTooltipCatalog, loadWeaponTooltipCatalog, cleanWeaponTooltipEntries,
+    installGrowthObjects, weaponObjectPattern, weaponObjectCount, putressWeaponObjects, installPutressHero, putressHero,
     cleanItemTooltipText, cleanItemTooltipEntries, prepareItemTooltipCleanup,
     removeGoldObjectData, removeGoldStrings, removeGoldMisc,
     prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, installGameInterfaceLabel, root, baseMapPath} from './build.mjs';
@@ -182,7 +183,7 @@ function SetLocal(fn,key,v) local _,f,i=Up(fn,key); assert(f,"Missing upvalue ".
 function NewCombat(weapon)
     world,actors,hits={}, {}, {}; state="RUNNING"; now=0
     local hero=CreateUnit(0,"hero",0,0,0)
-    local build=SurvivorAugments.NewBuild(weapon)
+    local build=SurvivorAugments.NewBuild(weapon,nil,SurvivorConfig.weapons[weapon].hero)
     SurvivorCombat.Init(hero,build.stats,{minX=-5000,maxX=5000,minY=-5000,maxY=5000},nil,nil,"normal")
     SurvivorCombat.TrackWeapons({weapon})
     return hero,build,Local(SurvivorCombat.Init,"units")
@@ -724,7 +725,7 @@ build.stats.sets.ember=true;hits={}
 local expire=Local(SurvivorCombat.CreateZone,'ExpireEmber')
 local nested=false;local areaHit=Local(SurvivorCombat.CastExtra,'AreaHit')
 onDamage=function()if not nested then nested=true;areaHit({x=far.x,y=far.y,z=60,radius=1,weapon='meteor',slow=0},1)end end
-expire({x=0,y=0,z=0,radius=200,damage=5});onDamage=nil
+expire({x=0,y=0,z=0,radius=200,damage=5,weapon='flamefield'});onDamage=nil
 local outer={};for _,hit in ipairs(hits)do if hit.damage==10 then outer[#outer+1]=hit.unit end end
 local groundExpected={};for _,u in ipairs(expected)do if not u.flying then groundExpected[#groundExpected+1]=u end end
 assert(#outer==#groundExpected);for i,u in ipairs(outer)do assert(u==groundExpected[i],'Secondary nested queries preserve the outer damage order')end
@@ -853,6 +854,114 @@ for _,weapon in ipairs({'firebolt','flamefield','chainlightning','monsoon','fron
     for _,actor in ipairs(pending)do actor.life=.001;actor.selfInteractions(actor);assert(actor.cleaned)end
     SurvivorCombat.Cleanup()
 end
+`);
+
+suite('putress weapons fire through shared engines and attribute damage to their own id', mocks + String.raw`
+function AddLightningEx()return {}end
+function GetRandomInt()return 1 end
+`, [config,metrics,augments,combat], String.raw`
+local ids={'plaguedart','plaguetrail','corrosion','plaguepool','deathcoil','soulchain','wraithguard','shadowscythe',
+    'plaguejar','catalyst','boilingflask','acidvials'}
+assert(#ids==12)
+for _,id in ipairs(ids)do
+    local hero,build,units=NewCombat(id);local target=EnemyAt(units,150,0,false);target.life=100000
+    assert(build.hero=='putress' and SurvivorConfig.weapons[id].hero=='putress')
+    SurvivorCombat.CastWeapon(id)
+    for step=1,300 do
+        if #hits>0 then break end
+        now=now+.02
+        local list={};for _,a in ipairs(actors)do list[#list+1]=a end
+        for _,a in ipairs(list)do
+            if not a.cleaned and a.selfInteractions then a.selfInteractions(a) end
+            if not a.cleaned and a.interactions and a.interactions.hsEnemy then a.interactions.hsEnemy(a,target) end
+        end
+    end
+    assert(#hits>0,'No hit from '..id)
+    local rows=SurvivorCombat.DamageRows({id})
+    assert(rows[1].damage>0,'Damage must be attributed to '..id)
+    for _,a in ipairs(actors)do
+        assert(a.weapon==nil or SurvivorConfig.weapons[a.weapon].hero=='putress','A Putress cast created an Anya-attributed object: '..tostring(a.weapon))
+    end
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('putress poison ticks, curse amplifies, reaction consumes poison and extra attacks halve stacks', mocks + String.raw`
+function AddLightningEx()return {}end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('plaguedart');local target=EnemyAt(units,150,0,false);target.life=100000
+local hit=Local(SurvivorCombat.UpdateWeapons,'Hit');local cfg=SurvivorConfig.status
+hit(target,10,'plaguedart')
+assert(units[target].poison==build.stats.status.plaguedart.poison and units[target].poison==2)
+hits={};now=cfg.poisonTick;SurvivorCombat.UpdateWeapons(.02)
+assert(#hits==1 and math.abs(hits[1].damage-2*build.stats.poisonDamage*cfg.poisonTick)<1e-9,'Poison ticks every half second per stack')
+hit(target,10,'plaguedart',false,false,1,{curse=5})
+assert(units[target].curse==cfg.curseMax,'Curse stacks cap')
+hits={};hit(target,10,'plaguedart',false,false,1,{})
+assert(math.abs(hits[1].damage-10*(1+cfg.curseAmp*cfg.curseMax))<1e-9,'Cursed enemies take amplified damage')
+units[target].poison=8;hits={}
+hit(target,10,'plaguedart',false,false,1,{reaction=1})
+local amp=1+cfg.curseAmp*cfg.curseMax
+assert(units[target].poison==4 and #hits==2,'Reaction consumes half of the poison')
+assert(math.abs(hits[2].damage-4*cfg.reactionDamage*build.stats.poisonDamage/cfg.poisonDamage*amp)<1e-6)
+hits={};hit(target,10,'plaguedart',false,false,1,{reaction=1})
+assert(#hits==1 and units[target].poison==4,'Reaction waits for its per-target cooldown')
+now=now+cfg.reactionCooldown;hits={};hit(target,10,'plaguedart',false,false,1,{reaction=1,reactionAll=true})
+assert(units[target].poison==0 and #hits==2,'Critical reaction consumes every stack')
+hit(target,10,'plaguedart',false,false,.5,{poison=4});assert(units[target].poison==2,'Extra attacks apply half the stacks')
+hit(target,10,'plaguedart',false,false,.5,{poison=1});assert(units[target].poison==3,'A halved stack never rounds to zero')
+hit(target,10,'plaguedart',true,false,1,{poison=4});assert(units[target].poison==3,'Set procs and ticks never add status')
+now=now+60;SurvivorCombat.UpdateWeapons(.02)
+assert(units[target].poison==0 and next(Local(SurvivorCombat.UpdateWeapons,'poisonUnits'))==nil,'Expired poison stops ticking')
+SurvivorCombat.Cleanup()
+assert(next(Local(SurvivorCombat.UpdateWeapons,'poisonUnits'))==nil)
+`);
+
+suite('putress throws follow a Bezier arc and land on the point locked at release', mocks + String.raw`
+function AddLightningEx()return {}end
+function GetRandomInt()return 1 end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('plaguejar');local target=EnemyAt(units,400,0,false);target.life=100000
+SurvivorCombat.CastWeapon('plaguejar')
+local throw;for _,a in ipairs(actors)do if a.identifier=='hsThrow' then throw=a end end
+assert(throw and throw.x1==400 and throw.y1==0,'The landing point is the target position at release')
+local c=SurvivorConfig.throw
+local expected=(c.minFlight+(c.maxFlight-c.minFlight)*400/c.flightRange)/build.stats.extraWeapons.plaguejar.speed
+assert(math.abs(throw.flight-expected)<1e-9)
+target.x=1000
+local steps,peak=0,-math.huge
+repeat steps=steps+1;now=now+.02;throw.selfInteractions(throw);peak=math.max(peak,throw.z) until throw.cleaned or steps>200
+assert(throw.cleaned and math.abs(steps*.02-expected)<.021,'Impact waits for the flight time')
+assert(peak>throw.z0 and peak<=throw.cz,'The bottle rises toward its control point')
+local zone;for _,a in ipairs(actors)do if a.identifier=='hsExtraZone' then zone=a end end
+assert(zone and zone.x==400 and zone.status.poison==1,'The poison residue lands where the jar was aimed')
+SurvivorCombat.Cleanup()
+`);
+
+suite('putress evolutions apply their engine, status and mode changes', mocks, [config,augments], String.raw`
+local count=0
+for i=25,48 do
+    local id='evolution'..i;local entry=SurvivorAugments.Get(id);assert(entry and entry.kind=='evolution')
+    local weapon=entry.weapon;assert(SurvivorConfig.weapons[weapon].hero=='putress');count=count+1
+    local build=SurvivorAugments.NewBuild(weapon,nil,'putress')
+    build.levels[weapon]=SurvivorConfig.growthMaxLevel;SurvivorAugments.Recalculate(build)
+    assert(SurvivorAugments.CanChoose(id,build));SurvivorAugments.Apply(id,build)
+    assert(SurvivorAugments.OwnedTooltip(weapon,build):find(entry.name,1,true))
+end
+assert(count==24)
+local function Evolved(weapon,id)
+    local build=SurvivorAugments.NewBuild(weapon,nil,'putress')
+    build.levels[weapon]=SurvivorConfig.growthMaxLevel;SurvivorAugments.Recalculate(build)
+    for i=25,48 do if SurvivorAugments.Get('evolution'..i).name==id then SurvivorAugments.Apply('evolution'..i,build)end end
+    return build.stats
+end
+local stats=Evolved('plaguedart','괴사 주입')
+assert(stats.views.plaguedart.frostPierce==1 and stats.status.plaguedart.poison==SurvivorConfig.weapons.plaguedart.poison[7]+4)
+stats=Evolved('plaguedart','역병 산탄');assert(stats.views.plaguedart.frostCount==3)
+stats=Evolved('catalyst','임계 반응');assert(stats.status.catalyst.reactionAll and math.abs(stats.status.catalyst.reaction-1.5*1.3)<1e-9)
+stats=Evolved('wraithguard','망령 군단');assert(stats.views.wraithguard.bladeEvolution=='evolution7' and stats.bladeEvolution==nil)
+stats=Evolved('acidvials','농축 산성');assert(stats.views.acidvials.monsoonCount==1)
+stats=Evolved('plaguejar','연쇄 폭발');assert(stats.status.plaguejar.splitJars==2)
 `);
 
 suite('tooltip cache invalidation, paused acquisition, and item recreation', mocks, [config, metrics, augments, combat, 'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
@@ -4812,18 +4921,19 @@ state='READY';HeroSurvivor.Start()
 assert(setupShown.hero==SurvivorConfig.defaultHero and SurvivorConfig.heroes[setupShown.hero].unitId,
     'Setup opens with a playable default hero')
 assert(HeroSurvivor.OpenSetup('HERO') and optionsShown.kind=='HERO' and optionsShown.selected=='anya')
+SurvivorConfig.heroes.putress.locked=true
 assert(not HeroSurvivor.SelectSetup('HERO','putress'),'A locked hero cannot be selected')
+SurvivorConfig.heroes.putress.locked=nil
 assert(not HeroSurvivor.SelectSetup('HERO','missing'))
 assert(HeroSurvivor.SelectSetup('HERO','anya') and setupShown.hero=='anya')
 assert(HeroSurvivor.OpenSetup('WEAPON') and HeroSurvivor.SelectSetup('WEAPON','firebolt'))
 assert(HeroSurvivor.OpenSetup('HERO') and HeroSurvivor.SelectSetup('HERO','anya') and setupShown.weapon=='firebolt',
     'Confirming the same hero keeps the starting weapon')
-SurvivorConfig.heroes.putress.locked=false
 assert(HeroSurvivor.OpenSetup('HERO') and HeroSurvivor.SelectSetup('HERO','putress'))
 assert(setupShown.hero=='putress' and setupShown.weapon==nil,'Switching heroes clears the previous hero weapon')
 assert(HeroSurvivor.OpenSetup('WEAPON') and optionsShown.hero=='putress')
 assert(not HeroSurvivor.SelectSetup('WEAPON','firebolt'),'A weapon owned by another hero is rejected')
-SurvivorConfig.heroes.putress.locked=true
+assert(HeroSurvivor.SelectSetup('WEAPON','deathcoil') and setupShown.weapon=='deathcoil' and setupShown.hero=='putress')
 local anya=SurvivorAugments.NewBuild('firebolt',nil,'anya')
 assert(anya.hero=='anya' and SurvivorAugments.CanChoose('frostshard',anya) and SurvivorAugments.CanChoose('power',anya))
 assert(not pcall(SurvivorAugments.NewBuild,'firebolt',nil,'putress'),'A starting weapon must belong to the hero')
@@ -4832,7 +4942,11 @@ assert(not SurvivorAugments.CanChoose('frostshard',foreign) and not SurvivorAugm
     'Weapons and evolutions are offered only to their own hero')
 assert(SurvivorAugments.CanChoose('power',foreign),'Trinkets are shared by every hero')
 local empty={hero='putress',levels={},weapons={},trinkets={},evolutions={},excluded={},stats={}}
+assert(SurvivorAugments.CanChoose('velocity',empty),'A future Putress projectile weapon keeps projectile speed available')
+for id,weapon in pairs(SurvivorConfig.weapons)do if weapon.hero=='putress' and weapon.projectile then empty.excluded[id]=true end end
 assert(not SurvivorAugments.CanChoose('velocity',empty),'Projectile speed waits for a projectile weapon of the same hero')
+empty.excluded={};for id,weapon in pairs(SurvivorConfig.weapons)do if weapon.hero=='anya' then empty.excluded[id]=true end end
+assert(SurvivorAugments.CanChoose('velocity',empty),'Excluding the other hero weapons never blocks projectile speed')
 `);
 
 suite('weapon clocks follow the registry: profiles and volleys fire before upkeep, zones keep overshoot', mocks + String.raw`
@@ -5154,6 +5268,20 @@ assert(not staleCanStart()and not staleReady(),'Previous-run preparation closure
 staleTimer.callback();assert(LiveTimers(1)==0 and SurvivorUI.IsCombatPreparationVisible()and RunSession.GetElapsed()==0)
 StartCountdown();assert(RunSession.IsRunning()and SurvivorCombat.Counts()==3)
 assert(RunSession.Finish('test'))
+HeroSurvivor.Start();assert(HeroSurvivor.OpenSetup('HERO')and HeroSurvivor.SelectSetup('HERO','putress'))
+for _,id in ipairs(SurvivorConfig.heroes.putress.startingWeapons)do
+    HeroSurvivor.Start();assert(HeroSurvivor.OpenSetup('WEAPON')and HeroSurvivor.SelectSetup('WEAPON',id))
+    ClickFrame(frames.HeroSurvivorSetupStart)
+    local nextHero=Local(HeroSurvivor.BeginRun,'hero')
+    assert(RunSession.GetState()=='STAGE_CLEAR'and nextHero and GetUnitTypeId(nextHero)==SurvivorConfig.heroes.putress.unitId,
+        'Selecting Putress creates the Putress hero unit')
+    SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
+    StartCountdown()
+    assert(RunSession.IsRunning()and selectedUnit==nextHero and lastFirstCast==id,'Putress starts with '..id)
+    assert(SurvivorCombat.Counts()==3 and not halted and #unsafeFrameCalls==0)
+    local before=RunSession.GetElapsed();periodic();assert(RunSession.GetElapsed()>before)
+    assert(RunSession.Finish('test')and nextHero.removed and not halted and periodic==nil)
+end
 `);
 
 suite('combat preparation preserves the live arena and requires a fresh click after interruption or replacement', presentationMocks,
@@ -5964,18 +6092,19 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
         const entries=new Map(['war3map.w3a','war3mapSkin.w3a','war3map.wts'].map(name=>[name,candidate.read(name)]));
         for(const [name,bytes]of cleanWeaponTooltipEntries(entries,weapons))assert.deepEqual(bytes,entries.get(name),'Saved weapon tooltip differs from runtime: '+filename+'/'+name);
     }
-    const weaponEntries=new Map(['war3map.w3a','war3mapSkin.w3a','war3map.wts'].map(name=>[name,map.read(name)]));
+    const grown=installGrowthObjects(new Map(['war3map.w3a','war3mapSkin.w3a','war3map.w3t','war3mapSkin.w3t'].map(name=>[name,map.read(name)])));
+    const weaponEntries=new Map(['war3map.w3a','war3mapSkin.w3a','war3map.wts'].map(name=>[name,grown.get(name)??map.read(name)]));
     const installed=cleanWeaponTooltipEntries(weaponEntries,weapons);
     const strip=bytes=>{
         const data=parseObjectData(bytes,'ability');
-        for(const row of data.tables[1].filter(row=>/^HsW[1-9ABC]$/.test(row.newId))) {
+        for(const row of data.tables[1].filter(row=>weaponObjectPattern.test(row.newId))) {
             row.fields=row.fields.filter(field=>!['anam','atp1','aub1'].includes(field.id));delete row.raw;
         }
         return serializeObjectData(data);
     };
     for(const name of ['war3map.w3a','war3mapSkin.w3a'])assert.deepEqual(strip(installed.get(name)),strip(weaponEntries.get(name)),
         'Weapon tooltip synchronization must preserve every combat field and unrelated ability');
-    console.log('PASS complete original/test audit: 15 talents, 11 trinkets, 82 equipment items and 84 weapon levels match runtime');
+    console.log('PASS complete original/test audit: 15 talents, 11 trinkets, 82 equipment items and '+weaponObjectCount*7+' weapon levels match runtime');
 }
 {
     const snapshots=new Map(),prepared=prepareNativeTalents(map,snapshots);
@@ -6792,4 +6921,21 @@ console.log('PASS MPQ replace/base sync never accumulate unused archive bytes an
     assert.throws(() => openMap(duplicate).read('war3map.lua'), /Multiple locale/,
         'The lookup cache must retain duplicate-locale refusal');
     console.log('PASS MPQ indexed lookup preserves duplicate-locale rejection');
+}
+{
+    const asset=fs.readFileSync(path.join(root,'assets/war3map.w3u')),skinAsset=fs.readFileSync(path.join(root,'assets/war3mapSkin.w3u'));
+    assert.deepEqual(installPutressHero(asset,false),asset,'Putress hero installation is idempotent');
+    assert.deepEqual(installPutressHero(skinAsset,true),skinAsset);
+    for(const [bytes,skin]of [[asset,false],[skinAsset,true]]) {
+        const data=parseUnits(bytes);data.tables[1]=data.tables[1].filter(row=>row.newId!==putressHero.id);
+        const installed=parseUnits(installPutressHero(serializeUnits(data),skin));
+        const row=installed.tables[1].find(row=>row.newId===putressHero.id),anya=installed.tables[0].find(row=>row.oldId==='Uany');
+        assert.equal(row.oldId,'Uany');
+        if(skin)assert.deepEqual(row.fields.map(field=>[field.id,field.value]),[['umdl',putressHero.model],['unam','퓨트리스'],['uico',putressHero.icon],['upro','퓨트리스'],['usnd','']]);
+        else assert.deepEqual(row.fields.map(field=>[field.id,field.value]),anya.fields.map(field=>[field.id,field.value]),'Putress copies every Anya gameplay override');
+    }
+    const abilities=parseObjectData(fs.readFileSync(path.join(root,'assets/war3mapSkin.w3a')),'ability');
+    for(const object of putressWeaponObjects)assert.equal(abilities.tables[1].find(row=>row.newId===object.id).fields.find(field=>field.id==='aart').value,object.icon);
+    assert.equal(parseObjectData(fs.readFileSync(path.join(root,'assets/war3map.w3a')),'ability').tables[1].filter(row=>weaponObjectPattern.test(row.newId)).length,weaponObjectCount);
+    console.log('PASS Putress hero copies Anya overrides and 12 Putress weapon indicators carry their icons');
 }

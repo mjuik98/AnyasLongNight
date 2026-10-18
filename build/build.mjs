@@ -57,7 +57,7 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
     try {
         lua.lua_pushjsfunction(state, current => {
             const values = [1,2,3].map(index => to_jsstring(lua.lua_tostring(current,index)));
-            assert((weapons ? /^HsW[1-9ABC]:[1-7]$/ : /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/).test(values[0]) && !catalog.has(values[0]));
+            assert((weapons ? /^HsW[1-9A-O]:[1-7]$/ : /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/).test(values[0]) && !catalog.has(values[0]));
             catalog.set(values[0], {name:values[1],description:values[2].replaceAll('\n','|n')});
             return 0;
         });
@@ -72,9 +72,10 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
             chunks.push([name,bytes.toString('utf8')]);
         }
         chunks.push(['descriptions',weapons ? String.raw`
-local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC'}
+local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC',
+    plaguedart='HsWD',plaguetrail='HsWE',corrosion='HsWF',plaguepool='HsWG',deathcoil='HsWH',soulchain='HsWI',wraithguard='HsWJ',shadowscythe='HsWK',plaguejar='HsWL',catalyst='HsWM',boilingflask='HsWN',acidvials='HsWO'}
 for id,raw in pairs(ids)do
-    local build=SurvivorAugments.NewBuild(id)
+    local build=SurvivorAugments.NewBuild(id,nil,SurvivorConfig.weapons[id].hero)
     for level=1,SurvivorConfig.growthMaxLevel do
         build.levels[id]=level;SurvivorAugments.Recalculate(build)
         local name=SurvivorAugments.Get(id).name..' · '..(level==SurvivorConfig.growthMaxLevel and 'MAX' or 'Lv.'..level)
@@ -95,7 +96,7 @@ end
             if(status===lua.LUA_OK)status=lua.lua_pcall(state,0,0,0);
             assert.equal(status,lua.LUA_OK,'Cannot generate item tooltips: '+(status===lua.LUA_OK?'':to_jsstring(lua.lua_tostring(state,-1))));
         }
-        assert.equal(catalog.size,weapons ? 12 * growthLevels : 93,'Unexpected runtime tooltip catalog size');
+        assert.equal(catalog.size,weapons ? weaponObjectCount * growthLevels : 93,'Unexpected runtime tooltip catalog size');
         return catalog;
     } finally { lua.lua_close(state); }
 }
@@ -464,6 +465,14 @@ export function prepareNativeTalents(map, snapshots = new Map(), preparedAssets 
 }
 // Weapon/trinket growth ends at level 7 (SurvivorConfig.growthMaxLevel).
 export const growthLevels = 7;
+// Passive weapon indicators: HsW1..HsWC are Anya's, HsWD..HsWO are Putress' (SurvivorNativeLoadout).
+export const weaponObjectCount = 24;
+export const weaponObjectPattern = /^HsW[1-9A-O]$/;
+export const putressWeaponObjects = [
+    ['HsWD', 'BTNEnvenomedSpear'], ['HsWE', 'BTNPlagueCloud'], ['HsWF', 'BTNCorrosiveBreath'], ['HsWG', 'BTNOrbOfVenom'],
+    ['HsWH', 'BTNDeathCoil'], ['HsWI', 'BTNCurse'], ['HsWJ', 'BTNUnholyFrenzy'], ['HsWK', 'BTNDarkRitual'],
+    ['HsWL', 'BTNAcidBomb'], ['HsWM', 'BTNTransmute'], ['HsWN', 'BTNHealingSpray'], ['HsWO', 'BTNChemicalRage'],
+].map(([id, icon]) => ({id, icon: 'ReplaceableTextures\\CommandButtons\\' + icon + '.blp'}));
 export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인장',
     icon: 'ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpOne.blp'};
 // Own only the weapon level count, their zero attribute rows and the armor trinket.
@@ -472,8 +481,20 @@ export function installGrowthObjects(entries) {
     const output = new Map(entries);
     const abilities = parseObjectData(entries.get('war3map.w3a'), 'ability');
     assert.deepEqual(serializeObjectData(abilities), entries.get('war3map.w3a'), 'Ability reader must round-trip losslessly');
-    const weapons = abilities.tables[1].filter(row => /^HsW[1-9ABC]$/.test(row.newId));
-    assert.equal(weapons.length, 12, 'Missing native weapon objects');
+    // Putress indicators are created from HsW1's level metadata; tooltips are filled later.
+    const template = abilities.tables[1].find(row => row.newId === 'HsW1');
+    assert(template && template.oldId === 'Aamk', 'Missing weapon template HsW1');
+    for (const object of putressWeaponObjects) {
+        assert(!abilities.tables[0].some(row => row.oldId === object.id), 'Weapon ID collides with a stock ability: ' + object.id);
+        const rows = abilities.tables[1].filter(row => row.newId === object.id);
+        assert(rows.length <= 1, 'Duplicate weapon object: ' + object.id);
+        if (rows.length) continue;
+        abilities.tables[1].push({oldId: 'Aamk', newId: object.id, extra: [...template.extra],
+            fields: template.fields.filter(field => field.id === 'aher' || field.id === 'alev')
+                .map(field => ({id: field.id, type: field.type, level: field.level, column: field.column, value: field.value, endId: object.id}))});
+    }
+    const weapons = abilities.tables[1].filter(row => weaponObjectPattern.test(row.newId));
+    assert.equal(weapons.length, weaponObjectCount, 'Missing native weapon objects');
     for (const row of weapons) {
         assert.equal(row.oldId, 'Aamk', 'Weapon base collision: ' + row.newId);
         const levels = row.fields.filter(field => field.id === 'alev');
@@ -488,6 +509,27 @@ export function installGrowthObjects(entries) {
         }
     }
     output.set('war3map.w3a', serializeObjectData(abilities));
+    const skins = parseObjectData(entries.get('war3mapSkin.w3a'), 'ability');
+    assert.deepEqual(serializeObjectData(skins), entries.get('war3mapSkin.w3a'), 'Ability skin reader must round-trip losslessly');
+    const skinTemplate = skins.tables[1].find(row => row.newId === 'HsW1');
+    assert(skinTemplate && skinTemplate.oldId === 'Aamk', 'Missing weapon skin template HsW1');
+    for (const object of putressWeaponObjects) {
+        const rows = skins.tables[1].filter(row => row.newId === object.id);
+        assert(rows.length <= 1, 'Duplicate weapon skin: ' + object.id);
+        if (rows.length) {
+            const art = rows[0].fields.filter(field => field.id === 'aart');
+            assert(art.length === 1 && art[0].value === object.icon, 'Unexpected weapon icon: ' + object.id);
+            continue;
+        }
+        const base = (id, value) => {
+            const field = skinTemplate.fields.find(candidate => candidate.id === id && candidate.level === 0 && candidate.column === 0);
+            assert(field, 'Weapon skin template lacks ' + id);
+            return {id, type: field.type, level: 0, column: 0, value: value ?? field.value, endId: object.id};
+        };
+        skins.tables[1].push({oldId: 'Aamk', newId: object.id, extra: [...skinTemplate.extra],
+            fields: [base('anam', object.id), base('aart', object.icon), base('abpx'), base('abpy')]});
+    }
+    output.set('war3mapSkin.w3a', serializeObjectData(skins));
     for (const [name, skin] of [['war3map.w3t', false], ['war3mapSkin.w3t', true]]) {
         const data = parseObjectData(entries.get(name), 'item');
         assert.deepEqual(serializeObjectData(data), entries.get(name), 'Item reader must round-trip losslessly');
@@ -508,7 +550,7 @@ export function installGrowthObjects(entries) {
     return output;
 }
 export function prepareGrowthObjects(map, snapshots = new Map(), preparedAssets = new Map()) {
-    const names = ['war3map.w3a', 'war3map.w3t', 'war3mapSkin.w3t'];
+    const names = ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.w3t', 'war3mapSkin.w3t'];
     const entries = installGrowthObjects(new Map(names.map(name => [name, map.read(name)])));
     const sources = new Map(names.map(name => [name, fs.readFileSync(path.join(root, 'assets', name))]));
     const outputs = installGrowthObjects(new Map(names.map(name => [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])));
@@ -523,13 +565,13 @@ export function prepareGrowthObjects(map, snapshots = new Map(), preparedAssets 
     return {entries, assets};
 }
 export function cleanWeaponTooltipEntries(entries, catalog) {
-    assert.equal(catalog.size,12 * growthLevels,'Expected twelve seven-level weapons');
+    assert.equal(catalog.size,weaponObjectCount * growthLevels,'Expected seven-level weapons for every indicator');
     const output=new Map(entries),strings=stringTable(entries.get('war3map.wts'));
     const skins=parseObjectData(entries.get('war3mapSkin.w3a'),'ability'),expectedStrings=new Map(),otherReferences=new Set();
     for(const name of ['war3map.w3a','war3mapSkin.w3a']) {
         const data=parseObjectData(entries.get(name),'ability');
-        const rows=data.tables[1].filter(row=>/^HsW[1-9ABC]$/.test(row.newId));
-        assert.equal(rows.length,12,'Missing native weapon objects in '+name);
+        const rows=data.tables[1].filter(row=>weaponObjectPattern.test(row.newId));
+        assert.equal(rows.length,weaponObjectCount,'Missing native weapon objects in '+name);
         for(const row of rows) {
             assert.equal(row.oldId,'Aamk','Weapon base collision: '+row.newId);
             const skin=skins.tables[1].find(value=>value.newId===row.newId&&value.oldId===row.oldId);
@@ -563,7 +605,7 @@ export function cleanWeaponTooltipEntries(entries, catalog) {
         for(const row of data.tables.flat())for(const field of row.fields) {
             if(field.type!==3)continue;
             const reference=field.value.match(/^TRIGSTR_(\d+)$/);
-            if(reference&&!(/^HsW[1-9ABC]$/.test(row.newId)&&['anam','atp1','aub1'].includes(field.id)))otherReferences.add(Number(reference[1]));
+            if(reference&&!(weaponObjectPattern.test(row.newId)&&['anam','atp1','aub1'].includes(field.id)))otherReferences.add(Number(reference[1]));
         }
         output.set(name,serializeObjectData(data));
     }
@@ -622,6 +664,31 @@ export function installHeroRegeneration(bytes, skin = false) {
     }
     return serializeUnits(data);
 }
+// Putress copies every Uany gameplay override (stats, regeneration, no native skills)
+// so both heroes start identical; the skin row only changes presentation.
+export const putressHero = {id: 'HsPu', base: 'Uany', name: '퓨트리스',
+    model: 'Units\\Forsaken\\Hero_Putress\\Hero_Putress.mdl',
+    icon: 'ReplaceableTextures\\CommandButtons\\BTNPutress.blp'};
+export function installPutressHero(bytes, skin = false) {
+    const data = parseUnits(bytes);
+    assert.deepEqual(serializeUnits(data), bytes, 'Unit reader must round-trip losslessly');
+    assert(!data.tables[0].some(row => row.oldId === putressHero.id), 'Putress ID collides with a stock unit');
+    const source = data.tables[0].filter(row => row.oldId === putressHero.base);
+    assert(source.length === 1, 'Putress needs the Anya unit overrides');
+    const fields = skin
+        ? [['umdl', putressHero.model], ['unam', putressHero.name], ['uico', putressHero.icon], ['upro', putressHero.name], ['usnd', '']]
+            .map(([id, value]) => ({id, type: 3, level: 0, column: 0, value, endId: putressHero.id}))
+        : source[0].fields.map(field => ({id: field.id, type: field.type, level: field.level, column: field.column,
+            value: field.value, endId: putressHero.id}));
+    const rows = data.tables[1].filter(row => row.newId === putressHero.id);
+    assert(rows.length <= 1, 'Duplicate Putress hero');
+    const same = row => row.oldId === putressHero.base && row.fields.length === fields.length
+        && row.fields.every((field, i) => ['id', 'type', 'level', 'column', 'value'].every(key => (field[key] ?? 0) === (fields[i][key] ?? 0)));
+    if (rows.length && same(rows[0])) return bytes;
+    if (rows.length) { delete rows[0].raw; rows[0].oldId = putressHero.base; rows[0].fields = fields; }
+    else data.tables[1].push({oldId: putressHero.base, newId: putressHero.id, extra: data.version === 3 ? [0] : [], fields});
+    return serializeUnits(data);
+}
 export function validateStrengthRegeneration(bytes) {
     let section = '', values = [];
     for (const line of bytes.toString('utf8').split(/\r?\n/)) {
@@ -637,8 +704,8 @@ export function prepareHeroRegeneration(map, snapshots = new Map(), preparedAsse
     const entries = new Map(), assets = new Map();
     for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
         const bytes = map.read(name), assetPath = path.join(root, 'assets', name), source = fs.readFileSync(assetPath);
-        const output = installHeroRegeneration(bytes, skin);
-        const assetOutput = installHeroRegeneration(preparedAssets.get(assetPath) ?? source, skin);
+        const output = installPutressHero(installHeroRegeneration(bytes, skin), skin);
+        const assetOutput = installPutressHero(installHeroRegeneration(preparedAssets.get(assetPath) ?? source, skin), skin);
         assert.deepEqual(assetOutput, output, 'Asset and test map hero regeneration diverge: ' + name);
         if (snapshots.has(assetPath)) assert.deepEqual(source, snapshots.get(assetPath), 'Asset changed during preparation');
         else snapshots.set(assetPath, source);
