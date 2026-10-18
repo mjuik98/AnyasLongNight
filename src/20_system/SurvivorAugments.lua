@@ -76,11 +76,10 @@ do
         armor = "무너진 성벽 대신 스스로를 지킨다.",
     }
     for id, text in pairs(flavor) do catalog[id].flavor = text end
-    local elements = {firebolt = "화염", flamefield = "화염", meteor = "화염",
-        chainlightning = "번개", monsoon = "번개", thunderorb = "번개",
-        orbitblade = "칼날", frontslash = "칼날", returnblade = "칼날",
-        frostshard = "얼음", frostnova = "얼음", blizzard = "얼음"}
-    for id, element in pairs(elements) do catalog[id].element = element end
+    for id, weapon in pairs(SurvivorConfig.weapons) do
+        assert(catalog[id] and catalog[id].kind == "weapon", "Registered weapon missing from catalog " .. id)
+        catalog[id].element, catalog[id].hero = weapon.element, weapon.hero
+    end
     local multiCounts, multiDamage = {1, 1, 2, 2, 2, 3, 3}, {0.30, 0.45, 0.30, 0.40, 0.50, 0.35, 0.45}
     -- Each max-level weapon chooses one permanent branch without another equipment requirement.
     local evolutions = {
@@ -355,10 +354,10 @@ do
                 enabled = level > 0,
                 damage = level > 0 and profile.damage * (1 + 0.35 * (level - 1)) * math.max(0.1, 1 + power + Bonus(build, id, "damagePct")) or 0,
                 interval = math.max(0.5, profile.interval / math.max(0.1, 1 + speed + Bonus(build, id, "speedPct"))),
-                radius = math.min(900, profile.radius * size * (id == "frostnova" and weaponRange or 1)),
+                radius = math.min(900, profile.radius * size * (c.weapons[id].engine == "nova" and weaponRange or 1)),
                 range = math.min(2500, profile.range * weaponRange), size = weaponSize,
                 duration = math.min(20, math.max(0.1, profile.duration + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife),
-                speed = profile.speed * ((id == "thunderorb" or id == "returnblade") and projectileSpeed or 1),
+                speed = profile.speed * (c.weapons[id].projectile and projectileSpeed or 1),
                 pulse = math.max(0.1, profile.pulse),
                 slow = profile.slow, delay = 0.8,
                 slowDurationBonus = Bonus(build, id, "slowDuration"),
@@ -436,13 +435,14 @@ do
         SurvivorAugments.Recalculate(build, hero)
         return true
     end
-    function SurvivorAugments.NewBuild(startingWeapon, startingTrinket)
+    function SurvivorAugments.NewBuild(startingWeapon, startingTrinket, heroId)
         assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= #chainTargets, "Growth tables support levels 1..7")
         assert(SurvivorConfig.weaponSlots >= 1 and SurvivorConfig.weaponSlots <= 6
             and SurvivorConfig.trinketSlots >= 1 and SurvivorConfig.trinketSlots <= 6, "Growth UI supports 1..6 slots per category")
-        local first = startingWeapon or SurvivorConfig.startingWeapon
+        local first, owner = startingWeapon or SurvivorConfig.startingWeapon, heroId or SurvivorConfig.defaultHero
         assert(catalog[first] and catalog[first].kind == "weapon", "Invalid starting weapon")
-        local build = {levels = {[first] = 1}, weapons = {first}, trinkets = {}, stats = {}, equipmentBonuses = {},
+        assert(catalog[first].hero == owner, "Starting weapon belongs to another hero")
+        local build = {hero = owner, levels = {[first] = 1}, weapons = {first}, trinkets = {}, stats = {}, equipmentBonuses = {},
             evolutions = {}, excluded = {}, excludesRemaining = SurvivorConfig.excludesPerRun}
         if startingTrinket then
             assert(catalog[startingTrinket] and catalog[startingTrinket].kind == "trinket", "Invalid starting trinket")
@@ -454,21 +454,25 @@ do
     end
     function SurvivorAugments.HasProjectileWeapon(build)
         for _, id in ipairs(build.weapons) do
-            if id == "firebolt" or id == "frostshard" or id == "thunderorb" or id == "returnblade" then return true end
+            if SurvivorConfig.weapons[id].projectile then return true end
         end
         return false
     end
     function SurvivorAugments.CanChoose(id, build)
         local entry = catalog[id]
         if not entry or entry.kind == "recovery" or build.excluded[id] then return false end
+        local heroId = build.hero or SurvivorConfig.defaultHero
         if id == "velocity" and not SurvivorAugments.HasProjectileWeapon(build) then
             if #build.weapons >= SurvivorConfig.weaponSlots then return false end
             local future = false
-            for _, weapon in ipairs({"firebolt", "frostshard", "thunderorb", "returnblade"}) do
-                if not build.excluded[weapon] then future = true end
+            for weapon, profile in pairs(SurvivorConfig.weapons) do
+                if profile.projectile and profile.hero == heroId and not build.excluded[weapon] then future = true end
             end
             if not future then return false end
         end
+        -- Weapons and their evolutions belong to one hero; trinkets are shared.
+        local owner = entry.kind == "evolution" and catalog[entry.weapon].hero or entry.hero
+        if owner and owner ~= heroId then return false end
         if entry.kind == "evolution" then
             return SurvivorAugments.Level(build, entry.weapon) == SurvivorConfig.growthMaxLevel and not build.evolutions[entry.weapon]
         end

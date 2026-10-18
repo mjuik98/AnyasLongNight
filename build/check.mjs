@@ -40,6 +40,7 @@ UNIT_TYPE_FLYING, EVENT_PLAYER_UNIT_DEATH, EVENT_PLAYER_UNIT_DAMAGED = "flying",
 UNIT_STATE_MANA, UNIT_STATE_MAX_MANA = "mana", "maxMana"
 UNIT_RF_HIT_POINTS_REGENERATION_RATE = 'uhpr'
 function FourCC(x) return x end
+function BlzGetAbilityIcon(id) return 'BTN' .. tostring(id) .. '.blp' end
 function Player(x) return x end
 playerColors, playerNames, alliances, ALLIANCE_PASSIVE = {}, {}, {}, 'passive'
 function GetPlayerColor(p) return playerColors[p] or 'color' .. tostring(p) end
@@ -845,8 +846,9 @@ for _,weapon in ipairs({'firebolt','flamefield','chainlightning','monsoon','fron
         build.stats.extraWeapons[weapon].damage=99999
         assert(snapshot.extraWeapons[weapon].damage==damage and snapshot.extraWeapons[weapon]~=build.stats.extraWeapons[weapon])
     else
-        assert(snapshot.extraWeapons==nil and snapshot[Local(SurvivorCombat.CastWeapon,'enabledFields')[weapon]])
-        local key=Local(SurvivorCombat.CastWeapon,'snapshotDamage')[weapon];local damage=snapshot[key]
+        local engine=SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine]
+        assert(snapshot.extraWeapons==nil and snapshot[engine.enabled])
+        local key=engine.damage;local damage=snapshot[key]
         build.stats[key]=99999;assert(snapshot[key]==damage)
     end
     for _,actor in ipairs(pending)do actor.life=.001;actor.selfInteractions(actor);assert(actor.cleaned)end
@@ -2863,15 +2865,16 @@ SurvivorLootUI.SetInventoryVisible(false)
 state='READY';SurvivorLootUI.Refresh()
 SurvivorSetupUI.ShowMenu('normal','firebolt','power')
 WorldAt(frames.HeroSurvivorSetupRoot,.02,.5)
-for _,name in ipairs({'DIFFICULTY','WEAPON','TRINKET','Start'})do
+for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET','Start'})do
     Surface(frames['HeroSurvivorSetup'..name],.5,.5)
 end
 Surface(frames.HSSummaryToggle,.5,.5)
-for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
+for _,kind in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do
     SurvivorSetupUI.ShowOptions(kind,nil)
     WorldAt(frames.HeroSurvivorSetupOptions,.02,.5)
     for i=1,6 do local button=frames['HeroSurvivorSetupOption'..i]
-        if button.visible then Surface(button,.5,.5);Surface(button,.07,.5)end
+        -- A locked hero card is shown disabled and never takes pointer input.
+        if button.visible and button.enabled then Surface(button,.5,.5);Surface(button,.07,.5)end
     end
     Surface(frames.HeroSurvivorSetupBack,.5,.5)
     if frames.HeroSurvivorSetupFollowing.visible and frames.HeroSurvivorSetupFollowing.enabled then
@@ -3184,15 +3187,15 @@ unsafeFrameCalls={}
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 local selections,hero,starts,completed={},nil,0,0
 local function Menu()
-    SurvivorSetupUI.ShowMenu(selections.DIFFICULTY,selections.WEAPON,selections.TRINKET)
+    SurvivorSetupUI.ShowMenu(selections.DIFFICULTY,selections.WEAPON,selections.TRINKET,selections.HERO)
 end
-SurvivorSetupUI.Init(function(kind)SurvivorSetupUI.ShowOptions(kind,selections[kind])end,
+SurvivorSetupUI.Init(function(kind)SurvivorSetupUI.ShowOptions(kind,selections[kind],selections.HERO)end,
     function(kind,id)selections[kind]=id;Menu()end,Menu,function()
         starts=starts+1;state='STAGE_CLEAR';hero=CreateUnit(0,'Uany',-7680,7424,0);selectedUnit=hero
         SurvivorUI.ShowStageIntro(1,function()completed=completed+1;state='FINISHED'end,hero)
     end)
 state='READY';Menu()
-for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
+for _,kind in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do
     ClickFrame(frames['HeroSurvivorSetup'..kind]);ClickFrame(frames.HeroSurvivorSetupOption1)
     assert(selections[kind],'The actual preparation UI must supply every required selection')
 end
@@ -4795,6 +4798,72 @@ state='FINISHED';HeroSurvivor.Start()
 assert(setupShown.difficulty==selections.DIFFICULTY and setupShown.weapon==selections.WEAPON and setupShown.trinket==selections.TRINKET)
 assert(HeroSurvivor.ToggleStorySummary() and not HeroSurvivor.IsStorySummary())
 assert(summaryMode==false,'Setup summary preference reaches the story runtime')
+`);
+
+suite('hero selection rejects locked heroes, resets foreign starting weapons and filters growth by hero', mocks + String.raw`
+OnInit={final=function()end}
+RunSession.Finish=function()state='FINISHED'end
+SurvivorSetupUI={ShowMenu=function(difficulty,weapon,trinket,hero)
+    setupShown={difficulty=difficulty,weapon=weapon,trinket=trinket,hero=hero}
+end,ShowOptions=function(kind,selected,hero)optionsShown={kind=kind,selected=selected,hero=hero}end}
+SurvivorStory={SetSummaryMode=function()end}
+`, [config,augments,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
+SetLocal(HeroSurvivor.Start,'initialized',true)
+state='READY';HeroSurvivor.Start()
+assert(setupShown.hero==SurvivorConfig.defaultHero and SurvivorConfig.heroes[setupShown.hero].unitId,
+    'Setup opens with a playable default hero')
+assert(HeroSurvivor.OpenSetup('HERO') and optionsShown.kind=='HERO' and optionsShown.selected=='anya')
+assert(not HeroSurvivor.SelectSetup('HERO','putress'),'A locked hero cannot be selected')
+assert(not HeroSurvivor.SelectSetup('HERO','missing'))
+assert(HeroSurvivor.SelectSetup('HERO','anya') and setupShown.hero=='anya')
+assert(HeroSurvivor.OpenSetup('WEAPON') and HeroSurvivor.SelectSetup('WEAPON','firebolt'))
+assert(HeroSurvivor.OpenSetup('HERO') and HeroSurvivor.SelectSetup('HERO','anya') and setupShown.weapon=='firebolt',
+    'Confirming the same hero keeps the starting weapon')
+SurvivorConfig.heroes.putress.locked=false
+assert(HeroSurvivor.OpenSetup('HERO') and HeroSurvivor.SelectSetup('HERO','putress'))
+assert(setupShown.hero=='putress' and setupShown.weapon==nil,'Switching heroes clears the previous hero weapon')
+assert(HeroSurvivor.OpenSetup('WEAPON') and optionsShown.hero=='putress')
+assert(not HeroSurvivor.SelectSetup('WEAPON','firebolt'),'A weapon owned by another hero is rejected')
+SurvivorConfig.heroes.putress.locked=true
+local anya=SurvivorAugments.NewBuild('firebolt',nil,'anya')
+assert(anya.hero=='anya' and SurvivorAugments.CanChoose('frostshard',anya) and SurvivorAugments.CanChoose('power',anya))
+assert(not pcall(SurvivorAugments.NewBuild,'firebolt',nil,'putress'),'A starting weapon must belong to the hero')
+local foreign={hero='putress',levels={firebolt=7},weapons={'firebolt'},trinkets={},evolutions={},excluded={},stats={}}
+assert(not SurvivorAugments.CanChoose('frostshard',foreign) and not SurvivorAugments.CanChoose('evolution1',foreign),
+    'Weapons and evolutions are offered only to their own hero')
+assert(SurvivorAugments.CanChoose('power',foreign),'Trinkets are shared by every hero')
+local empty={hero='putress',levels={},weapons={},trinkets={},evolutions={},excluded={},stats={}}
+assert(not SurvivorAugments.CanChoose('velocity',empty),'Projectile speed waits for a projectile weapon of the same hero')
+`);
+
+suite('weapon clocks follow the registry: profiles and volleys fire before upkeep, zones keep overshoot', mocks + String.raw`
+OnInit={final=function()end}
+function GetHeroLevel()return 1 end
+function GetHeroSkillPoints()return 0 end
+SurvivorExpedition.Step=function()end
+SurvivorEquipment={Step=function()end}
+SurvivorNativeLoadout={Refresh=function()end}
+casts={}
+SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 0,0,0 end,
+    SpawnBoss=function()return true end,Spawn=function()return true end,
+    CastWeapon=function(id)casts[#casts+1]=id end,
+    UpdateWeapons=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
+`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
+local step=Local(HeroSurvivor.BeginRun,'Step')
+SetLocal(step,'hero',CreateUnit(0,'hero',0,0,0))
+SetLocal(step,'stats',{zoneEnabled=true,zoneInterval=.05,missileEnabled=true,missileInterval=.05,
+    bladeEnabled=true,bladeInterval=.05,extraWeapons={meteor={enabled=true,interval=.05},blizzard={enabled=false,interval=.01}}})
+SetLocal(step,'selectedDifficulty','normal');SetLocal(step,'RefreshDamageBoard',function()end)
+SetLocal(step,'stage',1);SetLocal(step,'stageStarted',0);SetLocal(step,'bossStarted',false);SetLocal(step,'nextElite',45)
+state='RUNNING'
+now=.03;step(.03,now)
+assert(#casts==1 and casts[1]=='upkeep','Nothing fires before its interval')
+casts={};now=.06;step(.03,now)
+local order=table.concat(casts,',')
+assert(order=='meteor,orbitblade,upkeep,firebolt,flamefield','Unexpected cast order '..order)
+local clocks=Local(step,'weaponClocks')
+assert(math.abs(clocks.flamefield-.01)<1e-9 and clocks.firebolt==0 and clocks.meteor==0 and clocks.blizzard==0,
+    'Zones carry overshoot; other weapons restart and unowned weapons stay idle')
 `);
 
 suite('initial and later introductions wait for a distinct preparation countdown before real combat and reject stale run callbacks', presentationMocks + String.raw`

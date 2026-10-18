@@ -9,15 +9,14 @@ do
     -- This is a reward queue, not a second level/XP system. The unit owns both.
     local queuedLevels, queueHead, observedLevel = {}, 1, 1
     local levelTrigger
-    local missileClock, zoneClock, spawnBudget, enemyClock, hudClock, choiceGrace = 0, 0, 0, 0, 0, 0
+    local spawnBudget, enemyClock, hudClock, choiceGrace = 0, 0, 0, 0
     local debugTrigger
     local nextElite = 0
-    local chainClock, bossStarted = 0, false
-    local monsoonClock, slashClock, frostClock = 0, 0, 0
+    local bossStarted = false
     local stage, stageStarted, bossEngagedAt = 1, 0, nil
-    local bladeClock, extraClocks = 0, {}
+    local weaponClocks = {}
     local boardClock = 0
-    local selectedDifficulty, selectedWeapon, selectedTrinket, setupPhase
+    local selectedHero, selectedDifficulty, selectedWeapon, selectedTrinket, setupPhase = SurvivorConfig.defaultHero
     local storySummary = false
     local stageRecords, stageStartKills = {}, 0
     local gearOffers
@@ -275,45 +274,31 @@ do
             if bossStarted then bossEngagedAt = elapsed end
         end
         -- An unowned weapon has no cooldown accumulation and cannot fire.
-        missileClock = stats.missileEnabled and (missileClock + dt) or 0
-        zoneClock = stats.zoneEnabled and (zoneClock + dt) or 0
-        chainClock = stats.chainEnabled and (chainClock + dt) or 0
-        monsoonClock = stats.monsoonEnabled and (monsoonClock + dt) or 0
-        slashClock = stats.slashEnabled and (slashClock + dt) or 0
-        frostClock = stats.frostEnabled and (frostClock + dt) or 0
-        bladeClock = stats.bladeEnabled and (bladeClock + dt) or 0
-        for id, w in pairs(stats.extraWeapons) do
-            extraClocks[id] = w.enabled and ((extraClocks[id] or 0) + dt) or 0
-            if w.enabled and extraClocks[id] >= w.interval then extraClocks[id] = 0; SurvivorCombat.CastWeapon(id) end
+        local due = {}
+        for _, id in ipairs(SurvivorConfig.weaponOrder) do
+            local engine = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[id].engine]
+            local profile = engine.profile and stats.extraWeapons[id]
+            local enabled = engine.profile and profile and profile.enabled or not engine.profile and stats[engine.enabled]
+            local clock = enabled and (weaponClocks[id] or 0) + dt or 0
+            local interval = enabled and (profile and profile.interval or stats[engine.interval])
+            if enabled and clock >= interval then
+                clock = engine.carry and clock - interval or 0
+                due[#due + 1] = id
+            end
+            weaponClocks[id] = clock
         end
-        if stats.bladeEnabled and bladeClock >= stats.bladeInterval then bladeClock = 0; SurvivorCombat.CastWeapon("orbitblade") end
+        -- Profile weapons and volleys fire before status upkeep; the rest after this tick's spawns.
+        local function Fire(early)
+            for _, id in ipairs(due) do
+                local engine = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[id].engine]
+                if (engine.profile or engine.volley or false) == early then SurvivorCombat.CastWeapon(id) end
+            end
+        end
+        Fire(true)
         SurvivorCombat.UpdateWeapons(dt)
         enemyClock, hudClock = enemyClock + dt, hudClock + dt
         SpawnWave(dt, stageElapsed)
-        if stats.missileEnabled and missileClock >= stats.missileInterval then
-            missileClock = 0
-            SurvivorCombat.CastWeapon("firebolt")
-        end
-        if stats.zoneEnabled and zoneClock >= stats.zoneInterval then
-            zoneClock = zoneClock - stats.zoneInterval
-            SurvivorCombat.CastWeapon("flamefield")
-        end
-        if stats.chainEnabled and chainClock >= stats.chainInterval then
-            chainClock = 0
-            SurvivorCombat.CastWeapon("chainlightning")
-        end
-        if stats.monsoonEnabled and monsoonClock >= stats.monsoonInterval then
-            monsoonClock = 0
-            SurvivorCombat.CastWeapon("monsoon")
-        end
-        if stats.slashEnabled and slashClock >= stats.slashInterval then
-            slashClock = 0
-            SurvivorCombat.CastWeapon("frontslash")
-        end
-        if stats.frostEnabled and frostClock >= stats.frostInterval then
-            frostClock = 0
-            SurvivorCombat.CastWeapon("frostshard")
-        end
+        Fire(false)
         if enemyClock >= 0.5 then
             enemyClock = 0
             SurvivorCombat.UpdateEnemies(elapsed)
@@ -373,8 +358,7 @@ do
         SurvivorExpedition.BeginStage(hero, stage, stageStarted, ExpeditionReward)
         SurvivorEquipment.CarryGroundToStage()
         nextElite, bossStarted = SurvivorConfig.eliteInterval, false
-        missileClock, zoneClock, chainClock, monsoonClock, slashClock, frostClock = 0, 0, 0, 0, 0, 0
-        bladeClock, extraClocks, spawnBudget, enemyClock, hudClock = 0, {}, 0, 0, 0
+        weaponClocks, spawnBudget, enemyClock, hudClock = {}, 0, 0, 0
         ShowStageIntroduction()
         return true
     end
@@ -400,7 +384,7 @@ do
             "Use a flat map of at least 64 x 64 terrain tiles")
         local x, y = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
         assert(not IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY), "Map center must be walkable")
-        build = SurvivorAugments.NewBuild(startingWeapon, startingTrinket)
+        build = SurvivorAugments.NewBuild(startingWeapon, startingTrinket, selectedHero)
         for index = 1, SurvivorConfig.stages do
             local timing = SurvivorConfig.StageTiming(index)
             assert(timing.bossStart > 0 and timing.bossStart < timing.duration,
@@ -416,12 +400,11 @@ do
         kills = 0
         stageRecords, stageStartKills = {}, 0
         firstEvolution, peakEnemies, peakVisuals = nil, 0, 0
-        stage, stageStarted, bossEngagedAt, bladeClock, extraClocks = 1, 0, nil, 0, {}
+        stage, stageStarted, bossEngagedAt, weaponClocks = 1, 0, nil, {}
         nextElite = SurvivorConfig.eliteInterval
-        chainClock, bossStarted = 0, false
-        monsoonClock, slashClock, frostClock = 0, 0, 0
-        missileClock, zoneClock, spawnBudget, enemyClock, hudClock, choiceGrace = 0, 0, 0, 0, 0, 0
-        hero = CreateUnit(Player(SurvivorConfig.playerId), SurvivorConfig.heroId, x, y, 270)
+        bossStarted = false
+        spawnBudget, enemyClock, hudClock, choiceGrace = 0, 0, 0, 0
+        hero = CreateUnit(Player(SurvivorConfig.playerId), SurvivorConfig.heroes[selectedHero].unitId, x, y, 270)
         assert(hero ~= nil, "Hero object ID is missing")
         -- Combat takes ownership immediately, including during partial startup failure.
         SurvivorCombat.Init(hero, stats, arena, function(dead, elite, isBoss)
@@ -493,7 +476,7 @@ do
     end
     local function ShowSetup()
         setupPhase = "MENU"
-        SurvivorSetupUI.ShowMenu(selectedDifficulty, selectedWeapon, selectedTrinket)
+        SurvivorSetupUI.ShowMenu(selectedDifficulty, selectedWeapon, selectedTrinket, selectedHero)
     end
     function HeroSurvivor.Start()
         assert(initialized, "Start after HeroSurvivor.Init")
@@ -520,11 +503,11 @@ do
     end
     function HeroSurvivor.OpenSetup(kind)
         if not CanSetup() or setupPhase ~= "MENU" then return false end
-        if kind ~= "DIFFICULTY" and kind ~= "WEAPON" and kind ~= "TRINKET" then return false end
+        if kind ~= "HERO" and kind ~= "DIFFICULTY" and kind ~= "WEAPON" and kind ~= "TRINKET" then return false end
         setupPhase = kind
-        local selections = {DIFFICULTY = selectedDifficulty, WEAPON = selectedWeapon, TRINKET = selectedTrinket}
+        local selections = {HERO = selectedHero, DIFFICULTY = selectedDifficulty, WEAPON = selectedWeapon, TRINKET = selectedTrinket}
         local selected = selections[kind]
-        SurvivorSetupUI.ShowOptions(kind, selected)
+        SurvivorSetupUI.ShowOptions(kind, selected, selectedHero)
         return true
     end
     function HeroSurvivor.BackToSetup()
@@ -534,8 +517,13 @@ do
     end
     function HeroSurvivor.SelectSetup(kind, id)
         if not CanSetup() or setupPhase ~= kind then return false end
-        if kind == "DIFFICULTY" and SurvivorConfig.difficulties[id] then selectedDifficulty = id
-        elseif kind == "WEAPON" and Allowed(SurvivorConfig.startingWeapons, id) then selectedWeapon = id
+        local profile = SurvivorConfig.heroes[id]
+        if kind == "HERO" and profile and not profile.locked then
+            -- Starting weapons are per hero; trinkets and difficulty are shared.
+            if id ~= selectedHero then selectedWeapon = nil end
+            selectedHero = id
+        elseif kind == "DIFFICULTY" and SurvivorConfig.difficulties[id] then selectedDifficulty = id
+        elseif kind == "WEAPON" and Allowed(SurvivorConfig.heroes[selectedHero].startingWeapons, id) then selectedWeapon = id
         elseif kind == "TRINKET" and Allowed(SurvivorConfig.startingTrinkets, id) then selectedTrinket = id
         else return false end
         ShowSetup()

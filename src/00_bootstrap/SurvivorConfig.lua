@@ -1,7 +1,6 @@
 -- Prototype values, not final game balance. Uses stock Blizzard object IDs.
 SurvivorConfig = {
     autoStart = true, debugCommands = HERO_SURVIVOR_PROFILE ~= "release", playerId = 0,
-    heroId = FourCC("Uany"),
     talents = assert(HERO_SURVIVOR_TALENTS, "Missing native talent catalog"),
     stages = 5, heroLife = 300, moveSpeed = 300, heroRegeneration = 0,
     stageTimings = {
@@ -63,6 +62,54 @@ SurvivorConfig = {
     startingTrinkets = {"power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"},
     startingWeapon = "firebolt",
     startingWeapons = {"firebolt", "chainlightning", "orbitblade", "frostshard"},
+    -- Playable heroes. A locked hero is listed in setup but cannot start a run yet.
+    defaultHero = "anya", heroOrder = {"anya", "putress"},
+    heroes = {
+        anya = {name = "안야", unitId = FourCC("Uany"), portraitId = FourCC("hsPA"),
+            text = "화염·번개·칼날·얼음 무기로 몰려오는 적을 즉시 정리합니다."},
+        putress = {name = "퓨트리스", portraitId = FourCC("hsPP"), locked = true,
+            text = "독·어둠·연금술 무기로 상태이상을 쌓아 터뜨립니다. (준비 중)", startingWeapons = {}},
+    },
+    -- Weapon id -> owning hero, firing engine and catalog traits. weaponOrder is the cast order.
+    weaponOrder = {"frostnova", "blizzard", "meteor", "thunderorb", "returnblade", "orbitblade",
+        "firebolt", "flamefield", "chainlightning", "monsoon", "frontslash", "frostshard"},
+    weapons = {
+        firebolt = {hero = "anya", engine = "missile", element = "화염", projectile = true},
+        flamefield = {hero = "anya", engine = "zone", element = "화염"},
+        meteor = {hero = "anya", engine = "meteor", element = "화염"},
+        chainlightning = {hero = "anya", engine = "chain", element = "번개"},
+        monsoon = {hero = "anya", engine = "strike", element = "번개"},
+        thunderorb = {hero = "anya", engine = "orb", element = "번개", projectile = true},
+        orbitblade = {hero = "anya", engine = "orbit", element = "칼날"},
+        frontslash = {hero = "anya", engine = "cone", element = "칼날"},
+        returnblade = {hero = "anya", engine = "boomerang", element = "칼날", projectile = true},
+        frostshard = {hero = "anya", engine = "pierce", element = "얼음", projectile = true},
+        frostnova = {hero = "anya", engine = "nova", element = "얼음"},
+        blizzard = {hero = "anya", engine = "field", element = "얼음"},
+    },
+    -- Engines name the derived stats fields they read. Profile engines read
+    -- stats.extraWeapons[id]; carry keeps overshoot time so zones never drift.
+    -- single = the count field reduced to 1 for each multicast extra attack.
+    weaponEngines = {
+        missile = {cast = "FireMissile", enabled = "missileEnabled", interval = "missileInterval",
+            damage = "missileDamage", single = "missileCount",
+            fields = {"missileEnabled", "missileRange", "missileCount", "missileLifetime", "missileDamage", "missileSpeed", "missileHitRadius", "missileScale", "fireEvolution"}},
+        zone = {cast = "CreateZone", enabled = "zoneEnabled", interval = "zoneInterval", damage = "zoneDamage", carry = true,
+            fields = {"zoneEnabled", "zoneRadius", "zoneDuration", "zoneDamage", "zonePulse"}},
+        chain = {cast = "CastChainLightning", enabled = "chainEnabled", interval = "chainInterval", damage = "chainDamage",
+            fields = {"chainEnabled", "chainDamage", "chainRange", "chainTargets", "chainJumpRange"}},
+        -- Orbit casts its base and extra blades as one volley, so it has no snapshot.
+        orbit = {cast = "CastBlades", enabled = "bladeEnabled", interval = "bladeInterval", volley = true},
+        strike = {cast = "CastMonsoon", enabled = "monsoonEnabled", interval = "monsoonInterval",
+            damage = "monsoonDamage", single = "monsoonCount",
+            fields = {"monsoonEnabled", "monsoonRange", "monsoonCount", "monsoonRadius", "monsoonDelay", "monsoonSpacing", "monsoonDamage"}},
+        cone = {cast = "CastFrontSlash", enabled = "slashEnabled", interval = "slashInterval", damage = "slashDamage",
+            fields = {"slashEnabled", "slashAngle", "slashRange", "slashSweepTime", "slashDuration", "slashScale", "slashDamage"}},
+        pierce = {cast = "FireFrostShard", enabled = "frostEnabled", interval = "frostInterval", damage = "frostDamage",
+            fields = {"frostEnabled", "frostRange", "frostSpeed", "frostLifetime", "frostHitRadius", "frostDamage", "frostPierce", "frostSlow", "frostSlowDuration", "frostEvolution", "frostScale"}},
+        nova = {profile = true}, field = {profile = true}, meteor = {profile = true},
+        orb = {profile = true}, boomerang = {profile = true},
+    },
     missileInterval = 0.8, missileDamage = 40, missileSpeed = 850, missileRange = 1000,
     missileLifetime = 5,
     -- World Z = terrain Z + current fly height + model-relative height.
@@ -115,6 +162,18 @@ SurvivorConfig = {
     },
     frostModel = "Abilities\\Spells\\Other\\FrostArrows\\NagaColdArrowMissile.mdl",
 }
+
+SurvivorConfig.heroes.anya.startingWeapons = SurvivorConfig.startingWeapons
+do
+    local c, listed = SurvivorConfig, {}
+    for _, id in ipairs(c.weaponOrder) do
+        local weapon = assert(c.weapons[id], "Unregistered weapon " .. id)
+        assert(c.heroes[weapon.hero] and c.weaponEngines[weapon.engine], "Invalid weapon registry entry " .. id)
+        listed[id] = true
+    end
+    for id in pairs(c.weapons) do assert(listed[id], "Weapon missing from cast order " .. id) end
+    for id in pairs(c.extraWeapons) do assert(c.weaponEngines[c.weapons[id].engine].profile, "Profile weapon needs a profile engine " .. id) end
+end
 
 function SurvivorConfig.EnemyScaling(stage, stageElapsed, isBoss)
     local c = SurvivorConfig

@@ -3,11 +3,22 @@ SurvivorSetupUI = {}
 do
     local root, shade, title, footer, menu, options, startButton, back, previous, following, pageText
     local menuButtons, cards, triggers = {}, {}, {}
-    local view, category, selectedId, page, entries, startingWeapon
+    local view, category, selectedId, page, entries, startingWeapon, heroId
     local openCallback, selectCallback, backCallback, startCallback
     local summaryToggle
-    local labels = {DIFFICULTY = "난이도", WEAPON = "시작 무기", TRINKET = "시작 장신구"}
-    local kinds = {"DIFFICULTY", "WEAPON", "TRINKET"}
+    local labels = {HERO = "영웅", DIFFICULTY = "난이도", WEAPON = "시작 무기", TRINKET = "시작 장신구"}
+    local kinds = {"HERO", "DIFFICULTY", "WEAPON", "TRINKET"}
+    -- Hero and difficulty rows use one wide card per option; the others use a 2-column grid.
+    local function Wide(kind) return kind == "HERO" or kind == "DIFFICULTY" end
+    local function Entry(kind, id)
+        if kind == "HERO" then return SurvivorConfig.heroes[id] end
+        if kind == "DIFFICULTY" then return SurvivorConfig.difficulties[id] end
+        return SurvivorAugments.Get(id)
+    end
+    local function Icon(kind, entry)
+        -- Hero icons come from the map's own portrait units.
+        return kind == "HERO" and BlzGetAbilityIcon(entry.portraitId) or entry.icon
+    end
     local function Text(parent, name, width, height, x, y)
         local text = BlzCreateFrameByType("TEXT", name, parent, "", 0)
         BlzFrameSetSize(text, width, height)
@@ -56,7 +67,8 @@ do
     local function RenderOptions()
         local pages = math.ceil(#entries / 6)
         BlzFrameSetText(title, "|cffffcc00" .. labels[category] .. " 선택|r")
-        BlzFrameSetText(footer, category == "DIFFICULTY" and "처치한 적만큼 경험치를 획득합니다."
+        BlzFrameSetText(footer, category == "HERO" and "영웅을 바꾸면 시작 무기를 다시 선택합니다. 장신구는 두 영웅이 공유합니다."
+            or category == "DIFFICULTY" and "처치한 적만큼 경험치를 획득합니다."
             or "선택하면 준비 화면으로 돌아갑니다. 시작 전까지 변경할 수 있습니다.")
         BlzFrameSetText(pageText, string.format("%d / %d", page, pages))
         BlzFrameSetVisible(pageText, pages > 1)
@@ -67,7 +79,7 @@ do
         for i, card in ipairs(cards) do
             local id = entries[(page - 1) * 6 + i]
             card.id = id
-            local wide = category == "DIFFICULTY"
+            local wide = Wide(category)
             local width, height = wide and 0.60 or 0.30, 0.070
             BlzFrameSetSize(card.frame, width, height)
             BlzFrameClearAllPoints(card.frame)
@@ -77,17 +89,22 @@ do
             BlzFrameSetSize(card.name, width - 0.072, 0.021)
             BlzFrameSetSize(card.description, width - 0.072, 0.034)
             BlzFrameSetVisible(card.frame, id ~= nil)
+            card.locked = false
             if id then
-                local entry = category == "DIFFICULTY" and SurvivorConfig.difficulties[id] or SurvivorAugments.Get(id)
-                BlzFrameSetTexture(card.icon, entry.icon, 0, true)
-                BlzFrameSetText(card.name, (id == selectedId and "|cff80ff80[선택됨] " or "|cffffcc00") .. entry.name .. "|r")
+                local entry = Entry(category, id)
+                card.locked = entry.locked == true
+                BlzFrameSetEnable(card.button, not card.locked)
+                BlzFrameSetTexture(card.icon, Icon(category, entry), 0, true)
+                BlzFrameSetText(card.name, card.locked and "|cff888888" .. entry.name .. " · 준비 중|r"
+                    or (id == selectedId and "|cff80ff80[선택됨] " or "|cffffcc00") .. entry.name .. "|r")
                 local text = entry.text
                 if category == "DIFFICULTY" then
                     text = string.format("적 출현량 %.0f%% · 생명력 %.0f%% · 공격력 %.0f%%\n공격 속도 %.0f%% · 이동 속도 %.0f%%",
                         entry.spawn * 100, entry.life * 100, entry.damage * 100, entry.attackSpeed * 100, entry.moveSpeed * 100)
                 elseif category == "TRINKET" then
                     -- Universal modifier only; never a single weapon-specific example.
-                    text = SurvivorAugments.Preview(id, SurvivorAugments.NewBuild(startingWeapon or SurvivorConfig.startingWeapon))
+                    text = SurvivorAugments.Preview(id, SurvivorAugments.NewBuild(startingWeapon or SurvivorConfig.startingWeapon, nil,
+                        startingWeapon and heroId or SurvivorConfig.defaultHero))
                 end
                 BlzFrameSetText(card.description, text)
             end
@@ -110,7 +127,7 @@ do
         root = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupRoot", parent, "", 0)
         BlzFrameSetTexture(root, "HeroSurvivorUI\\Transparent.tga", 0, true)
         BlzFrameSetAbsPoint(root, FRAMEPOINT_TOP, 0.4, 0.57)
-        BlzFrameSetSize(root, 0.66, 0.40)
+        BlzFrameSetSize(root, 0.66, 0.44)
         BlzFrameSetLevel(root, 11)
         local background = BlzCreateFrame("EscMenuBackdrop", root, 0, 800)
         BlzFrameSetAllPoints(background, root)
@@ -120,7 +137,7 @@ do
         BlzFrameSetLevel(title, 3)
         -- Keep this frame unscaled: scaling also shifts its anchored offset and
         -- previously pulled the footer over the start button and last option row.
-        footer = Text(root, "HeroSurvivorSetupFooter", 0.59, 0.018, 0, -0.350)
+        footer = Text(root, "HeroSurvivorSetupFooter", 0.59, 0.018, 0, -0.412)
         BlzFrameSetLevel(footer, 3)
         menu = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupMenu", root, "", 0)
         BlzFrameSetTexture(menu, "HeroSurvivorUI\\Transparent.tga", 0, true)
@@ -143,10 +160,10 @@ do
             BlzFrameSetEnable(row.icon, false)
             row.value = LeftText(row.button, "HeroSurvivorSetup" .. kind .. "Value", 0.29, 0.028, 0.224, -0.012)
         end
-        summaryToggle = Button(menu, "HSSummaryToggle", 0.36, 0.032, 0, -0.268, function()
+        summaryToggle = Button(menu, "HSSummaryToggle", 0.36, 0.032, 0, -0.330, function()
             if view == "MENU" then HeroSurvivor.ToggleStorySummary() end
         end)
-        startButton = Button(menu, "HeroSurvivorSetupStart", 0.30, 0.040, 0, -0.306, function()
+        startButton = Button(menu, "HeroSurvivorSetupStart", 0.30, 0.040, 0, -0.368, function()
             if view ~= "MENU" or not startButton.ready then return end
             SurvivorSetupUI.Hide()
             startCallback()
@@ -159,7 +176,7 @@ do
             local slot = i
             local card = Button(options, "HeroSurvivorSetupOption" .. i, 0.30, 0.070,
                 i % 2 == 1 and -0.158 or 0.158, -0.062 - math.floor((i - 1) / 2) * 0.080, function()
-                    if view ~= "OPTIONS" or not cards[slot].id then return end
+                    if view ~= "OPTIONS" or not cards[slot].id or cards[slot].locked then return end
                     local kind, id = category, cards[slot].id
                     view = nil -- A queued second click cannot select twice.
                     selectCallback(kind, id)
@@ -189,33 +206,34 @@ do
         pageText = Text(options, "HeroSurvivorSetupPage", 0.10, 0.027, -0.030, -0.306)
         SurvivorSetupUI.Hide()
     end
-    function SurvivorSetupUI.ShowMenu(difficulty, weapon, trinket)
-        startingWeapon = weapon
+    function SurvivorSetupUI.ShowMenu(difficulty, weapon, trinket, hero)
+        startingWeapon, heroId = weapon, hero or SurvivorConfig.defaultHero
         Show()
         view = "MENU"
         BlzFrameSetVisible(menu, true)
         BlzFrameSetVisible(options, false)
         BlzFrameSetText(title, "|cffffcc00" .. SurvivorStory.title .. "|r")
         BlzFrameSetText(summaryToggle.text, HeroSurvivor.IsStorySummary() and "이미 본 대화: 요약 보기" or "이미 본 대화: 전체 보기")
-        local selected = {difficulty, weapon, trinket}
+        local selected = {heroId, difficulty, weapon, trinket}
         for i, kind in ipairs(kinds) do
             local id = selected[i]
-            local entry = id and (kind == "DIFFICULTY" and SurvivorConfig.difficulties[id] or SurvivorAugments.Get(id))
+            local entry = id and Entry(kind, id)
             local row = menuButtons[i]
             BlzFrameSetVisible(row.icon, entry ~= nil)
-            if entry then BlzFrameSetTexture(row.icon, entry.icon, 0, true) end
+            if entry then BlzFrameSetTexture(row.icon, Icon(kind, entry), 0, true) end
             BlzFrameSetText(row.value, entry and "|cff80ff80" .. entry.name .. "|r" or "|cffcccccc선택하세요|r")
         end
         startButton.ready = difficulty ~= nil and weapon ~= nil and trinket ~= nil
         BlzFrameSetEnable(startButton.button, startButton.ready)
         BlzFrameSetText(startButton.text, startButton.ready and "|cffffcc00게임 시작|r" or "|cff888888게임 시작|r")
-        BlzFrameSetText(footer, startButton.ready and "선택한 무기와 장신구를 각각 Lv.1로 보유하고 시작합니다." or "난이도·시작 무기·시작 장신구를 모두 선택하세요.")
+        BlzFrameSetText(footer, startButton.ready and "선택한 무기와 장신구를 각각 Lv.1로 보유하고 시작합니다." or "영웅·난이도·시작 무기·시작 장신구를 모두 선택하세요.")
     end
-    function SurvivorSetupUI.ShowOptions(kind, selected)
+    function SurvivorSetupUI.ShowOptions(kind, selected, hero)
         Show()
         view, category, selectedId, page = "OPTIONS", kind, selected, 1
-        entries = kind == "DIFFICULTY" and SurvivorConfig.difficultyOrder
-            or kind == "WEAPON" and SurvivorConfig.startingWeapons or SurvivorConfig.startingTrinkets
+        heroId = hero or heroId or SurvivorConfig.defaultHero
+        entries = kind == "HERO" and SurvivorConfig.heroOrder or kind == "DIFFICULTY" and SurvivorConfig.difficultyOrder
+            or kind == "WEAPON" and SurvivorConfig.heroes[heroId].startingWeapons or SurvivorConfig.startingTrinkets
         for i, id in ipairs(entries) do if id == selected then page = math.floor((i - 1) / 6) + 1 end end
         BlzFrameSetVisible(menu, false)
         BlzFrameSetVisible(options, true)

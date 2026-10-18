@@ -887,7 +887,8 @@ do
         local w = stats.extraWeapons[id]
         if not w or not w.enabled or not RunSession.IsRunning() or not Alive(hero) then return end
         local x, y, z = ImpactPoint(hero)
-        if id == "frostnova" then
+        local engine = SurvivorConfig.weapons[id].engine
+        if engine == "nova" then
             -- Reservoir sampling gives every living enemy in range the same chance.
             local target, count = nil, 0
             local candidates = AreaCandidates(x, y, w.range, "frostnovaSelection")
@@ -909,25 +910,26 @@ do
                 slowDuration = w.duration + (w.slowDurationBonus or 0), weapon = id}, w.damage)
             return
         end
-        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, id == "returnblade" and GroundEnemy or Enemy)
+        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, engine == "boomerang" and GroundEnemy or Enemy)
         if not target then return end
         local tx, ty, tz = ImpactPoint(target)
-        if id == "blizzard" or id == "meteor" then tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot) end
-        if id == "blizzard" then NewZone(id, tx, ty, w, w.damage); return end
-        if id == "meteor" then
+        if engine == "field" or engine == "meteor" then tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot) end
+        if engine == "field" then NewZone(id, tx, ty, w, w.damage); return end
+        if engine == "meteor" then
             CreateObject({identifier = "hsMeteor", x = tx, y = ty, z = tz + 750, groundZ = tz,
                 profile = w, life = w.delay, delay = w.delay, isAnonymous = true, selfInteractions = FallMeteor}, SurvivorConfig.meteorModel, 1.8 * w.size)
             return
         end
-        local dx, dy, dz = tx - x, ty - y, id == "returnblade" and 0 or tz - z
+        local orb = engine == "orb"
+        local dx, dy, dz = tx - x, ty - y, orb and tz - z or 0
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance < 1 then dx, dy, dz, distance = math.cos(GetUnitFacing(hero) * bj_DEGTORAD), math.sin(GetUnitFacing(hero) * bj_DEGTORAD), 0, 1 end
-        local object = {identifier = id == "thunderorb" and "hsOrb" or "hsReturnBlade", weapon = id,
+        local object = {identifier = orb and "hsOrb" or "hsReturnBlade", weapon = id,
             x = x, y = y, z = z, dx = dx / distance, dy = dy / distance, dz = dz / distance,
             life = w.duration, remaining = w.range, range = w.range, leg = 1, speed = w.speed, radius = w.radius, damage = w.damage,
             pulse = w.pulse, pulseClock = 0, spherical = true, slow = 0, hitTimes = {},
-            isAnonymous = true, selfInteractions = id == "thunderorb" and MoveOrb or MoveReturnBlade}
-        CreateObject(object, id == "thunderorb" and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel, w.size)
+            isAnonymous = true, selfInteractions = orb and MoveOrb or MoveReturnBlade}
+        CreateObject(object, orb and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel, w.size)
     end
     local function MoveFrost(shard)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1027,23 +1029,13 @@ do
             FaceMissile(shard, dx, dy, dz)
         end
     end
-    local castMethods = {firebolt = "FireMissile", flamefield = "CreateZone", chainlightning = "CastChainLightning",
-        orbitblade = "CastBlades", monsoon = "CastMonsoon", frontslash = "CastFrontSlash", frostshard = "FireFrostShard"}
-    local enabledFields = {firebolt = "missileEnabled", flamefield = "zoneEnabled", chainlightning = "chainEnabled",
-        orbitblade = "bladeEnabled", monsoon = "monsoonEnabled", frontslash = "slashEnabled", frostshard = "frostEnabled"}
-    local snapshotFields = {
-        firebolt = {"missileEnabled", "missileRange", "missileCount", "missileLifetime", "missileDamage", "missileSpeed", "missileHitRadius", "missileScale", "fireEvolution"},
-        flamefield = {"zoneEnabled", "zoneRadius", "zoneDuration", "zoneDamage", "zonePulse"},
-        chainlightning = {"chainEnabled", "chainDamage", "chainRange", "chainTargets", "chainJumpRange"},
-        monsoon = {"monsoonEnabled", "monsoonRange", "monsoonCount", "monsoonRadius", "monsoonDelay", "monsoonSpacing", "monsoonDamage"},
-        frontslash = {"slashEnabled", "slashAngle", "slashRange", "slashSweepTime", "slashDuration", "slashScale", "slashDamage"},
-        frostshard = {"frostEnabled", "frostRange", "frostSpeed", "frostLifetime", "frostHitRadius", "frostDamage", "frostPierce", "frostSlow", "frostSlowDuration", "frostEvolution", "frostScale"},
-    }
-    local snapshotDamage = {firebolt = "missileDamage", flamefield = "zoneDamage", chainlightning = "chainDamage",
-        monsoon = "monsoonDamage", frontslash = "slashDamage", frostshard = "frostDamage"}
+    local function EngineOf(id)
+        local weapon = SurvivorConfig.weapons[id]
+        return weapon and SurvivorConfig.weaponEngines[weapon.engine]
+    end
     local function DispatchWeapon(id, shot)
-        local method = castMethods[id]
-        if method then SurvivorCombat[method](shot) else SurvivorCombat.CastExtra(id, shot) end
+        local engine = EngineOf(id)
+        if engine.profile then SurvivorCombat.CastExtra(id, shot) else SurvivorCombat[engine.cast](shot) end
     end
     local function ExtraAttack(pending)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1057,29 +1049,28 @@ do
     end
     function SurvivorCombat.CastWeapon(id)
         if not RunSession.IsRunning() or not Alive(hero) then return end
-        local enabled = enabledFields[id]
-        if enabled and not stats[enabled] or not enabled and (not stats.extraWeapons[id] or not stats.extraWeapons[id].enabled) then return end
-        if id == "orbitblade" then
-            SurvivorCombat.CastBlades() -- Spawn base and extra blades together; no delayed single-blade casts.
+        local engine = EngineOf(id)
+        if not engine then return end
+        if engine.profile and (not stats.extraWeapons[id] or not stats.extraWeapons[id].enabled)
+            or not engine.profile and not stats[engine.enabled] then return end
+        if engine.volley then
+            SurvivorCombat[engine.cast]() -- Spawn base and extra blades together; no delayed single-blade casts.
             return
         end
         DispatchWeapon(id)
         if not RunSession.IsRunning() or not stats or stats.multiCount == 0 then return end
         local snapshot = {}
-        local fields = snapshotFields[id]
-        if fields then
-            for _, key in ipairs(fields) do snapshot[key] = stats[key] end
-            local damage = snapshotDamage[id]
-            snapshot[damage] = snapshot[damage] * stats.multiDamage
-        else
+        if engine.profile then
             local copy = {}
             for key, value in pairs(stats.extraWeapons[id]) do copy[key] = value end
             copy.damage = copy.damage * stats.multiDamage
             snapshot.extraWeapons = {[id] = copy}
+        else
+            for _, key in ipairs(engine.fields) do snapshot[key] = stats[key] end
+            snapshot[engine.damage] = snapshot[engine.damage] * stats.multiDamage
+            -- Add individual projectiles/strikes, not copies of an entire existing volley.
+            if engine.single then snapshot[engine.single] = 1 end
         end
-        -- Add individual projectiles/blades/strikes, not copies of an entire existing volley.
-        if id == "firebolt" then snapshot.missileCount = 1
-        elseif id == "monsoon" then snapshot.monsoonCount = 1 end
         for i = 1, stats.multiCount do
             local pending = {identifier = "hsExtraAttack", x = GetUnitX(hero), y = GetUnitY(hero), z = 0,
                 weapon = id, shot = {stats = snapshot, index = i}, life = i * 0.18,
