@@ -82,14 +82,31 @@ SurvivorConfig = {
     startingWeapon = "firebolt",
     startingWeapons = {"firebolt", "chainlightning", "orbitblade", "frostshard"},
     -- Playable heroes. A locked hero would be listed in setup but could not start a run.
+    -- story fills the setup description panel; previewSkin is the setup preview model
+    -- (the story's portrait proxies carry the HeroAnya/Putress models).
     defaultHero = "anya", heroOrder = {"anya", "putress"},
     heroes = {
         anya = {name = "안야", unitId = FourCC("Uany"), icon = [[ReplaceableTextures\CommandButtons\BTNAnya.blp]],
-            text = "화염·번개·칼날·얼음 무기로 몰려오는 적을 즉시 정리합니다."},
+            previewSkin = FourCC("hsPA"), previewAnimation = "cinematic stand 1",
+            text = "화염·번개·칼날·얼음 무기로 몰려오는 적을 즉시 정리합니다.",
+            story = "스트라솔름 폐허에서 스컬지 무리를 벗어난 언데드가 목격됐다.\n"
+                .. "안야는 퓨트리스와 함께 그 흔적을 쫓아 불타는 시가지와 납골당, 로데론 수도의 하수구까지 긴 밤의 수색에 나선다.\n\n"
+                .. "화염·번개·칼날·얼음 무기로 몰려오는 적을 정리하며 길을 연다."},
         putress = {name = "퓨트리스", unitId = FourCC("HsPu"), icon = [[ReplaceableTextures\CommandButtons\BTNPutress.blp]],
+            previewSkin = FourCC("hsPP"), previewAnimation = "stand",
             text = "독·어둠·연금술 무기로 중독과 저주를 쌓아 반응으로 터뜨립니다.",
+            story = "스트라솔름 폐허에서 스컬지 무리를 벗어난 언데드가 목격됐다.\n"
+                .. "퓨트리스는 안야와 함께 그 흔적을 쫓아 불타는 시가지와 납골당, 로데론 수도의 하수구까지 긴 밤의 수색에 나선다.\n\n"
+                .. "독·어둠·연금술 무기로 중독과 저주를 쌓고, 반응으로 한꺼번에 터뜨린다.",
             startingWeapons = {"plaguedart", "plaguetrail", "deathcoil", "plaguejar"}},
     },
+    -- Setup preview shot: the hero floats lift above the ground at x/y (map center when nil)
+    -- and the camera looks north from distance, pitch degrees down, with this field of view.
+    -- height is the model point that lands in the middle of the preview window. The far clip
+    -- plane sits clip past the hero, short of the ground, so only the hero shows on black sky.
+    -- screenScale corrects the field-of-view screen-to-world conversion; two in-game shots at
+    -- distances 500 and 420 both measured about 1.12 at 16:9.
+    setupPreview = {distance = 420, pitch = 0, fov = 70, height = 45, lift = 1500, clip = 600, screenScale = 1.12},
     -- Weapon id -> owning hero, firing engine and catalog traits. weaponOrder is the cast order.
     weaponOrder = {"frostnova", "blizzard", "meteor", "thunderorb", "returnblade", "orbitblade",
         "firebolt", "flamefield", "chainlightning", "monsoon", "frontslash", "frostshard",

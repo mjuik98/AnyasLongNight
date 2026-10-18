@@ -213,7 +213,7 @@ do
             descriptions, titles, descriptionRevision = {}, {}, build.revision
         end
         local available, earned, pending = SurvivorNativeLoadout.TalentStatus()
-        local interfaceState = build.stats.regeneration .. ":" .. available .. ":" .. earned .. ":" .. pending
+        local interfaceState = available .. ":" .. earned .. ":" .. pending
         if textCache.interface ~= interfaceState then
             textCache.interface = interfaceState
             local entry = FourCC("ASpc")
@@ -221,7 +221,7 @@ do
             BlzSetAbilityTooltip(entry, presentation.title, 0)
             BlzSetAbilityExtendedTooltip(entry, string.format(
                 presentation.format,
-                available, earned, pending > 0 and ("포인트 전달 대기: " .. pending .. "개") or "남은 포인트 보관 가능", build.stats.regeneration), 0)
+                available, earned, pending > 0 and ("|n포인트 전달 대기: " .. pending .. "개") or ""), 0)
         end
         local passive = FourCC("HsAE")
         if GetUnitAbilityLevel(hero, passive) == 0 then

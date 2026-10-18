@@ -1199,7 +1199,7 @@ for _,preexisting in ipairs({false,true})do
     BlzSetAbilityPosX=function(id,...)assert(id~='ASde'and id~='ASpc','Native details must not occupy a weapon slot');positionWrites=positionWrites+1;position(id,...)end
     SurvivorNativeLoadout.Init(hero,build)
     local menuText=BlzGetAbilityExtendedTooltip('ASpc')
-    assert(select(2,menuText:gsub('|n',''))==2,'Shared menu tooltip contains only points, delivery status and regeneration')
+    assert(select(2,menuText:gsub('|n',''))==0,'Shared menu tooltip contains only the talent point line when nothing is pending')
     assert(not menuText:find('각 구역 수색 준비에서',1,true)and not menuText:find('단계마다 셋 중 하나 선택',1,true)
         and not menuText:find('상세 정보를 확인합니다',1,true),'The shared menu must not restore the long help text')
     for _=1,20 do SurvivorNativeLoadout.Refresh()end
@@ -1358,18 +1358,21 @@ assert(Rate()==1 and hpWrites==0)
 AdvanceEngine(5);assert(hero.life==105,'Renewal contributes once, not on top of another Lua heal')
 local oldTitle,oldText=BlzGetAbilityTooltip('ASpc'),BlzGetAbilityExtendedTooltip('ASpc')
 SurvivorNativeLoadout.Init(hero,build)
-assert(BlzGetAbilityExtendedTooltip('ASpc'):find('초당 1.00',1,true))
+local interfaceText=BlzGetAbilityExtendedTooltip('ASpc')
+assert(interfaceText:find('사용 가능 특성 포인트: ',1,true)and not interfaceText:find('생명력 재생',1,true)
+    and not interfaceText:find('보관 가능',1,true)and not interfaceText:find('포인트 전달 대기',1,true),
+    'The stat skill shows talent points only; regeneration stays in the stat rows')
 local calls=abilityWrites
 for _=1,20 do SurvivorNativeLoadout.Refresh()end
-assert(abilityWrites==calls,'Unchanged regeneration tooltips do not rewrite the native interface')
+assert(abilityWrites==calls,'Unchanged talent tooltips do not rewrite the native interface')
 assert(RunSession.Start(function()end,{pause=function(reason)SurvivorCombat.SetPaused(true,reason)end,
     resume=function()SurvivorCombat.SetPaused(false)end,finish=function()SurvivorNativeLoadout.Cleanup();SurvivorCombat.Cleanup()end}))
 assert(RunSession.BeginChoice()and Rate()==0 and hero.paused)
 SurvivorAugments.Apply('renewal',build,hero)
 assert(build.stats.regeneration==2 and Rate()==0,'Learning renewal while choosing must not enable regeneration')
-SurvivorNativeLoadout.Refresh()
-assert(BlzGetAbilityExtendedTooltip('ASpc'):find('초당 2.00',1,true)
-    and BlzGetAbilityExtendedTooltip('ASpc'):find('일시정지 중 회복 정지',1,true))
+calls=abilityWrites;SurvivorNativeLoadout.Refresh()
+assert(abilityWrites==calls and not BlzGetAbilityExtendedTooltip('ASpc'):find('초당',1,true),
+    'Regeneration changes no longer rewrite the talent tooltip')
 AdvanceEngine(60);assert(hero.life==105)
 RunSession.SetInventoryOpen(true)
 assert(RunSession.GetState()=='CHOOSING'and hero.paused and Rate()==2,
@@ -2813,7 +2816,7 @@ for _,name in ipairs({"FRAMEPOINT_CENTER","FRAMEPOINT_TOP","FRAMEPOINT_BOTTOM","
     "ORIGIN_FRAME_PORTRAIT","ORIGIN_FRAME_WORLD_FRAME","ORIGIN_FRAME_TOOLTIP","ORIGIN_FRAME_UBERTOOLTIP",
     "ORIGIN_FRAME_COMMAND_BUTTON","ORIGIN_FRAME_ITEM_BUTTON",
     "CAMERA_FIELD_TARGET_DISTANCE","CAMERA_FIELD_ANGLE_OF_ATTACK","CAMERA_FIELD_ROTATION",
-    "CAMERA_FIELD_ZOFFSET","CAMERA_FIELD_ROLL","ANIM_TYPE_STAND","ANIM_TYPE_WALK","ANIM_TYPE_SPELL","ANIM_TYPE_DEATH"})do _G[name]=name end
+    "CAMERA_FIELD_ZOFFSET","CAMERA_FIELD_ROLL","CAMERA_FIELD_FIELD_OF_VIEW","CAMERA_FIELD_FARZ","ANIM_TYPE_STAND","ANIM_TYPE_WALK","ANIM_TYPE_SPELL","ANIM_TYPE_DEATH"})do _G[name]=name end
 function BlzCreateFrameByType(kind,name,parent)
     serial=serial+1;local f={name=name,parent=parent,kind=kind,handle=serial,visible=true,enabled=true};frames[name]=f;return f
 end
@@ -2893,7 +2896,9 @@ function BlzFrameSetText(f,v) assert(f);f.text=v end
 function BlzFrameSetSize(f,w,h)RequireFrameObject(f,'BlzFrameSetSize');f.width,f.height=w,h end
 function BlzFrameSetAlpha(f,v)RequireFrameObject(f,'BlzFrameSetAlpha');f.alpha=v end
 function BlzFrameSetLevel(f,v)RequireFrameObject(f,'BlzFrameSetLevel');f.level=v end
-function BlzFrameSetEnable(f,v)RequireFrameObject(f,'BlzFrameSetEnable');f.enabled=v end
+function BlzFrameSetEnable(f,v)RequireFrameObject(f,'BlzFrameSetEnable');f.enabled=v
+    f.enableWrites=(f.enableWrites or 0)+1 end
+function BlzFrameGetEnable(f)RequireFrameObject(f,'BlzFrameGetEnable');return f.enabled end
 function BlzFrameSetTexture(f,v) f.texture=v end
 function BlzFrameSetScale(f,v)RequireFrameObject(f,'BlzFrameSetScale');f.scale=v end
 function BlzFrameSetTextAlignment(f,v,h)RequireFrameObject(f,'BlzFrameSetTextAlignment');f.vertical,f.horizontal=v,h end
@@ -2930,6 +2935,10 @@ function ClickFrame(frame)
     error('Missing click binding: '..frame.name)
 end
 function ShowUnit(u,visible) u.visible=visible end
+function SetUnitFlyHeight(u,height)u.flyHeight=height end
+function BlzShowUnitTeamGlow(u,show)u.teamGlow=show end
+function SetUnitAnimation(u,name)u.animation=name end
+function BlzSetUnitSkin(u,skin)u.skin=skin end
 function SetUnitInvulnerable(u,value)u.invulnerable=value end
 function SetUnitPathing(u,value)u.pathing=value end
 function SetUnitColor(u,value)u.color=value end
@@ -3140,25 +3149,61 @@ WorldAt(frames.QuestButtonBaseTemplate812,.5,.92)
 for _,context in ipairs({810,811,842,843,846,847})do Surface(frames['ScriptDialogButton'..context],.5,.5)end
 SurvivorLootUI.SetInventoryVisible(false)
 state='READY';SurvivorLootUI.Refresh()
+local createUnit,previewUnit=CreateUnit,nil
+CreateUnit=function(...)previewUnit=createUnit(...);return previewUnit end
 SurvivorSetupUI.ShowMenu('normal','firebolt','power')
-WorldAt(frames.HeroSurvivorSetupRoot,.02,.5)
-for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET','Start'})do
-    Surface(frames['HeroSurvivorSetup'..name],.5,.5)
+CreateUnit=createUnit
+local function Inside(inner,outer)
+    local a,b=assert(Rect(inner)),assert(Rect(outer))
+    assert(a[1]>=b[1]-1e-9 and a[2]>=b[2]-1e-9 and a[1]+a[3]<=b[1]+b[3]+1e-9 and a[2]+a[4]<=b[2]+b[4]+1e-9,
+        inner.name..' overflows '..outer.name)
 end
-Surface(frames.HSSummaryToggle,.5,.5)
+local setupRoot=frames.HeroSurvivorSetupRoot
+local rootRect=assert(Rect(setupRoot))
+assert(rootRect[1]>=0 and rootRect[1]+rootRect[3]<=.8 and rootRect[2]>=.02 and rootRect[2]+rootRect[4]<=.56
+    and math.abs(rootRect[2]+rootRect[4]/2-.3)<1e-9,'Setup is centered in the 4:3 area below the upper menu bar')
+local list,summary,preview,actions=frames.EscMenuBackdrop800,frames.EscMenuBackdrop801,frames.HeroSurvivorSetupPreview,frames.EscMenuBackdrop803
+for _,panel in ipairs({list,summary,preview,actions})do Inside(panel,setupRoot);WorldAt(panel,.5,.995)end
+assert(preview.texture==[[HeroSurvivorUI\Transparent.tga]] and frames.HeroSurvivorSetupPreviewTop.texture==[[HeroSurvivorUI\Ready.tga]],
+    'The preview window is clear with a thin outline so the world shows through')
+WorldAt(setupRoot,.5,.99)
+for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET','DescriptionTitle','Description'})do
+    Inside(frames['HeroSurvivorSetup'..name],summary)
+end
+for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do Surface(frames['HeroSurvivorSetup'..name],.5,.5)end
+WorldAt(frames.HeroSurvivorSetupDescription,.5,.5)
+WorldAt(preview,.5,.5)
+for _,button in ipairs({frames.HeroSurvivorSetupStart,frames.HeroSurvivorSetupReset,frames.HSSummaryToggle})do
+    Inside(button,actions);Surface(button,.5,.5)
+end
+local anya=SurvivorConfig.heroes.anya
+assert(previewUnit and previewUnit.id==FourCC('hfoo') and previewUnit.skin==anya.previewSkin and not previewUnit.removed
+    and previewUnit.abilities[FourCC('Aloc')] and not previewUnit.abilities[FourCC('Aatk')]
+    and previewUnit.x>cameraNative.x and previewUnit.y==cameraNative.y,'The camera shifts left so the locust hero lands in the right-hand window')
+assert(previewUnit.flyHeight==SurvivorConfig.setupPreview.lift and not previewUnit.abilities[FourCC('Amrf')],
+    'The hero floats above the ground so only black sky surrounds it')
+assert(previewUnit.teamGlow==false and previewUnit.animation==anya.previewAnimation,
+    'The preview hides the hero glow and plays its cinematic stand')
+assert(cameraNative.maxX-cameraNative.minX<=2 and cameraNative.maxY-cameraNative.minY<=2
+    and cameraNative.x==(cameraNative.minX+cameraNative.maxX)/2,'Setup locks the camera on the preview shot')
+Inside(frames.HeroSurvivorSetupHole,preview)
+SurvivorSetupUI.ShowOptions('WEAPON',nil);assert(not previewUnit.removed,'Re-rendering keeps the same preview actor')
+for _,name in ipairs({'HERO','TRINKET'})do
+    local tile=frames['HeroSurvivorSetup'..name]
+    assert(frames['HeroSurvivorSetup'..name..'Active'].level<frames['HeroSurvivorSetup'..name..'Icon'].level,
+        'The opaque selection rim stays behind the icon')
+end
+assert(frames.HeroSurvivorSetupChosen1.level<frames.HeroSurvivorSetupIcon1.level)
 for _,kind in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do
     SurvivorSetupUI.ShowOptions(kind,nil)
-    WorldAt(frames.HeroSurvivorSetupOptions,.02,.5)
-    for i=1,6 do local button=frames['HeroSurvivorSetupOption'..i]
+    for i=1,12 do local button=frames['HeroSurvivorSetupOption'..i]
         -- A locked hero card is shown disabled and never takes pointer input.
-        if button.visible and button.enabled then Surface(button,.5,.5);Surface(button,.07,.5)end
-    end
-    Surface(frames.HeroSurvivorSetupBack,.5,.5)
-    if frames.HeroSurvivorSetupFollowing.visible and frames.HeroSurvivorSetupFollowing.enabled then
-        Surface(frames.HeroSurvivorSetupFollowing,.5,.5)
+        if button.visible and button.enabled then Inside(button,list);Surface(button,.5,.5);Surface(button,.07,.5)end
     end
 end
 SurvivorSetupUI.Hide()
+assert(previewUnit.removed and previewUnit.visible==false and cameraNative.maxX-cameraNative.minX>1000,
+    'Closing setup hides and removes the preview actor and restores the camera bounds')
 SurvivorUI.ShowNarrative('test','test',function()end)
 WorldAt(frames.HeroSurvivorStoryContent,.5,.9)
 Surface(frames.ScriptDialogButton700,.5,.5)
@@ -3472,6 +3517,10 @@ SurvivorSetupUI.Init(function(kind)SurvivorSetupUI.ShowOptions(kind,selections[k
         SurvivorUI.ShowStageIntro(1,function()completed=completed+1;state='FINISHED'end,hero)
     end)
 state='READY';Menu()
+local console=frames.ConsoleBottomBar
+assert(not console.visible and not frames.CommandBarFrame.visible,'Setup hides the console HUD')
+SurvivorSetupUI.Hide();assert(console.visible and frames.CommandBarFrame.visible,'Closing setup restores the console HUD')
+Menu();assert(not console.visible)
 for _,kind in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do
     ClickFrame(frames['HeroSurvivorSetup'..kind]);ClickFrame(frames.HeroSurvivorSetupOption1)
     assert(selections[kind],'The actual preparation UI must supply every required selection')
@@ -4107,7 +4156,7 @@ end
 SurvivorStory.Reset();SurvivorUI.HidePanel()
 `);
 
-suite('choice hover stays local, uses bounded animation and cannot consume rerolls or exclusions', presentationMocks,
+suite('choice hover stays local, switches feedback without a fade timer and cannot consume rerolls or exclusions', presentationMocks,
     [config,augments,'src/30_gameplay/SurvivorUI.lua'], String.raw`
 local selected,rerolled,excluded=0,0,0
 SurvivorUI.Init(function()selected=selected+1 end,function()end,function()rerolled=rerolled+1 end,
@@ -4134,8 +4183,8 @@ assert(frames.HSCardHover2Top.width<card.width and frames.HSCardHover2Left.heigh
     'Card borders keep an inset and do not expand the hit area')
 Event(reroll,FRAMEEVENT_MOUSE_ENTER)
 assert(tip.visible and frames.HSChoiceActionTooltipText.text:find('리롤 기회'))
-AdvanceVisualTime(.04);assert(gold.alpha>0 and gold.alpha<230)
-AdvanceVisualTime(.1);assert(gold.alpha==230 and LiveTimers(.02)==0)
+assert(gold.alpha==230 and LiveTimers(.02)==0 and #timers==timerCount,
+    'Hover feedback switches at once; a fade timer rewrote the hovered frames and made the cursor flicker')
 assert(frames.HSCardHover2.alpha==0,'Moving from the card to its action button clears the card highlight')
 assert(reroll.width==width and reroll.height==height and frames.HeroSurvivorRerollText2.textColor.g==220)
 Event(reroll,FRAMEEVENT_MOUSE_DOWN);assert(frames.QuestButtonBaseTemplate202.color.r==165)
@@ -4162,9 +4211,8 @@ Show(3);GetLocalPlayer=function()return 12 end
 Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 assert(gold.alpha==0 and not tip.visible and LiveTimers(.02)==0,'Mouse feedback is local to the playable client')
 GetLocalPlayer=function()return 0 end
-Event(reroll,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.04)
-local feedbackTimer=Local(SurvivorUI.HidePanel,'actionTimer')
-SurvivorUI.HidePanel();feedbackTimer.callback()
+Event(reroll,FRAMEEVENT_MOUSE_ENTER);assert(gold.alpha==230)
+SurvivorUI.HidePanel()
 assert(gold.alpha==0 and orange.alpha==0 and not tip.visible and LiveTimers(.02)==0)
 Show(3);Event(card,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 ClickFrame(frames.HeroSurvivorCard2)
@@ -5276,7 +5324,7 @@ local function StartCountdown()
         and not frames.HSCombatCountdown.visible and LiveTimers(1)==0)
 end
 assert(RunSession.GetState()=='READY'and frames.HeroSurvivorSetupShade.visible
-    and frames.HeroSurvivorSetupShade.texture==[[HeroSurvivorUI\Black.tga]])
+    and frames.HeroSurvivorSetupShadeTop.texture==[[HeroSurvivorUI\Black.tga]])
 for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
     ClickFrame(frames['HeroSurvivorSetup'..kind])
     ClickFrame(frames[kind=='DIFFICULTY'and'HeroSurvivorSetupOption2'or'HeroSurvivorSetupOption1'])
@@ -5586,6 +5634,7 @@ assert(completed==1 and failures==3 and not SurvivorUI.IsCombatPreparationVisibl
 suite('actual preparation UI supports second-page selections, return navigation and duplicate-click guards', presentationMocks + String.raw`
 SurvivorUI.HidePanel=function()end
 SurvivorUI.ClearDamageBoard=function()end
+SurvivorUI.SetSetupCinematic=function()end
 SurvivorStory={title='안야의 긴 밤',notice='창작 외전'}
 HeroSurvivor.IsStorySummary=function()return false end
 HeroSurvivor.ToggleStorySummary=function()end
@@ -5595,39 +5644,90 @@ local nativeSetupSnapshots={}
 for _,frame in pairs(frames)do
     nativeSetupSnapshots[frame]={visible=frame.visible,enabled=frame.enabled,parent=frame.parent}
 end
-local chosen='power';local selects,starts,failures=0,0,0
+local chosen='power';local selects,starts,failures,resets,heroSelects=0,0,0,0,0
 local failStart=false
 RunSession.Fail=function(message) failures=failures+1;failure=message end
-SurvivorSetupUI.Init(function(kind)SurvivorSetupUI.ShowOptions(kind,chosen)end,
+local function Event(frame,event)
+    for _,trigger in ipairs(triggers)do
+        if trigger.frame==frame and trigger.event==event then trigger.action();return end
+    end
+    error('Missing pointer event')
+end
+SurvivorSetupUI.Init(function(kind)SurvivorSetupUI.ShowOptions(kind,kind=='TRINKET'and chosen or nil)end,
     function(kind,id)
+        -- Gameplay owns the hero too; it answers with the refreshed menu.
+        if kind=='HERO' then heroSelects=heroSelects+1;SurvivorSetupUI.ShowMenu('normal','firebolt',chosen,id);return end
         assert(kind=='TRINKET');chosen=id;selects=selects+1
         SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)
-    end,function()SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)end,
+    end,function()resets=resets+1;SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)end,
     function()starts=starts+1;if failStart then error('intentional start failure')end end)
 SurvivorSetupUI.ShowMenu(nil,nil,nil)
 local setupBlack=frames.HeroSurvivorSetupShade
-assert(setupBlack.texture==[[HeroSurvivorUI\Black.tga]] and setupBlack.alpha==255 and setupBlack.visible)
+assert(setupBlack.alpha==255 and setupBlack.visible)
+for _,side in ipairs({'Top','Bottom','Left','Right'})do
+    local piece=frames['HeroSurvivorSetupShade'..side]
+    assert(piece.parent==setupBlack and piece.texture==[[HeroSurvivorUI\Black.tga]] and not piece.enabled and piece.anchor.target==frames.HeroSurvivorSetupHole)
+end
+local hole=frames.HeroSurvivorSetupHole
+assert(hole.parent==setupBlack and hole.anchor.target==frames.HeroSurvivorSetupPreview and hole.width>.15 and hole.height>.15,
+    'Only the preview window is left uncovered')
+assert(frames.HeroSurvivorSetupShadeTop.width>=2.4 and frames.HeroSurvivorSetupShadeBottom.width>=2.4
+    and frames.HeroSurvivorSetupShadeLeft.width>=1.2 and frames.HeroSurvivorSetupShadeRight.width>=1.2
+    and frames.HeroSurvivorSetupShadeLeft.height==hole.height and frames.HeroSurvivorSetupShadeRight.height==hole.height,
+    'The four pieces reach past ultrawide edges around the hole')
 assert(setupBlack.width>=2.4 and setupBlack.height>=.6 and setupBlack.x==.4 and setupBlack.y==.3
     and not setupBlack.enabled and frames.HeroSurvivorSetupRoot.level>setupBlack.level,
     'The disabled opaque backdrop spans ultrawide screens while setup controls remain above it')
 assert(not frames.HeroSurvivorSetupStart.enabled)
 ClickFrame(frames.HeroSurvivorSetupStart);assert(starts==0)
+-- Both heroes are listed; the description opens with the selected hero's story.
+local anyaStory=SurvivorConfig.heroes.anya.story
+assert(frames.HeroSurvivorSetupListTitle.text:find('영웅',1,true)and frames.HeroSurvivorSetupOption1.visible
+    and frames.HeroSurvivorSetupOption2.visible and not frames.HeroSurvivorSetupOption3.visible
+    and frames.HeroSurvivorSetupChosen1.visible and not frames.HeroSurvivorSetupChosen2.visible
+    and frames.HeroSurvivorSetupDescription.text:sub(1,#anyaStory)==anyaStory,
+    'Setup opens on the hero list with the selected hero story')
+assert(frames.HeroSurvivorSetupWEAPONCaption.text:find('미선택',1,true)and frames.HeroSurvivorSetupWEAPONLabel.text:find('?',1,true))
 SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)
-ClickFrame(frames.HeroSurvivorSetupTRINKET)
-assert(setupBlack.visible and setupBlack.alpha==255,'Equipment option pages retain the black cover')
-assert(frames.HeroSurvivorSetupPage.text=='1 / 2' and not frames.HeroSurvivorSetupPrevious.enabled)
-ClickFrame(frames.HeroSurvivorSetupFollowing)
-assert(frames.HeroSurvivorSetupPage.text=='2 / 2' and not frames.HeroSurvivorSetupFollowing.enabled)
-assert(frames.HeroSurvivorSetupOption5.visible and not frames.HeroSurvivorSetupOption6.visible)
-ClickFrame(frames.HeroSurvivorSetupOption4);ClickFrame(frames.HeroSurvivorSetupOption4)
-assert(selects==1 and chosen==SurvivorConfig.startingTrinkets[10] and frames.HeroSurvivorSetupMenu.visible)
-ClickFrame(frames.HeroSurvivorSetupTRINKET)
-assert(frames.HeroSurvivorSetupPage.text=='2 / 2' and frames.HeroSurvivorSetupName4.text:find('선택됨'))
-ClickFrame(frames.HeroSurvivorSetupPrevious);assert(frames.HeroSurvivorSetupPage.text=='1 / 2')
-ClickFrame(frames.HeroSurvivorSetupBack);ClickFrame(frames.HeroSurvivorSetupTRINKET)
-assert(frames.HeroSurvivorSetupPage.text=='2 / 2','Reopening finds the selected item on its actual page')
-ClickFrame(frames.HeroSurvivorSetupBack)
-assert(setupBlack.visible and setupBlack.alpha==255,'Returning to the preparation menu retains opaque black')
+local trinketTile=frames.HeroSurvivorSetupTRINKET;local writes=trinketTile.enableWrites or 0
+ClickFrame(trinketTile)
+assert(trinketTile.enabled and trinketTile.enableWrites==writes+2,'A click drops the button focus that made hovers flicker')
+assert(setupBlack.visible and setupBlack.alpha==255,'Equipment option lists retain the black cover')
+assert(frames.HeroSurvivorSetupOption11.visible and not frames.HeroSurvivorSetupOption12.visible,'Every trinket fits one list')
+local tenth=SurvivorAugments.Get(SurvivorConfig.startingTrinkets[10]).name
+Event(frames.HeroSurvivorSetupOption10,FRAMEEVENT_MOUSE_ENTER)
+assert(frames.HeroSurvivorSetupDescriptionTitle.text:find(tenth,1,true),'Hovering previews an option')
+Event(frames.HeroSurvivorSetupOption10,FRAMEEVENT_MOUSE_LEAVE)
+assert(frames.HeroSurvivorSetupDescriptionTitle.text:find(SurvivorAugments.Get(chosen).name,1,true),'Leaving restores the choice')
+ClickFrame(frames.HeroSurvivorSetupOption10)
+assert(selects==1 and chosen==SurvivorConfig.startingTrinkets[10])
+assert(frames.HeroSurvivorSetupListTitle.text:find('장신구',1,true)and frames.HeroSurvivorSetupChosen10.visible
+    and not frames.HeroSurvivorSetupChosen1.visible and frames.HeroSurvivorSetupTRINKETCaption.text:find(tenth,1,true),
+    'Selecting keeps the list open, marks the choice and updates the summary')
+ClickFrame(frames.HeroSurvivorSetupHERO)
+assert(frames.HeroSurvivorSetupListTitle.text:find('영웅',1,true)and frames.HeroSurvivorSetupHEROActive.visible
+    and not frames.HeroSurvivorSetupTRINKETActive.visible)
+ClickFrame(frames.HeroSurvivorSetupOption1)
+assert(selects==1 and heroSelects==1 and frames.HeroSurvivorSetupChosen1.visible,'A hero card hands the choice to gameplay')
+-- Switching to Putress swaps the preview model and lists only Putress's starting weapons.
+local createUnit,previewSkin=CreateUnit,nil
+CreateUnit=function(...)local unit=createUnit(...);local skin=BlzSetUnitSkin
+    BlzSetUnitSkin=function(u,id)if u==unit then previewSkin=id end;return skin(u,id)end;return unit end
+ClickFrame(frames.HeroSurvivorSetupOption2)
+CreateUnit=createUnit
+assert(heroSelects==2 and frames.HeroSurvivorSetupChosen2.visible and not frames.HeroSurvivorSetupChosen1.visible
+    and frames.HeroSurvivorSetupHeroName.text:find(SurvivorConfig.heroes.putress.name,1,true)
+    and previewSkin==SurvivorConfig.heroes.putress.previewSkin,'The hero card swaps the summary and the preview model')
+ClickFrame(frames.HeroSurvivorSetupWEAPON)
+local putressWeapons=SurvivorConfig.heroes.putress.startingWeapons
+for i,id in ipairs(putressWeapons)do
+    assert(frames['HeroSurvivorSetupName'..i].text:find(SurvivorAugments.Get(id).name,1,true),'Putress lists its own starting weapon '..id)
+end
+assert(not frames['HeroSurvivorSetupOption'..(#putressWeapons+1)].visible,'Anya weapons never appear for Putress')
+ClickFrame(frames.HeroSurvivorSetupHERO);ClickFrame(frames.HeroSurvivorSetupOption1)
+assert(heroSelects==3 and frames.HeroSurvivorSetupChosen1.visible)
+ClickFrame(frames.HeroSurvivorSetupReset);assert(resets==1)
+assert(setupBlack.visible and setupBlack.alpha==255,'Resetting the preparation screen retains opaque black')
 failStart=true;ClickFrame(frames.HeroSurvivorSetupStart);ClickFrame(frames.HeroSurvivorSetupStart)
 assert(starts==1 and failures==1 and failure:find('intentional start failure'))
 assert(not frames.HeroSurvivorSetupRoot.visible and not frames.HeroSurvivorSetupShade.visible)
@@ -5640,7 +5740,7 @@ for _=1,3 do
     for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
         ClickFrame(frames['HeroSurvivorSetup'..kind])
         assert(setupShade.visible and setupShade.alpha==255 and setupRoot.visible)
-        ClickFrame(frames.HeroSurvivorSetupBack)
+        ClickFrame(frames.HeroSurvivorSetupReset)
     end
     SurvivorSetupUI.Hide();SurvivorSetupUI.Hide()
     assert(not setupRoot.visible and not setupShade.visible)

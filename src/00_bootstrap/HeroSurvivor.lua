@@ -503,22 +503,23 @@ do
         setupPhase = "MENU"
         return HeroSurvivor.BeginRun()
     end
+    -- The setup screen shows every panel at once; opening a kind only switches its option list.
     function HeroSurvivor.OpenSetup(kind)
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         if kind ~= "HERO" and kind ~= "DIFFICULTY" and kind ~= "WEAPON" and kind ~= "TRINKET" then return false end
-        setupPhase = kind
         local selections = {HERO = selectedHero, DIFFICULTY = selectedDifficulty, WEAPON = selectedWeapon, TRINKET = selectedTrinket}
         local selected = selections[kind]
         SurvivorSetupUI.ShowOptions(kind, selected, selectedHero)
         return true
     end
-    function HeroSurvivor.BackToSetup()
-        if not CanSetup() then return false end
+    function HeroSurvivor.ResetSetup()
+        if not CanSetup() or setupPhase ~= "MENU" then return false end
+        selectedDifficulty, selectedWeapon, selectedTrinket = nil, nil, nil
         ShowSetup()
         return true
     end
     function HeroSurvivor.SelectSetup(kind, id)
-        if not CanSetup() or setupPhase ~= kind then return false end
+        if not CanSetup() or setupPhase ~= "MENU" then return false end
         local profile = SurvivorConfig.heroes[id]
         if kind == "HERO" and profile and not profile.locked then
             -- Starting weapons are per hero; trinkets and difficulty are shared.
@@ -555,7 +556,7 @@ do
         FogMaskEnable(false)
         FogEnable(false)
         SurvivorUI.Init(Choose, HeroSurvivor.Start, Reroll, HeroSurvivor.NextStage, Exclude)
-        SurvivorSetupUI.Init(HeroSurvivor.OpenSetup, HeroSurvivor.SelectSetup, HeroSurvivor.BackToSetup, HeroSurvivor.BeginRun)
+        SurvivorSetupUI.Init(HeroSurvivor.OpenSetup, HeroSurvivor.SelectSetup, HeroSurvivor.ResetSetup, HeroSurvivor.BeginRun)
         if SurvivorConfig.debugCommands then
             debugTrigger = CreateTrigger() -- Map lifetime; registered once across restarts.
             TriggerRegisterPlayerChatEvent(debugTrigger, Player(SurvivorConfig.playerId), "-hs", false)
