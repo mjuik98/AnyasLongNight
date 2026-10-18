@@ -42,6 +42,9 @@ export function talentLua(data) {
         : '{' + Object.entries(value).map(([key,item]) => '[' + JSON.stringify(key) + ']=' + literal(item)).join(',') + '}';
     return 'HERO_SURVIVOR_TALENTS = ' + literal(data);
 }
+// Owned item rawcodes: trinkets HsT*, weapon gear Hs##, and set pieces by set code letter
+// (Anya e,i,t,b,a,n,c,v; Putress p,g,r,l,f,m).
+export const ownedItemPattern = /^H(?:sT[1-9AB]|[seitabnchvpgrlfm]\d{2})$/;
 // Evaluate only pure catalog/description code. No Warcraft gameplay natives run.
 // Runtime descriptions, native object tooltips and editor strings share one source.
 export function loadItemTooltipCatalog(snapshots = new Map()) {
@@ -57,8 +60,9 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
     try {
         lua.lua_pushjsfunction(state, current => {
             const values = [1,2,3].map(index => to_jsstring(lua.lua_tostring(current,index)));
-            assert((weapons ? /^HsW[1-9A-O]:[1-7]$/ : /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/).test(values[0]) && !catalog.has(values[0]));
-            catalog.set(values[0], {name:values[1],description:values[2].replaceAll('\n','|n')});
+            assert((weapons ? /^HsW[1-9A-O]:[1-7]$/ : ownedItemPattern).test(values[0]) && !catalog.has(values[0]));
+            const optional = index => lua.lua_isstring(current,index) ? to_jsstring(lua.lua_tostring(current,index)) : undefined;
+            catalog.set(values[0], {name:values[1],description:values[2].replaceAll('\n','|n'),icon:optional(4),base:optional(5)});
             return 0;
         });
         lua.lua_setglobal(state,to_luastring('EmitItemTooltip'));
@@ -88,7 +92,7 @@ for id,raw in pairs(ids)do
     EmitItemTooltip(raw,SurvivorAugments.Get(id).name,SurvivorAugments.OwnedTooltip(id,SurvivorAugments.NewBuild('firebolt',id)))
 end
 for _,entry in ipairs(SurvivorEquipment.Catalog())do
-    EmitItemTooltip(entry.id,SurvivorEquipment.Name(entry.id),SurvivorEquipment.Describe(entry.id,{}))
+    EmitItemTooltip(entry.id,SurvivorEquipment.Name(entry.id),SurvivorEquipment.Describe(entry.id,{}),entry.icon,entry.base)
 end
 `]);
         for(const [label,source] of chunks) {
@@ -96,7 +100,7 @@ end
             if(status===lua.LUA_OK)status=lua.lua_pcall(state,0,0,0);
             assert.equal(status,lua.LUA_OK,'Cannot generate item tooltips: '+(status===lua.LUA_OK?'':to_jsstring(lua.lua_tostring(state,-1))));
         }
-        assert.equal(catalog.size,weapons ? weaponObjectCount * growthLevels : 93,'Unexpected runtime tooltip catalog size');
+        assert.equal(catalog.size,weapons ? weaponObjectCount * growthLevels : itemObjectCount,'Unexpected runtime tooltip catalog size');
         return catalog;
     } finally { lua.lua_close(state); }
 }
@@ -467,6 +471,8 @@ export function prepareNativeTalents(map, snapshots = new Map(), preparedAssets 
 export const growthLevels = 7;
 // Passive weapon indicators: HsW1..HsWC are Anya's, HsWD..HsWO are Putress' (SurvivorNativeLoadout).
 export const weaponObjectCount = 24;
+// 11 trinkets + 30 single gear + 14 sets of nine pieces, minus Anya set pieces reusing single gear.
+export const itemObjectCount = 159;
 export const weaponObjectPattern = /^HsW[1-9A-O]$/;
 export const putressWeaponObjects = [
     ['HsWD', 'BTNEnvenomedSpear'], ['HsWE', 'BTNPlagueCloud'], ['HsWF', 'BTNCorrosiveBreath'], ['HsWG', 'BTNOrbOfVenom'],
@@ -477,7 +483,27 @@ export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인�
     icon: 'ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpOne.blp'};
 // Own only the weapon level count, their zero attribute rows and the armor trinket.
 // Tooltip text is written afterwards by the weapon/item tooltip synchronization.
-export function installGrowthObjects(entries) {
+export const itemTemplates = {gcel: 'Hs05', bspd: 'Hs13', cnob: 'Ha01', ciri: 'Hs08', ram3: 'Ha05', rlif: 'Ha06',
+    ofro: 'Ha07', lhst: 'Ha08', penr: 'Ha09'};
+function installGearRows(data, skin, catalog) {
+    const text = new Set(['unam', 'utip', 'utub', 'ides', 'iico']);
+    for (const [id, item] of catalog) {
+        if (/^HsT/.test(id) || !item.base) continue;
+        assert(!data.tables[0].some(row => row.oldId === id), 'Gear ID collides with a stock item: ' + id);
+        const rows = data.tables[1].filter(row => row.newId === id);
+        assert(rows.length <= 1, 'Duplicate gear object: ' + id);
+        if (rows.length) { assert.equal(rows[0].oldId, item.base, 'Gear base collision: ' + id); continue; }
+        const template = data.tables[1].find(row => row.newId === itemTemplates[item.base]);
+        assert(template && template.oldId === item.base, 'Missing gear template for ' + item.base);
+        const fields = template.fields.filter(field => !text.has(field.id)).map(field => ({id: field.id, type: field.type,
+            level: field.level, column: field.column, value: field.value, endId: id}));
+        const add = (field, value) => fields.push({id: field, type: 3, level: 0, column: 0, value, endId: id});
+        if (skin) { add('unam', item.name); add('iico', item.icon); add('utip', item.name); }
+        add('utub', item.description); add('ides', item.description);
+        data.tables[1].push({oldId: item.base, newId: id, extra: [...template.extra], fields});
+    }
+}
+export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatalog()) {
     const output = new Map(entries);
     const abilities = parseObjectData(entries.get('war3map.w3a'), 'ability');
     assert.deepEqual(serializeObjectData(abilities), entries.get('war3map.w3a'), 'Ability reader must round-trip losslessly');
@@ -533,6 +559,8 @@ export function installGrowthObjects(entries) {
     for (const [name, skin] of [['war3map.w3t', false], ['war3mapSkin.w3t', true]]) {
         const data = parseObjectData(entries.get(name), 'item');
         assert.deepEqual(serializeObjectData(data), entries.get(name), 'Item reader must round-trip losslessly');
+        installGearRows(data, skin, itemCatalog);
+        output.set(name, serializeObjectData(data));
         assert(!data.tables[0].some(row => row.oldId === armorTrinket.id), 'Armor trinket collides with a stock item');
         const rows = data.tables[1].filter(row => row.newId === armorTrinket.id);
         assert(rows.length <= 1, 'Duplicate armor trinket');
@@ -551,9 +579,10 @@ export function installGrowthObjects(entries) {
 }
 export function prepareGrowthObjects(map, snapshots = new Map(), preparedAssets = new Map()) {
     const names = ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.w3t', 'war3mapSkin.w3t'];
-    const entries = installGrowthObjects(new Map(names.map(name => [name, map.read(name)])));
+    const itemCatalog = loadItemTooltipCatalog(snapshots);
+    const entries = installGrowthObjects(new Map(names.map(name => [name, map.read(name)])), itemCatalog);
     const sources = new Map(names.map(name => [name, fs.readFileSync(path.join(root, 'assets', name))]));
-    const outputs = installGrowthObjects(new Map(names.map(name => [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])));
+    const outputs = installGrowthObjects(new Map(names.map(name => [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])), itemCatalog);
     const assets = new Map();
     for (const name of names) {
         const asset = path.join(root, 'assets', name);
@@ -893,7 +922,7 @@ export function cleanItemTooltipEntries(entries, catalog = null) {
     for (const name of ['war3map.w3t', 'war3mapSkin.w3t']) {
         const bytes = entries.get(name), data = parseObjectData(bytes, 'item');
         // The main data must resolve the same text even when a reader skips skins.
-        for (const row of data.tables.flat().filter(row => /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/.test(row.newId))) {
+        for (const row of data.tables.flat().filter(row => ownedItemPattern.test(row.newId))) {
             const skin = skinItems.tables.flat().find(value => value.newId === row.newId && value.oldId === row.oldId);
             assert(skin, 'Missing owned item skin: ' + row.newId);
             for (const id of ['utub','ides']) {
@@ -911,7 +940,7 @@ export function cleanItemTooltipEntries(entries, catalog = null) {
             if (field.type !== 3) continue;
             const item = catalog?.get(row.newId);
             const descriptionField = ['utub','ides'].includes(field.id);
-            const owned = /^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/.test(row.newId)
+            const owned = ownedItemPattern.test(row.newId)
                 && (descriptionField || item && ['unam','utip'].includes(field.id));
             const expected = owned && item ? (descriptionField ? item.description : item.name) : undefined;
             const trinket = /^HsT[1-9AB]$/.test(row.newId);

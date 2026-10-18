@@ -2275,7 +2275,7 @@ function GetRandomInt(a,b) if b==100 then return rarityRoll end;return a end
 function GetRandomReal(a,b) return b end
 function NewGear(weapon,capacity)
     local hero=CreateUnit(0,"hero",0,0,0);hero.bag,hero.equipped,hero.capacity={},{},capacity or 6
-    local build=SurvivorAugments.NewBuild(weapon or "firebolt")
+    local build=SurvivorAugments.NewBuild(weapon or "firebolt",nil,SurvivorConfig.weapons[weapon or "firebolt"].hero)
     SurvivorEquipment.Init(hero,build)
     return hero,build
 end
@@ -2524,6 +2524,81 @@ ui=SurvivorEquipment.UIRevision();RemoveItem(assert(pending))
 assert(SurvivorEquipment.UIRevision()>ui and SurvivorEquipment.PendingRewardCount()==0,
     'External removal of a pending reward must invalidate a paused inventory display')
 SurvivorEquipment.Cleanup()
+`);
+
+suite('gear is split by hero: shared pieces serve both, Putress gear and sets roll only for Putress', gearMocks + String.raw`
+function GetRandomInt(a,b)randomSeed=(randomSeed or 7)*1103515245%2147483648;return a+randomSeed%(b-a+1)end
+`, [config, metrics, augments, equipment], String.raw`
+local counts={}
+for _,entry in ipairs(SurvivorEquipment.Catalog())do counts[entry.hero or 'shared']=(counts[entry.hero or 'shared']or 0)+1 end
+assert(counts.shared==7 and counts.putress==66 and counts.anya==75,'Shared 7, Anya 75 and Putress 66 gear entries')
+for _,entry in ipairs(SurvivorEquipment.Catalog())do
+    for scope in pairs(entry.bonuses)do
+        assert(scope=='all' or SurvivorConfig.weapons[scope].hero==entry.hero,'Gear bonuses target only their own hero: '..entry.id)
+    end
+end
+local roll=Local(SurvivorEquipment.OnKill,'RollIndex')
+local hero,build=NewGear('deathcoil',6)
+local seen={}
+for i=1,400 do
+    local entry=SurvivorEquipment.Catalog()[roll(i%4==0,i%7==0)];seen[entry.hero or 'shared']=true
+    assert(entry.hero~='anya','Putress never rolls Anya gear: '..entry.id)
+end
+assert(seen.putress and seen.shared,'Putress rolls both shared and Putress gear')
+for i=1,20 do
+    for _,id in ipairs(SurvivorEquipment.RollBossReward())do assert(SurvivorEquipment.Get(id).hero~='anya')end
+    for _,id in ipairs(SurvivorEquipment.RollRiskReward())do assert(SurvivorEquipment.Get(id).hero~='anya')end
+end
+SurvivorEquipment.Cleanup()
+hero,build=NewGear('firebolt',6)
+for i=1,400 do assert(SurvivorEquipment.Catalog()[roll(i%4==0,false)].hero~='putress','Anya never rolls Putress gear')end
+SurvivorEquipment.Cleanup()
+hero,build=NewGear('plaguedart',6)
+hero.equipped[1]=CreateItem('Hs19',0,0);SurvivorEquipment.Reconcile()
+assert(build.stats.status.plaguedart.poison==SurvivorConfig.weapons.plaguedart.poison[1]+1 and build.stats.views.plaguedart.frostPierce==3,
+    'Weapon gear adds poison stacks and pierce to its Putress weapon')
+for i,id in ipairs({'Hp01','Hp02','Hp03','Hp04'})do hero.equipped[i]=CreateItem(id,0,0)end
+SurvivorEquipment.Reconcile();assert(build.stats.sets.apothecary and not build.stats.sets.gravewarden,'Four apothecary pieces enable its set effect')
+local _,summary=SurvivorEquipment.Summary('Hp01');assert(summary:find('[독]',1,true)and summary:find('역병 침',1,true))
+SurvivorEquipment.Cleanup()
+`);
+
+suite('putress set effects spread poison, burst cursed deaths and strengthen reactions', mocks + String.raw`
+function AddLightningEx()return {}end
+`, [config, metrics, augments, combat], String.raw`
+local hero,build,units=NewCombat('plaguedart')
+local apply=Local(SurvivorCombat.UpdateWeapons,'ApplyStatus');local hit=Local(SurvivorCombat.UpdateWeapons,'Hit')
+local cfg=SurvivorConfig.status
+local function Kill(u)
+    u.life=0;GetTriggerUnit=function()return u end
+    for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
+end
+local dead=EnemyAt(units,0,100,false);local near=EnemyAt(units,100,100,false);local far=EnemyAt(units,2000,0,false)
+for _,u in ipairs({dead,near,far})do u.life=100000 end
+apply(dead,'plaguedart',{poison=20},1);assert(units[dead].poison==cfg.poisonMax,'Poison caps without the set')
+build.stats.sets.apothecary=true
+apply(dead,'plaguedart',{poison=20},1);assert(units[dead].poison==cfg.poisonMax+4,'Apothecary raises the poison cap')
+Kill(dead)
+assert(units[near].poison==8 and (units[far].poison or 0)==0,'Poison spreads half the stacks only to nearby enemies')
+build.stats.sets.apothecary=false;build.stats.sets.gravewarden=true
+local cursed=EnemyAt(units,100,0,false);cursed.life=100000
+apply(cursed,'plaguedart',{curse=3},1);hit(cursed,40,'plaguedart',false,false,1,{})
+hits={};Kill(cursed)
+local burst=0;for _,h in ipairs(hits)do if h.unit==near then burst=burst+1 end end
+assert(burst==1 and units[near].curse==1,'Gravewarden bursts the last hit onto nearby enemies and curses them')
+hits={};local again=EnemyAt(units,110,0,false);again.life=100000
+apply(again,'plaguedart',{curse=3},1);Kill(again)
+assert(#hits==0,'The soul burst waits for its one-second cooldown')
+build.stats.sets.gravewarden=false;build.stats.sets.apprentice=true
+local target=EnemyAt(units,300,0,false);target.life=100000;units[target].poison=0
+apply(target,'plaguedart',{poison=4},1);now=now+1;hits={}
+hit(target,1,'plaguedart',false,false,1,{reaction=1})
+assert(math.abs(hits[2].damage-2*cfg.reactionDamage*build.stats.poisonDamage/cfg.poisonDamage*1.6)<1e-6,'Apprentice reactions deal 60% more')
+local victim=EnemyAt(units,500,0,false);victim.life=1;apply(victim,'plaguedart',{poison=4},1);now=now+1
+local before=#actors;hit(victim,0.5,'plaguedart',false,false,1,{reaction=1})
+local residue;for i=before+1,#actors do if actors[i].identifier=='hsExtraZone' then residue=actors[i] end end
+assert(residue and residue.status.poison==1 and residue.x==500,'A reaction kill leaves a poison residue')
+SurvivorCombat.Cleanup()
 `);
 
 suite('boss recommendations preserve rarity/random cards and prioritize useful missing gear', gearMocks,

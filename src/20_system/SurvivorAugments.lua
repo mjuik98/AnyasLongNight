@@ -182,7 +182,7 @@ do
     local slashPower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
     local frostPower, frostPierce = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, {2, 3, 3, 4, 5, 5, 6}
     local bonusKeys = {
-        set = {ember = true, storm = true, frost = true, blade = true},
+        set = {ember = true, storm = true, frost = true, blade = true, apothecary = true, gravewarden = true, apprentice = true},
         all = {damagePct = true, speedPct = true, areaPct = true, moveSpeed = true, extraProjectiles = true, duration = true, maxLife = true,
             projectileSpeedPct = true, projectileSizePct = true, projectileRangePct = true, projectileDurationPct = true},
         firebolt = {damagePct = true, speedPct = true, areaPct = true, extraProjectiles = true},
@@ -200,6 +200,10 @@ do
 
     for id in pairs(SurvivorConfig.extraWeapons) do
         bonusKeys[id] = {damagePct = true, speedPct = true, areaPct = true, duration = true, slowDuration = true}
+    end
+    -- Putress gear may also add poison stacks or reaction damage to one weapon.
+    for id, weapon in pairs(SurvivorConfig.weapons) do
+        if weapon.hero == "putress" then bonusKeys[id].poison, bonusKeys[id].reactionPct = true, true end
     end
     function SurvivorAugments.Get(id) return catalog[id] end
     function SurvivorAugments.Level(build, id) return build.levels[id] or 0 end
@@ -439,9 +443,9 @@ do
             commonDamageBonus = power, commonAreaBonus = area,
             commonSizeBonus = weaponSize - 1, commonRangeBonus = weaponRange - 1,
             commonDurationBonus = weaponLife - 1, commonProjectileSpeedBonus = projectileSpeed - 1,
-            sets = {ember = Bonus(build, "set", "ember") >= 1, storm = Bonus(build, "set", "storm") >= 1,
-                frost = Bonus(build, "set", "frost") >= 1, blade = Bonus(build, "set", "blade") >= 1},
+            sets = {},
         }
+        for set in pairs(bonusKeys.set) do result.sets[set] = Bonus(build, "set", set) >= 1 end
         for engine, definition in pairs(c.weaponEngines) do
             if definition.weapon then
                 local fields = EngineFields(engine, definition.weapon, levels[definition.weapon] or 0, c)
@@ -463,9 +467,14 @@ do
             local level = levels[id] or 0
             if level > 0 and weapon.hero == "putress" then
                 local function At(list) return list and list[level] or 0 end
-                result.status[id] = {poison = At(weapon.poison), curse = At(weapon.curse), reaction = At(weapon.reaction),
+                local poison = At(weapon.poison)
+                if poison > 0 then poison = poison + math.floor(Bonus(build, id, "poison")) end
+                -- tickPower: poison ticks scale with this weapon's own damage bonuses.
+                result.status[id] = {poison = poison, curse = At(weapon.curse),
+                    reaction = At(weapon.reaction) * math.max(0.1, 1 + Bonus(build, id, "reactionPct")),
                     cursedBonus = At(weapon.cursedBonus), returnBonus = At(weapon.returnBonus),
-                    residuePoison = weapon.residuePoison or 0, maxCurseBonus = 0}
+                    residuePoison = weapon.residuePoison or 0, maxCurseBonus = 0,
+                    tickPower = math.max(0.1, 1 + power + Bonus(build, id, "damagePct"))}
             end
         end
         result.extraWeapons = {}

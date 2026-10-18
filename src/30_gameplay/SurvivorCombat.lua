@@ -11,7 +11,8 @@ do
     local escapeLines = {"위험했네… 여기서 벗어나자.", "불길이 코앞이었어. 빠지자.", "냉기가 스며들기 전에 물러나자.",
         "포위됐어. 길을 다시 열자.", "물길로 빠지자. 아직 끝나지 않았어."}
     local difficulty = SurvivorConfig.difficulties.normal
-    local Slow, SetHit, ExpireEmber, ZoneLifetime, ApplyStatus, Throw
+    local Slow, SetHit, ExpireEmber, ZoneLifetime, ApplyStatus, Throw, StatusDeath, Residue
+    local soulReady, inStatusProc = 0, false
     local stormHits, stormReady, bladeReady = 0, 0, 0
     local boss, bossDefeated = nil, false
     local damageTrigger, escapeEffect = nil, nil
@@ -225,6 +226,7 @@ do
                 amount = amount * (1 + SurvivorConfig.status.curseAmp * curse + (status and status.cursedBonus or 0)
                     + (status and curse >= SurvivorConfig.status.curseMax and status.maxCurseBonus or 0))
             end
+            units[target].lastHit, units[target].lastWeapon = amount, weapon
             local before = math.max(0, GetWidgetLife(target))
             local isBoss = units[target].boss
             local previous = hitSecondary
@@ -539,7 +541,9 @@ do
                 local record = units[u]
                 if Enemy(u) and RunSession.IsRunning() then
                     record.poisonNext = record.poisonNext + config.poisonTick
-                    Hit(u, record.poison * stats.poisonDamage * config.poisonTick, record.poisonWeapon, true)
+                    local status = stats.status and stats.status[record.poisonWeapon]
+                    local power = status and status.tickPower or stats.poisonDamage / config.poisonDamage
+                    Hit(u, record.poison * config.poisonDamage * power * config.poisonTick, record.poisonWeapon, true)
                 end
             end
         end
@@ -763,13 +767,18 @@ do
             record.poison, record.reactionReady = record.poison - consumed, now + config.reactionCooldown
             local x, y, z = ImpactPoint(target)
             ProcVisual(x, y, z, [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]], 0.7)
-            Hit(target, consumed * config.reactionDamage * status.reaction * stats.poisonDamage / config.poisonDamage, weapon, true)
-            if not Enemy(target) then return end
+            Hit(target, consumed * config.reactionDamage * status.reaction * stats.poisonDamage / config.poisonDamage
+                * (stats.sets.apprentice and 1.6 or 1), weapon, true)
+            if not Enemy(target) then
+                -- Apprentice set: a reaction kill leaves a short poison residue.
+                if stats.sets.apprentice and RunSession.IsRunning() then Residue(weapon, x, y) end
+                return
+            end
         end
         local poison = Stacks(status.poison)
         if poison > 0 then
             if now >= (record.poisonUntil or 0) then record.poison, record.poisonNext = 0, now + config.poisonTick end
-            record.poison = math.min(config.poisonMax, record.poison + poison)
+            record.poison = math.min(config.poisonMax + (stats.sets.apothecary and 4 or 0), record.poison + poison)
             record.poisonUntil, record.poisonWeapon = now + config.poisonDuration * life, weapon
             poisonUnits[target] = true
         end
@@ -915,6 +924,43 @@ do
             radius = w.radius, damage = damage, life = w.duration, pulse = w.pulse, pulseClock = w.pulse,
             slow = w.slow, slowDuration = math.max(0.5, w.duration / 3) + (w.slowDurationBonus or 0), isStationary = true, isAnonymous = true,
             selfInteractions = ExtraZone}, model, math.min(2.5, w.radius / 230))
+    end
+    Residue = function(weapon, x, y)
+        NewZone(weapon, x, y, {radius = 150, duration = 2, pulse = 0.5, slow = 0,
+            model = [[Abilities\Spells\Undead\DeathandDecay\DeathandDecayTarget.mdl]]}, 0, {poison = 1, curse = 0, reaction = 0})
+    end
+    -- Putress 4-piece set effects that trigger when a statused enemy dies.
+    StatusDeath = function(dead, record)
+        if not stats or inStatusProc or not Alive(hero) then return end
+        local now, config = RunSession.GetElapsed(), SurvivorConfig.status
+        local x, y, z = ImpactPoint(dead)
+        local function Nearby(radius, limit)
+            local list, chosen = Candidates(x, y, x, y, radius, "statusDeath"), {}
+            for _, u in ipairs(list) do
+                local distance = (GetUnitX(u) - x) ^ 2 + (GetUnitY(u) - y) ^ 2
+                if u ~= dead and Enemy(u) and distance <= radius * radius then chosen[#chosen + 1] = {unit = u, distance = distance} end
+            end
+            ReleaseCandidates(list)
+            table.sort(chosen, function(a, b) return a.distance < b.distance
+                or a.distance == b.distance and GetHandleId(a.unit) < GetHandleId(b.unit) end)
+            for i = #chosen, (limit or #chosen) + 1, -1 do chosen[i] = nil end
+            return chosen
+        end
+        inStatusProc = true
+        if stats.sets.apothecary and (record.poison or 0) >= 8 and now < (record.poisonUntil or 0) then
+            for _, target in ipairs(Nearby(300, 3)) do
+                ApplyStatus(target.unit, record.poisonWeapon, {poison = math.floor(record.poison / 2)}, 1)
+            end
+        end
+        if stats.sets.gravewarden and CurseStacks(record) >= config.curseMax and now >= soulReady then
+            soulReady = now + 1
+            ProcVisual(x, y, z, [[Abilities\Spells\Undead\DeathCoil\DeathCoilSpecialArt.mdl]], 1.2)
+            for _, target in ipairs(Nearby(200)) do
+                Hit(target.unit, (record.lastHit or 0) * 1.5, record.lastWeapon, true)
+                if Enemy(target.unit) then ApplyStatus(target.unit, record.lastWeapon, {curse = 1}, 1) end
+            end
+        end
+        inStatusProc = false
     end
     local function FallMeteor(meteor)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -2066,7 +2112,7 @@ do
                 record.removeAt = RunSession.GetElapsed() + 2.0
                 ALICE_RemoveIdentifier(dead, "hsEnemy")
                 if record.boss then bossDefeated = true end
-                if RunSession.IsRunning() then Shatter(dead, record) end
+                if RunSession.IsRunning() then Shatter(dead, record); StatusDeath(dead, record) end
                 -- Finish is deferred to Step; never tear down combat during a Hit loop.
                 if RunSession.IsRunning() and onKill then onKill(dead, record.elite, record.boss) end
             elseif onDeath then onDeath() end

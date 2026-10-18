@@ -69,13 +69,51 @@ do
         {id = "Hs18", base = "lhst", slot = "Offhand", name = "해진 주문서",
             icon = "ReplaceableTextures\\CommandButtons\\BTNBookOfTheDead.blp",
             description = "모든 무기 쿨다운 4.8% 감소", bonuses = {all = {speedPct = 0.05}}},
+        -- Putress weapon gear. Hs01, Hs02 and Hs14..Hs18 stay shared by both heroes.
+        {id = "Hs19", base = "gcel", slot = "Gloves", name = "독침 통", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
+            description = "역병 침 관통 +1 / 중독 +1스택", bonuses = {plaguedart = {extraPierce = 1, poison = 1}}},
+        {id = "Hs20", base = "bspd", slot = "Boots", name = "새는 약낭", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNBootsOfSpeed.blp",
+            description = "역병 발자취 지속 +1초 / 반경 +20%p", bonuses = {plaguetrail = {duration = 1, areaPct = 0.20}}},
+        {id = "Hs21", base = "cnob", slot = "Head", name = "역병 호흡기", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNHelmutPurple.blp",
+            description = "부식의 숨결 각도 +30도 / 거리 +20%p", bonuses = {corrosion = {angle = 30, areaPct = 0.20}}},
+        {id = "Hs22", base = "ciri", slot = "Chest", name = "오염된 외투", hero = "putress", rarity = "rare",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
+            description = "역병 웅덩이 피해 +15% / 지속 +1초", bonuses = {plaguepool = {damagePct = 0.15, duration = 1}}},
+        {id = "Hs23", base = "cnob", slot = "Head", name = "망자의 두건", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNCirclet.blp",
+            description = "죽음의 고리 발사 수 +1", bonuses = {deathcoil = {extraProjectiles = 1}}},
+        {id = "Hs24", base = "gcel", slot = "Gloves", name = "사슬 감긴 장갑", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNGauntletsOfOgrePower.blp",
+            description = "영혼 사슬 전이 거리 +20%p / 피해 +15%p", bonuses = {soulchain = {areaPct = 0.20, damagePct = 0.15}}},
+        {id = "Hs25", base = "ciri", slot = "Chest", name = "영혼 결속의 로브", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
+            description = "망령의 호위 피해 +15% / 범위 +15%", bonuses = {wraithguard = {damagePct = 0.15, areaPct = 0.15}}},
+        {id = "Hs26", base = "bspd", slot = "Boots", name = "예기의 장화", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNBootsOfSpeed.blp",
+            description = "그림자 낫 피해 +20% / 타격 크기 +15%", bonuses = {shadowscythe = {damagePct = 0.20, areaPct = 0.15}}},
+        {id = "Hs27", base = "gcel", slot = "Gloves", name = "단지 투척용 장갑", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
+            description = "역병 단지 충돌·잔여물 피해 +25%", bonuses = {plaguejar = {damagePct = 0.25}}},
+        {id = "Hs28", base = "cnob", slot = "Head", name = "보호용 고글", hero = "putress", rarity = "rare",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
+            description = "휘발성 촉매 범위 +20% / 반응 피해 +15%", bonuses = {catalyst = {areaPct = 0.20, reactionPct = 0.15}}},
+        {id = "Hs29", base = "ciri", slot = "Chest", name = "내열 앞치마", hero = "putress", rarity = "rare",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
+            description = "끓어오르는 플라스크 범위 +20% / 최대 지속 +0.5초", bonuses = {boilingflask = {areaPct = 0.20, duration = 0.5}}},
+        {id = "Hs30", base = "bspd", slot = "Boots", name = "약병 허리띠", hero = "putress",
+            icon = "ReplaceableTextures\\CommandButtons\\BTNBootsOfSpeed.blp",
+            description = "산성 약병 산포 약병 +1개 / 피해 +15%p", bonuses = {acidvials = {extraStrikes = 1, damagePct = 0.15}}},
     }
     local rarities = {
         common = {name = "일반", color = "|cffffffff"},
         rare = {name = "희귀", color = "|cff609fff"},
         epic = {name = "영웅", color = "|cffc080ff"},
     }
-    local setOrder = {"ember", "storm", "frost", "blade", "ashguide", "duskstorm", "silentcrypt", "nightwatch"}
+    local setOrder = {"ember", "storm", "frost", "blade", "ashguide", "duskstorm", "silentcrypt", "nightwatch",
+        "apothecary", "gravewarden", "apprentice", "plaguelab", "forsworn", "grandalchemy"}
     local sets = {
         ember = {name = "스트라솔름 수비대의 유품", prefix = "스트라솔름 수비대의", flavor = "정화의 불길 속에서도 피난처를 지키던 수비대의 유품.", code = "He", weapons = {"firebolt", "flamefield", "meteor"},
             existing = {Head = "Hs04", Chest = "Hs03", Gloves = "Hs05"},
@@ -117,6 +155,40 @@ do
             tiers = {{count = 3, text = "칼날 계열 쿨다운 16.7% 감소", bonuses = {}},
                 {count = 5, text = "순찰자의 칼날 피해 +35%p|n그림자 베기 각도 +45도 · 귀환 칼날 지속 +2초",
                     bonuses = {orbitblade = {damagePct = 0.35}, frontslash = {angle = 45}, returnblade = {duration = 2}}}}},
+        -- Putress sets: school tier 1 comes from firstBonus; 4-piece effects are combat flags.
+        apothecary = {name = "왕립 약제사의 실험 장비", prefix = "왕립 약제사의", hero = "putress", code = "Hp",
+            flavor = "봉인된 실험실에서 쓰이던 장비. 아직도 약품 냄새가 배어 있다.",
+            weapons = {"plaguedart", "plaguetrail", "corrosion", "plaguepool"}, existing = {}, firstBonus = {damagePct = 0.15},
+            tiers = {{count = 2, text = "독 계열 피해 +15%p (중독 피해 포함)", bonuses = {}},
+                {count = 4, text = "중독 최대 +4스택 · 8스택 이상 적 처치 시 주변 3명에게 스택 절반 전염", bonuses = {set = {apothecary = 1}}}}},
+        gravewarden = {name = "망자 감시인의 장구", prefix = "망자 감시인의", hero = "putress", code = "Hg",
+            flavor = "잠들지 못한 자들을 지켜보던 감시인의 장구.",
+            weapons = {"deathcoil", "soulchain", "wraithguard", "shadowscythe"}, existing = {}, firstBonus = {speedPct = 0.15},
+            tiers = {{count = 2, text = "어둠 계열 쿨다운 13.0% 감소", bonuses = {}},
+                {count = 4, text = "저주 3스택 적 처치 시 영혼 폭발: 마지막 타격 피해 150%, 주변 저주 1스택 (재사용 1초)", bonuses = {set = {gravewarden = 1}}}}},
+        apprentice = {name = "약제사 견습생의 도구", prefix = "약제사 견습생의", hero = "putress", code = "Hr",
+            flavor = "서툰 손으로 쥐었지만 실험은 언제나 성공이었다.",
+            weapons = {"plaguejar", "catalyst", "boilingflask", "acidvials"}, existing = {}, firstBonus = {areaPct = 0.15},
+            tiers = {{count = 2, text = "연금술 계열 범위 +15%p", bonuses = {}},
+                {count = 4, text = "반응 피해 +60% · 반응으로 적 처치 시 그 자리에 중독 잔여물 2초", bonuses = {set = {apprentice = 1}}}}},
+        plaguelab = {name = "역병 조제실의 유산", prefix = "역병 조제실의", short = "조제실", hero = "putress", code = "Hl",
+            flavor = "수많은 실패 끝에 완성된 처방이 이 장비에 남아 있다.",
+            weapons = {"plaguedart", "plaguetrail", "corrosion", "plaguepool"}, existing = {}, firstBonus = {damagePct = 0.20},
+            tiers = {{count = 3, text = "독 계열 피해 +20%p", bonuses = {}},
+                {count = 5, text = "역병 침 관통 +2 · 역병 발자취 지속 +2초|n부식의 숨결 각도 +45도 · 역병 웅덩이 범위 +30%p",
+                    bonuses = {plaguedart = {extraPierce = 2}, plaguetrail = {duration = 2}, corrosion = {angle = 45}, plaguepool = {areaPct = 0.30}}}}},
+        forsworn = {name = "버림받은 자의 맹세", prefix = "버림받은 자의", short = "맹세", hero = "putress", code = "Hf",
+            flavor = "모든 것을 잃은 뒤에도 끝내 놓지 않은 맹세.",
+            weapons = {"deathcoil", "soulchain", "wraithguard", "shadowscythe"}, existing = {}, firstBonus = {damagePct = 0.20},
+            tiers = {{count = 3, text = "어둠 계열 피해 +20%p", bonuses = {}},
+                {count = 5, text = "죽음의 고리 +1발 · 영혼 사슬 전이 거리 +35%p|n망령의 호위 피해 +35%p · 그림자 낫 지속 +2초",
+                    bonuses = {deathcoil = {extraProjectiles = 1}, soulchain = {areaPct = 0.35}, wraithguard = {damagePct = 0.35}, shadowscythe = {duration = 2}}}}},
+        grandalchemy = {name = "대연금술사의 비망록", prefix = "대연금술사의", short = "비망록", hero = "putress", code = "Hm",
+            flavor = "여백마다 다음 실험의 계산이 빼곡하다.",
+            weapons = {"plaguejar", "catalyst", "boilingflask", "acidvials"}, existing = {}, firstBonus = {speedPct = 0.20},
+            tiers = {{count = 3, text = "연금술 계열 쿨다운 16.7% 감소", bonuses = {}},
+                {count = 5, text = "역병 단지 범위 +30%p · 휘발성 촉매 피해 +35%p|n끓어오르는 플라스크 지속 +2초 · 산성 약병 +1개",
+                    bonuses = {plaguejar = {areaPct = 0.30}, catalyst = {damagePct = 0.35}, boilingflask = {duration = 2}, acidvials = {extraStrikes = 1}}}}},
     }
     -- Nine simultaneous slots: each set has two distinct rings and seven other pieces.
     local parts = {
@@ -131,10 +203,13 @@ do
         {key = "Trinket", slot = "Trinket", base = "penr", name = "부적", icon = "BTNPendantOfEnergy.blp", rarity = "epic", stat = "damagePct", value = 0.10, specialized = true, text = "최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p"},
     }
     local existingById = {}
+    -- Shared gear has no hero; Anya-only gear is every other original item.
+    local sharedGear = {Hs01 = true, Hs02 = true, Hs14 = true, Hs15 = true, Hs16 = true, Hs17 = true, Hs18 = true}
     for _, entry in ipairs(catalog) do
-        entry.rarity = "common"
+        entry.rarity = entry.rarity or "common"
         -- Keep all existing rawcodes, stats and equipment slots intact.
         if entry.id == "Hs10" or entry.id == "Hs11" or entry.id == "Hs12" then entry.rarity = "rare" end
+        if not sharedGear[entry.id] then entry.hero = entry.hero or "anya" end
         existingById[entry.id] = entry
     end
     for _, id in ipairs(setOrder) do
@@ -158,7 +233,7 @@ do
                 catalog[#catalog + 1] = entry
             end
             entry.name, entry.flavor = set.prefix .. " " .. part.name, set.flavor
-            entry.set, entry.rarity = id, part.rarity
+            entry.set, entry.rarity, entry.hero = id, part.rarity, set.hero or "anya"
             set.pieces[#set.pieces + 1] = entry.id
         end
     end
@@ -177,7 +252,8 @@ do
     for _, entry in ipairs(catalog) do entry.flavor = entry.flavor or flavor[entry.id] end
     -- Keyed by each set's first weapon; set tier texts already use these element words.
     local elementTags = {firebolt = "|cffff8040[화염]|r", chainlightning = "|cff80d0ff[번개]|r",
-        frostshard = "|cff6fa8ff[냉기]|r", orbitblade = "|cffd8d8e0[칼날]|r"}
+        frostshard = "|cff6fa8ff[냉기]|r", orbitblade = "|cffd8d8e0[칼날]|r",
+        plaguedart = "|cff80ff60[독]|r", deathcoil = "|cffb080ff[어둠]|r", plaguejar = "|cffffd040[연금술]|r"}
     local slotNames = {Head = "머리", Chest = "가슴", Gloves = "장갑", Boots = "신발",
         Trinket = "장신구 (장비용)", Ring = "반지", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
@@ -233,6 +309,11 @@ do
         if roll <= 20 + 10 * (currentStage - 1) then return "rare" end
         return "common"
     end
+    -- Drops and rewards come from shared gear plus the current hero's own gear.
+    local function ForHero(entry)
+        return entry.hero == nil or entry.hero == (build and build.hero or SurvivorConfig.defaultHero)
+    end
+    SurvivorEquipment.ForHero = function(id) return byId[id] ~= nil and ForHero(byId[id]) end
     function SurvivorEquipment.FitsBuild(id)
         local entry = byId[id]
         if not entry or not build then return false end
@@ -247,13 +328,13 @@ do
     local function RollIndex(elite, bossReward, excluded, relevant)
         local rarity, candidates = RollRarity(elite, bossReward), {}
         for i, entry in ipairs(catalog) do
-            if entry.rarity == rarity and not (excluded and excluded[entry.id])
+            if entry.rarity == rarity and ForHero(entry) and not (excluded and excluded[entry.id])
                 and (not relevant or SurvivorEquipment.FitsBuild(entry.id)) then candidates[#candidates + 1] = i end
         end
         -- A guaranteed related choice stays rare or better even if a tier has no match.
         if relevant and #candidates == 0 then
             for i, entry in ipairs(catalog) do
-                if entry.rarity ~= "common" and not (excluded and excluded[entry.id])
+                if entry.rarity ~= "common" and ForHero(entry) and not (excluded and excluded[entry.id])
                     and SurvivorEquipment.FitsBuild(entry.id) then candidates[#candidates + 1] = i end
             end
         end
@@ -274,12 +355,12 @@ do
             local tier = currentStage >= 3 and "epic" or (GetRandomInt(1, 100) <= 20 and "epic" or "rare")
             local pool = {}
             for _, entry in ipairs(catalog) do
-                if entry.rarity == tier and not used[entry.id]
+                if entry.rarity == tier and ForHero(entry) and not used[entry.id]
                     and (slot ~= 1 or SurvivorEquipment.FitsBuild(entry.id)) then pool[#pool + 1] = entry.id end
             end
             if #pool == 0 then
                 for _, entry in ipairs(catalog) do
-                    if entry.rarity == tier and not used[entry.id] then pool[#pool + 1] = entry.id end
+                    if entry.rarity == tier and ForHero(entry) and not used[entry.id] then pool[#pool + 1] = entry.id end
                 end
             end
             assert(#pool > 0, "Missing risk reward candidates")
@@ -474,8 +555,9 @@ do
     local function RewardValues(stats)
         local values = {stats.equipmentLife, stats.moveSpeed, stats.regeneration}
         for _, weapon in ipairs(build.weapons) do
-            local fields = rewardFields[weapon]
-            local source = fields and stats or stats.extraWeapons[weapon]
+            local native = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine].weapon
+            local fields = native and rewardFields[native]
+            local source = native == weapon and stats or native and stats.views[weapon] or stats.extraWeapons[weapon]
             for _, field in ipairs(fields or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"}) do
                 local lower = field:sub(1, 1) == "-"
                 local value = source[lower and field:sub(2) or field] or 0
@@ -487,11 +569,11 @@ do
     HelpfulBossIndex = function()
         local rarity, pool = RollRarity(false, true), {}
         for index, entry in ipairs(catalog) do
-            if entry.rarity == rarity and SurvivorEquipment.FitsBuild(entry.id) then pool[#pool + 1] = index end
+            if entry.rarity == rarity and ForHero(entry) and SurvivorEquipment.FitsBuild(entry.id) then pool[#pool + 1] = index end
         end
         if #pool == 0 then
             for index, entry in ipairs(catalog) do
-                if entry.rarity ~= "common" and SurvivorEquipment.FitsBuild(entry.id) then pool[#pool + 1] = index end
+                if entry.rarity ~= "common" and ForHero(entry) and SurvivorEquipment.FitsBuild(entry.id) then pool[#pool + 1] = index end
             end
         end
         assert(#pool > 0, "Empty related boss reward pool")
