@@ -69,7 +69,9 @@ SurvivorConfig = {
     bladeProcModel = [[abilities\spells\orc\criticalstrike\criticalstriketarget.mdl]],
     reactionModel = [[doodads\underground\props\poisongas\poisonexplosion.mdl]], reactionScale = 0.08,
     residueModel = [[doodads\underground\props\poisongas\poisonrise.mdl]],
-    jarExplosionModel = [[Units\Undead\Abomination\AbominationExplosion.mdl]],
+    jarExplosionModel = [[Objects\Spawnmodels\NightElf\NightElfLargeDeathExplode\NightElfLargeDeathExplode.mdl]],
+    -- Shown above enemies while the plague jar residue keeps damaging them.
+    jarMarkModel = [[Abilities\Spells\Undead\Curse\CurseTarget.mdl]],
     soulBurstModel = [[abilities\spells\undead\witheringfire\witheringfireimpact.mdl]],
     equipmentDropChance = 0.04, equipmentPityKills = 24,
     equipmentPickupRadius = 140, equipmentGroundLimit = 24, equipmentGroundLifetime = 60,
@@ -110,7 +112,7 @@ SurvivorConfig = {
         -- thrown = delivered by a Bezier arc that lands on the locked target point; throwModel/throwScale
         -- pick the flying model (default throw.model), model stays the landing/residue effect.
         -- modelScale enlarges a profile weapon's own model; opaque keeps it fully visible.
-        -- tint overrides the school tint (a grey fog becomes a green poison pool).
+        -- tint overrides the school tint (a grey fog becomes a green poison pool); throwTint only the flying model.
         plaguedart = {hero = "putress", engine = "pierce", element = "독", projectile = true,
             poison = {2, 2, 3, 3, 3, 4, 4}, model = [[Abilities\Weapons\ChimaeraAcidMissile\ChimaeraAcidMissile.mdl]]},
         plaguetrail = {hero = "putress", engine = "zone", element = "독",
@@ -132,7 +134,7 @@ SurvivorConfig = {
             model = [[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]], modelScale = 1.6, opaque = true},
         plaguejar = {hero = "putress", engine = "meteor", element = "연금술", projectile = true, thrown = true,
             reaction = {1, 1, 1, 1, 1, 1, 1}, residuePoison = 1,
-            throwModel = [[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]], throwScale = 2.6},
+            throwModel = [[Abilities\Spells\Other\StrongDrink\BrewmasterMissile.mdl]], throwScale = 2.6, throwTint = {255, 0, 255}},
         catalyst = {hero = "putress", engine = "nova", element = "연금술",
             reaction = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}, model = [[abilities\spells\undead\shadownova\shadownova.mdl]]},
         boilingflask = {hero = "putress", engine = "orb", element = "연금술", projectile = true,

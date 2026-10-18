@@ -205,7 +205,8 @@ do
             BlzSetSpecialEffectAlpha(object.visual, object.alpha)
         end
         local weapon = object.weapon and SurvivorConfig.weapons[object.weapon]
-        local tint = weapon and (weapon.tint or SurvivorConfig.elements[weapon.element].tint)
+        local tint = object.tint
+        if tint == nil then tint = weapon and (weapon.tint or SurvivorConfig.elements[weapon.element].tint) end
         if tint then
             BlzSetSpecialEffectColor(object.visual, tint[1], tint[2], tint[3])
         elseif object.readableBlade then
@@ -819,7 +820,8 @@ do
         local height = math.min(config.maxHeight, math.max(config.minHeight, distance * config.arc))
         local flight = (config.minFlight + (config.maxFlight - config.minFlight) * math.min(1, distance / config.flightRange))
             / math.max(0.1, speed or 1)
-        CreateObject({identifier = "hsThrow", weapon = weapon, x = x0, y = y0, z = z0, x0 = x0, y0 = y0, z0 = z0, x1 = x1, y1 = y1, z1 = z1,
+        CreateObject({identifier = "hsThrow", weapon = weapon, tint = weapon and SurvivorConfig.weapons[weapon].throwTint,
+            x = x0, y = y0, z = z0, x0 = x0, y0 = y0, z0 = z0, x1 = x1, y1 = y1, z1 = z1,
             cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2 + height, age = -(delay or 0), flight = flight,
             onLand = onLand, isAnonymous = true, selfInteractions = MoveThrow}, model or config.model, scale or 1)
         return (delay or 0) + flight
@@ -879,6 +881,23 @@ do
             ReleaseCandidates(candidates)
         end
     end
+    -- One mark per enemy stays attached while repeated hits keep refreshing it.
+    local function MarkLifetime(mark)
+        local dt = ALICE_Config.MIN_INTERVAL
+        if not RunSession.IsRunning() or mark.cleaned then return dt end
+        mark.life = mark.life - dt
+        if mark.life <= 0 or not Enemy(mark.unit) then ALICE_Kill(mark) end
+        return dt
+    end
+    local function MarkUnit(u, model, duration)
+        local record = units[u]
+        local mark = record.dotMark
+        if mark and not mark.cleaned then mark.life = math.max(mark.life, duration); return end
+        mark = {identifier = "hsDotMark", target = u, unit = u, attachPoint = "overhead", x = GetUnitX(u), y = GetUnitY(u), z = 0,
+            life = duration, tint = false, isAnonymous = true, selfInteractions = MarkLifetime}
+        record.dotMark = mark
+        CreateObject(mark, model, 1)
+    end
     local function AreaHit(object, amount)
         local weapon, checked = object.weapon, 0
         local started = SurvivorMetrics.Begin()
@@ -893,6 +912,7 @@ do
                 local dz = object.spherical and z - object.z or 0
                 if dx * dx + dy * dy + dz * dz <= object.radius ^ 2 then
                     Hit(u, amount, object.weapon, nil, nil, object.statusScale, object.status)
+                    if object.markModel and Enemy(u) then MarkUnit(u, object.markModel, object.pulse + 0.15) end
                     if object.slow > 0 then Slow(u, object.slow, object.slowDuration, object.weapon) end
                 end
             end
@@ -925,7 +945,8 @@ do
     local function NewZone(id, x, y, w, damage, status)
         local model = id == "blizzard" and [[Abilities\Spells\Human\Blizzard\BlizzardTarget.mdl]]
             or id == "meteor" and SurvivorConfig.meteorImpactModel or w.model or SurvivorConfig.zoneModel
-        CreateObject({identifier = "hsExtraZone", weapon = id, status = status, statusScale = w.statusScale, x = x, y = y, z = Height(x, y),
+        CreateObject({identifier = "hsExtraZone", weapon = id, status = status, statusScale = w.statusScale,
+            tint = w.tint, markModel = w.markModel, x = x, y = y, z = Height(x, y),
             radius = w.radius, damage = damage, life = w.duration, pulse = w.pulse, pulseClock = w.pulse,
             slow = w.slow, slowDuration = math.max(0.5, w.duration / 3) + (w.slowDurationBonus or 0), isStationary = true, isAnonymous = true,
             selfInteractions = ExtraZone}, model, math.min(2.5, w.radius / 230))
@@ -1081,7 +1102,7 @@ do
             local function Land(lx, ly, lz, scale, split)
                 if engine == "field" then NewZone(id, lx, ly, w, w.damage * scale); return end
                 local residue = {radius = w.radius, duration = w.duration, pulse = w.pulse, slow = 0, statusScale = w.statusScale,
-                    model = SurvivorConfig.jarExplosionModel}
+                    model = SurvivorConfig.jarExplosionModel, tint = false, markModel = SurvivorConfig.jarMarkModel}
                 NewZone(id, lx, ly, residue, w.damage * 0.2 * scale, {poison = status and status.residuePoison or 0, curse = 0, reaction = 0})
                 AreaHit({x = lx, y = ly, z = lz, radius = w.radius * (split and 1 or 0.6), slow = 0, weapon = id, statusScale = w.statusScale}, w.damage * scale)
                 for k = 1, split and status and status.splitJars or 0 do

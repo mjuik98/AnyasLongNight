@@ -959,10 +959,20 @@ assert(scythe.visual.scale==build.stats.extraWeapons.shadowscythe.size*1.6,'The 
 assert(scythe.visual.color[1]==dark[1] and scythe.visual.color[3]==dark[3],'Dark weapons are tinted purple instead of the glaive tint')
 SurvivorCombat.Cleanup()
 build=Cast('plaguejar');local jar=Find('hsThrow')
-assert(jar.visual.model==[[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]] and jar.visual.scale==SurvivorConfig.weapons.plaguejar.throwScale,'The plague jar flies as an enlarged venom orb')
-assert(jar.visual.color[1]==alchemy[1] and jar.visual.color[2]==alchemy[2],'Alchemy throws are tinted orange')
+local jarWeapon=SurvivorConfig.weapons.plaguejar
+assert(jar.visual.model==jarWeapon.throwModel and jar.visual.scale==jarWeapon.throwScale,'The plague jar flies as an enlarged brew')
+assert(jar.visual.color[1]==255 and jar.visual.color[2]==0 and jar.visual.color[3]==255,'The plague jar throw uses its own purple tint')
 local steps=0;repeat steps=steps+1;now=now+.02;jar.selfInteractions(jar)until jar.cleaned or steps>200
-local residue=Find('hsExtraZone');assert(residue and residue.visual.model==SurvivorConfig.jarExplosionModel,'The jar leaves a visible residue')
+local residue=Find('hsExtraZone');assert(residue and residue.visual.model==SurvivorConfig.jarExplosionModel and residue.visual.color==nil,
+    'The jar explosion keeps its own colours')
+local victim=EnemyAt(Local(SurvivorCombat.Init,'units'),residue.x,residue.y,false);victim.life=100000
+residue.pulseClock=residue.pulse;residue.selfInteractions(residue)
+local function Marks()local list={};for _,a in ipairs(actors)do if a.identifier=='hsDotMark' and a.unit==victim then list[#list+1]=a end end;return list end
+local mark=Marks()[1];assert(mark and mark.visual.model==SurvivorConfig.jarMarkModel,'Residue damage marks the enemy')
+residue.pulseClock=residue.pulse;residue.selfInteractions(residue)
+local count=#Marks()
+assert(count==1,'Repeated residue hits refresh one mark instead of stacking')
+for i=1,40 do now=now+.02;mark.selfInteractions(mark)end;assert(mark.cleaned,'The mark fades once the damage stops')
 SurvivorCombat.Cleanup()
 Cast('boilingflask');assert(Find('hsOrb').visual.scale==build.stats.extraWeapons.boilingflask.size*SurvivorConfig.weapons.boilingflask.modelScale,'The flask is enlarged')
 SurvivorCombat.Cleanup()
