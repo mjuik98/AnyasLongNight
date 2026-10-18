@@ -13,7 +13,7 @@ do
     local excludeCallback
     local gearCallback
     local expeditionRoot, expeditionText
-    local actionFeedback, actionTimer, actionTimerRunning, actionTooltip, actionTooltipText = {}, nil, false, nil, nil
+    local actionFeedback, actionTooltip, actionTooltipText = {}, nil, nil
     local ResetActionFeedback
     local speechRoot, speechName, speechText, noticeRoot, noticeText
     local speechQueue, speech, notice, speechClock, speechVisible = {}, nil, nil, 0, false
@@ -200,7 +200,7 @@ do
         if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
         local hidden = {}
         for _, entry in ipairs(cinematicFrames) do
-            if ValidNativeFrame(entry.frame) and (mode == "intro" or not entry.introOnly) then
+            if ValidNativeFrame(entry.frame) and (mode == "intro" or mode == "setup" or not entry.introOnly) then
                 hidden[entry.frame] = true
             end
         end
@@ -223,6 +223,11 @@ do
             end
         end
         -- No native enable/anchor/size/parent writes: hotkeys and original positions survive.
+    end
+    -- The setup screen hides the whole console like an intro; it only lifts its own mode.
+    function SurvivorUI.SetSetupCinematic(active)
+        if active then ApplyCinematicFrames("setup")
+        elseif cinematicMode == "setup" then RestoreCinematicFrames() end
     end
     function SurvivorUI.UpdateExpedition()
         if not expeditionText then return end
@@ -717,10 +722,7 @@ do
         end
     end
     ResetActionFeedback = function()
-        -- The handle is allocated for every client in Init; mouse events only
-        -- animate local frames and never allocate timers or touch gameplay state.
-        if actionTimer then PauseTimer(actionTimer) end
-        actionTimerRunning = false
+        -- Mouse events only restyle local frames and never touch gameplay state.
         for _, control in ipairs(actionFeedback) do
             control.hovered, control.pressed, control.amount = false, false, 0
             RenderActionFeedback(control)
@@ -728,29 +730,24 @@ do
         if actionTooltip then BlzFrameSetVisible(actionTooltip, false) end
     end
     local function AnimateActionFeedback()
-        local moving = false
         for _, control in ipairs(actionFeedback) do
             local target = control.hovered and ActionAvailable(control) and 1 or 0
             if not ActionAvailable(control) then control.hovered, control.pressed = false, false end
             if control.amount ~= target then
-                control.amount = target > control.amount and math.min(target, control.amount + 0.2)
-                    or math.max(target, control.amount - 0.2)
+                control.amount = target
                 RenderActionFeedback(control)
             end
-            moving = moving or control.amount ~= target
         end
-        if not moving then PauseTimer(actionTimer); actionTimerRunning = false end
     end
+    -- Hover feedback switches once per enter/leave. A 0.02-second fade rewrote the
+    -- frames under the cursor 50 times a second and made the cursor flicker to the
+    -- screen's top-right corner while it rested on a card.
     local function StartActionAnimation()
-        if actionTimerRunning then return end
-        actionTimerRunning = true
-        TimerStart(actionTimer, 0.02, true, function()
-            local ok, message = pcall(AnimateActionFeedback)
-            if not ok then
-                pcall(ResetActionFeedback)
-                print("[HeroSurvivor] Button feedback: " .. tostring(message))
-            end
-        end)
+        local ok, message = pcall(AnimateActionFeedback)
+        if not ok then
+            pcall(ResetActionFeedback)
+            print("[HeroSurvivor] Button feedback: " .. tostring(message))
+        end
     end
     local function BindActionFeedback(card, key, button, background, label, name, color, tooltip)
         -- A transparent FRAME still has a mouse surface over its parent button.
@@ -1078,7 +1075,6 @@ do
         end
         BlzFrameSetLevel(heading, 5)
         BlzFrameSetLevel(note, 5)
-        actionTimer = CreateTimer()
         actionTooltip = FramedPanel(parent, "HSChoiceActionTooltip", 716, 0.23, 0.060)
         BlzFrameSetLevel(actionTooltip, 30)
         actionTooltipText = Text(actionTooltip, "HSChoiceActionTooltipText", 0.194, 0.032, 0, -0.014)

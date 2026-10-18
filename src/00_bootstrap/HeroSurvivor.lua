@@ -518,22 +518,23 @@ do
         setupPhase = "MENU"
         return HeroSurvivor.BeginRun()
     end
+    -- The setup screen shows every panel at once; opening a kind only switches its option list.
     function HeroSurvivor.OpenSetup(kind)
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         if kind ~= "DIFFICULTY" and kind ~= "WEAPON" and kind ~= "TRINKET" then return false end
-        setupPhase = kind
         local selections = {DIFFICULTY = selectedDifficulty, WEAPON = selectedWeapon, TRINKET = selectedTrinket}
         local selected = selections[kind]
         SurvivorSetupUI.ShowOptions(kind, selected)
         return true
     end
-    function HeroSurvivor.BackToSetup()
-        if not CanSetup() then return false end
+    function HeroSurvivor.ResetSetup()
+        if not CanSetup() or setupPhase ~= "MENU" then return false end
+        selectedDifficulty, selectedWeapon, selectedTrinket = nil, nil, nil
         ShowSetup()
         return true
     end
     function HeroSurvivor.SelectSetup(kind, id)
-        if not CanSetup() or setupPhase ~= kind then return false end
+        if not CanSetup() or setupPhase ~= "MENU" then return false end
         if kind == "DIFFICULTY" and SurvivorConfig.difficulties[id] then selectedDifficulty = id
         elseif kind == "WEAPON" and Allowed(SurvivorConfig.startingWeapons, id) then selectedWeapon = id
         elseif kind == "TRINKET" and Allowed(SurvivorConfig.startingTrinkets, id) then selectedTrinket = id
@@ -565,7 +566,7 @@ do
         FogMaskEnable(false)
         FogEnable(false)
         SurvivorUI.Init(Choose, HeroSurvivor.Start, Reroll, HeroSurvivor.NextStage, Exclude)
-        SurvivorSetupUI.Init(HeroSurvivor.OpenSetup, HeroSurvivor.SelectSetup, HeroSurvivor.BackToSetup, HeroSurvivor.BeginRun)
+        SurvivorSetupUI.Init(HeroSurvivor.OpenSetup, HeroSurvivor.SelectSetup, HeroSurvivor.ResetSetup, HeroSurvivor.BeginRun)
         if SurvivorConfig.debugCommands then
             debugTrigger = CreateTrigger() -- Map lifetime; registered once across restarts.
             TriggerRegisterPlayerChatEvent(debugTrigger, Player(SurvivorConfig.playerId), "-hs", false)
