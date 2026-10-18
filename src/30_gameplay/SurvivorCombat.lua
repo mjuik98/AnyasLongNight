@@ -183,7 +183,7 @@ do
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function FriendlyEffectAlpha(object, warning)
-        if object.identifier == "hsChainHit" then return warning and 110 or 255 end
+        if object.identifier == "hsChainHit" or object.opaque then return warning and 110 or 255 end
         if object.identifier == "hsEscapeDeparture" or object.identifier == "hsEscapeArrival" then return 255 end
         -- Solid metal needs more opacity than luminous spell particles at night.
         if object.readableBlade then return warning and 150 or 255 end
@@ -648,7 +648,7 @@ do
             if stats.thrown then
                 -- A vial lands exactly when its strike resolves; the strike owns the damage.
                 local hx, hy, hz = ImpactPoint(hero)
-                life = Throw(hx, hy, hz, tx, ty, tz, stats.throwSpeed, (i - 1) * stats.monsoonSpacing)
+                life = Throw(hx, hy, hz, tx, ty, tz, stats.throwSpeed, (i - 1) * stats.monsoonSpacing, nil, stats.throwScale, stats.throwModel)
             end
             local strike = {identifier = "hsMonsoon", weapon = stats.weaponId or "monsoon", model = stats.model,
                 statusScale = stats.statusScale, x = tx, y = ty, z = tz,
@@ -808,7 +808,7 @@ do
         return dt
     end
     -- Returns delay + flight time so callers can resolve damage on landing.
-    Throw = function(x0, y0, z0, x1, y1, z1, speed, delay, onLand, scale)
+    Throw = function(x0, y0, z0, x1, y1, z1, speed, delay, onLand, scale, model)
         local config = SurvivorConfig.throw
         local distance = math.sqrt((x1 - x0) ^ 2 + (y1 - y0) ^ 2)
         local height = math.min(config.maxHeight, math.max(config.minHeight, distance * config.arc))
@@ -816,7 +816,7 @@ do
             / math.max(0.1, speed or 1)
         CreateObject({identifier = "hsThrow", x = x0, y = y0, z = z0, x0 = x0, y0 = y0, z0 = z0, x1 = x1, y1 = y1, z1 = z1,
             cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2 + height, age = -(delay or 0), flight = flight,
-            onLand = onLand, isAnonymous = true, selfInteractions = MoveThrow}, config.model, scale or 1)
+            onLand = onLand, isAnonymous = true, selfInteractions = MoveThrow}, model or config.model, scale or 1)
         return (delay or 0) + flight
     end
     ExpireEmber = function(zone)
@@ -1080,10 +1080,11 @@ do
                 for k = 1, split and status and status.splitJars or 0 do
                     local angle = GetUnitFacing(hero) * bj_DEGTORAD + (k - 0.5) * 2 * math.pi / status.splitJars
                     local sx, sy = lx + math.cos(angle) * 150, ly + math.sin(angle) * 150
-                    Throw(lx, ly, lz, sx, sy, Height(sx, sy), w.speed, 0, function() Land(sx, sy, Height(sx, sy), 0.4, false) end, 0.6)
+                    Throw(lx, ly, lz, sx, sy, Height(sx, sy), w.speed, 0, function() Land(sx, sy, Height(sx, sy), 0.4, false) end,
+                        0.6 * (w.throwScale or 1), w.throwModel)
                 end
             end
-            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() Land(tx, ty, tz, 1, true) end)
+            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() Land(tx, ty, tz, 1, true) end, w.throwScale, w.throwModel)
             return
         end
         if engine == "field" then NewZone(id, tx, ty, w, w.damage); return end
@@ -1096,13 +1097,15 @@ do
         local dx, dy, dz = tx - x, ty - y, orb and tz - z or 0
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance < 1 then dx, dy, dz, distance = math.cos(GetUnitFacing(hero) * bj_DEGTORAD), math.sin(GetUnitFacing(hero) * bj_DEGTORAD), 0, 1 end
-        local object = {identifier = orb and "hsOrb" or "hsReturnBlade", weapon = id,
+        -- Putress models keep their own colours; only Anya's glaive is tinted.
+        local object = {identifier = orb and "hsOrb" or w.model and "hsScythe" or "hsReturnBlade", weapon = id, opaque = w.opaque,
             x = x, y = y, z = z, dx = dx / distance, dy = dy / distance, dz = dz / distance,
             life = w.duration, remaining = w.range, range = w.range, leg = 1, speed = w.speed, radius = w.radius, damage = w.damage,
             pulse = w.pulse, pulseClock = 0, spherical = true, slow = 0, hitTimes = {},
             isAnonymous = true, selfInteractions = orb and MoveOrb or MoveReturnBlade}
         object.statusScale = w.statusScale
-        CreateObject(object, w.model or (orb and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel), w.size)
+        CreateObject(object, w.model or (orb and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel),
+            w.size * (w.modelScale or 1))
     end
     local function MoveFrost(shard)
         local dt = ALICE_Config.MIN_INTERVAL

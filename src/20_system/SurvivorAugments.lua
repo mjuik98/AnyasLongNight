@@ -34,11 +34,11 @@ do
         deathcoil = {kind = "weapon", name = "죽음의 고리", icon = icons .. "BTNDeathCoil.blp", text = "추적 투사체·저주 · 지상·공중"},
         soulchain = {kind = "weapon", name = "영혼 사슬", icon = icons .. "BTNCurse.blp", text = "연쇄 공격·저주 · 지상·공중"},
         wraithguard = {kind = "weapon", name = "망령의 호위", icon = icons .. "BTNUnholyFrenzy.blp", text = "회전 망령·저주 대상 추가 피해 · 지상"},
-        shadowscythe = {kind = "weapon", name = "그림자 낫", icon = icons .. "BTNDarkRitual.blp", text = "왕복 낫·저주 · 지상"},
+        shadowscythe = {kind = "weapon", name = "그림자 낫", icon = icons .. "BTNShadowStrike.blp", text = "왕복 낫·저주 · 지상"},
         plaguejar = {kind = "weapon", name = "역병 단지", icon = icons .. "BTNAcidBomb.blp", text = "포물선 투척 범위·반응·중독 잔여물 · 지상·공중"},
         catalyst = {kind = "weapon", name = "휘발성 촉매", icon = icons .. "BTNTransmute.blp", text = "무작위 적 위치 폭발·강한 반응 · 지상·공중"},
         boilingflask = {kind = "weapon", name = "끓어오르는 플라스크", icon = icons .. "BTNHealingSpray.blp", text = "전진 후 머무는 구체·반응 · 지상·공중"},
-        acidvials = {kind = "weapon", name = "산성 약병 산포", icon = icons .. "BTNChemicalRage.blp", text = "무작위 포물선 투척·반응 · 지상·공중"},
+        acidvials = {kind = "weapon", name = "산성 약병 산포", icon = icons .. "BTNHealingSalve.blp", text = "무작위 포물선 투척·반응 · 지상·공중"},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
             text = "모든 무기 피해 증가", statName = "모든 무기 피해", amount = 0.10},
         haste = {kind = "trinket", name = "신속의 인장", icon = icons .. "BTNGlove.blp",
@@ -458,6 +458,7 @@ do
             local view = EngineFields(weapon.engine, id, levels[id] or 0, base)
             view.weaponId, view.model, view.thrown, view.lightning = id, weapon.model, weapon.thrown, weapon.lightning
             view.throwSpeed = weapon.thrown and projectileSpeed or nil
+            view.throwModel, view.throwScale = weapon.throwModel, weapon.throwScale
             result.views[id] = view
         end
         -- Putress status per owned weapon; evolutions below may adjust it.
@@ -490,6 +491,8 @@ do
                 duration = math.min(20, math.max(0.1, profile.duration + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife),
                 speed = profile.speed * (c.weapons[id].projectile and projectileSpeed or 1),
                 model = c.weapons[id].model, thrown = c.weapons[id].thrown,
+                throwModel = c.weapons[id].throwModel, throwScale = c.weapons[id].throwScale,
+                modelScale = c.weapons[id].modelScale, opaque = c.weapons[id].opaque,
                 pulse = math.max(0.1, profile.pulse),
                 slow = profile.slow, delay = 0.8,
                 slowDurationBonus = Bonus(build, id, "slowDuration"),

@@ -90,7 +90,9 @@ SurvivorConfig = {
         frostnova = {hero = "anya", engine = "nova", element = "얼음"},
         blizzard = {hero = "anya", engine = "field", element = "얼음"},
         -- Putress: per-level status tables (poison stacks, curse stacks, reaction multiplier).
-        -- thrown = delivered by a Bezier arc that lands on the locked target point.
+        -- thrown = delivered by a Bezier arc that lands on the locked target point; throwModel/throwScale
+        -- pick the flying model (default throw.model), model stays the landing/residue effect.
+        -- modelScale enlarges a profile weapon's own model; opaque keeps it fully visible.
         plaguedart = {hero = "putress", engine = "pierce", element = "독", projectile = true,
             poison = {2, 2, 3, 3, 3, 4, 4}, model = [[Abilities\Weapons\ChimaeraAcidMissile\ChimaeraAcidMissile.mdl]]},
         plaguetrail = {hero = "putress", engine = "zone", element = "독",
@@ -106,15 +108,18 @@ SurvivorConfig = {
         wraithguard = {hero = "putress", engine = "orbit", element = "어둠",
             cursedBonus = {0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3}, model = [[Abilities\Weapons\AvengerMissile\AvengerMissile.mdl]]},
         shadowscythe = {hero = "putress", engine = "boomerang", element = "어둠", projectile = true,
-            curse = {1, 1, 1, 1, 1, 1, 1}, returnBonus = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5}},
+            curse = {1, 1, 1, 1, 1, 1, 1}, returnBonus = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5},
+            model = [[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]], modelScale = 1.6, opaque = true},
         plaguejar = {hero = "putress", engine = "meteor", element = "연금술", projectile = true, thrown = true,
-            reaction = {1, 1, 1, 1, 1, 1, 1}, residuePoison = 1, model = [[Abilities\Weapons\MeatwagonMissile\MeatwagonMissile.mdl]]},
+            reaction = {1, 1, 1, 1, 1, 1, 1}, residuePoison = 1, model = [[Abilities\Weapons\MeatwagonMissile\MeatwagonMissile.mdl]],
+            throwModel = [[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]], throwScale = 1.8},
         catalyst = {hero = "putress", engine = "nova", element = "연금술",
             reaction = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]]},
         boilingflask = {hero = "putress", engine = "orb", element = "연금술", projectile = true,
             reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
         acidvials = {hero = "putress", engine = "strike", element = "연금술", projectile = true, thrown = true,
-            reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]]},
+            reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]],
+            throwModel = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
     },
     -- Status effects applied by Putress weapons (draft values).
     status = {poisonDamage = 6, poisonTick = 0.5, poisonMax = 12, poisonDuration = 4,

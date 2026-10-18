@@ -476,8 +476,8 @@ export const itemObjectCount = 159;
 export const weaponObjectPattern = /^HsW[1-9A-O]$/;
 export const putressWeaponObjects = [
     ['HsWD', 'BTNEnvenomedSpear'], ['HsWE', 'BTNPlagueCloud'], ['HsWF', 'BTNCorrosiveBreath'], ['HsWG', 'BTNOrbOfVenom'],
-    ['HsWH', 'BTNDeathCoil'], ['HsWI', 'BTNCurse'], ['HsWJ', 'BTNUnholyFrenzy'], ['HsWK', 'BTNDarkRitual'],
-    ['HsWL', 'BTNAcidBomb'], ['HsWM', 'BTNTransmute'], ['HsWN', 'BTNHealingSpray'], ['HsWO', 'BTNChemicalRage'],
+    ['HsWH', 'BTNDeathCoil'], ['HsWI', 'BTNCurse'], ['HsWJ', 'BTNUnholyFrenzy'], ['HsWK', 'BTNShadowStrike'],
+    ['HsWL', 'BTNAcidBomb'], ['HsWM', 'BTNTransmute'], ['HsWN', 'BTNHealingSpray'], ['HsWO', 'BTNHealingSalve'],
 ].map(([id, icon]) => ({id, icon: 'ReplaceableTextures\\CommandButtons\\' + icon + '.blp'}));
 export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인장',
     icon: 'ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpOne.blp'};
@@ -543,8 +543,10 @@ export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatal
         const rows = skins.tables[1].filter(row => row.newId === object.id);
         assert(rows.length <= 1, 'Duplicate weapon skin: ' + object.id);
         if (rows.length) {
+            // The icon follows the Lua catalog; every other field stays as stored.
             const art = rows[0].fields.filter(field => field.id === 'aart');
-            assert(art.length === 1 && art[0].value === object.icon, 'Unexpected weapon icon: ' + object.id);
+            assert(art.length === 1 && art[0].type === 3, 'Unexpected weapon icon field: ' + object.id);
+            if (art[0].value !== object.icon) { delete rows[0].raw; delete art[0].raw; art[0].value = object.icon; }
             continue;
         }
         const base = (id, value) => {

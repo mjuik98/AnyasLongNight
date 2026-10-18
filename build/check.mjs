@@ -938,6 +938,33 @@ assert(zone and zone.x==400 and zone.status.poison==1,'The poison residue lands 
 SurvivorCombat.Cleanup()
 `);
 
+suite('putress weapon visuals use their configured models, sizes and opacity', mocks + String.raw`
+function AddLightningEx()return {}end
+function BlzSetSpecialEffectScale(e,v)e.scale=v end
+function BlzSetSpecialEffectAlpha(e,v)e.alpha=v end
+function BlzSetSpecialEffectColor(e,r,g,b)e.color={r,g,b}end
+function GetRandomInt()return 1 end
+`, [config,metrics,augments,combat], String.raw`
+local function Cast(id)
+    local hero,build,units=NewCombat(id);local target=EnemyAt(units,400,0,false);target.life=100000
+    SurvivorCombat.CastWeapon(id);return build
+end
+local function Find(identifier)for _,a in ipairs(actors)do if a.identifier==identifier then return a end end end
+Cast('deathcoil')
+assert(Find('hsMissile').visual.model==[[Abilities\Spells\Undead\DeathCoil\DeathCoilMissile.mdl]]);SurvivorCombat.Cleanup()
+local build=Cast('shadowscythe');local scythe=Find('hsScythe')
+assert(scythe.visual.model==[[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]] and scythe.visual.alpha==255,'The scythe is opaque')
+assert(scythe.visual.scale==build.stats.extraWeapons.shadowscythe.size*1.6 and scythe.visual.color==nil,'The scythe is enlarged and untinted')
+SurvivorCombat.Cleanup()
+build=Cast('plaguejar');local jar=Find('hsThrow')
+assert(jar.visual.model==[[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]] and jar.visual.scale==1.8,'The plague jar flies as an enlarged venom orb')
+SurvivorCombat.Cleanup()
+Cast('acidvials');local vial=Find('hsThrow')
+assert(vial.visual.model==[[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]],'Acid vials fly as bottles')
+SurvivorCombat.Cleanup()
+assert(SurvivorAugments.Get('acidvials').icon:find('BTNHealingSalve',1,true) and SurvivorAugments.Get('shadowscythe').icon:find('BTNShadowStrike',1,true))
+`);
+
 suite('putress evolutions apply their engine, status and mode changes', mocks, [config,augments], String.raw`
 local count=0
 for i=25,48 do
