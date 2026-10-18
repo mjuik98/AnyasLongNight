@@ -477,7 +477,7 @@ export const weaponObjectPattern = /^HsW[1-9A-O]$/;
 export const putressWeaponObjects = [
     ['HsWD', 'BTNEnvenomedSpear'], ['HsWE', 'BTNPlagueCloud'], ['HsWF', 'BTNCorrosiveBreath'], ['HsWG', 'BTNOrbOfVenom'],
     ['HsWH', 'BTNDeathCoil'], ['HsWI', 'BTNCurse'], ['HsWJ', 'BTNUnholyFrenzy'], ['HsWK', 'BTNShadowStrike'],
-    ['HsWL', 'BTNAcidBomb'], ['HsWM', 'BTNTransmute'], ['HsWN', 'BTNHealingSpray'], ['HsWO', 'BTNHealingSalve'],
+    ['HsWL', 'BTNUnstableConcoction'], ['HsWM', 'BTNRejuvenationPotion'], ['HsWN', 'BTNChemicalRage'], ['HsWO', 'BTNHealingSalve'],
 ].map(([id, icon]) => ({id, icon: 'ReplaceableTextures\\CommandButtons\\' + icon + '.blp'}));
 export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인장',
     icon: 'ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpOne.blp'};
@@ -696,8 +696,9 @@ export function installHeroRegeneration(bytes, skin = false) {
     return serializeUnits(data);
 }
 // Putress copies every Uany gameplay override (stats, regeneration, no native skills)
-// so both heroes start identical; the skin row only changes presentation.
-export const putressHero = {id: 'HsPu', base: 'Uany', name: '퓨트리스',
+// so both heroes start identical, except the primary attribute (intelligence).
+// The skin row only changes presentation.
+export const putressHero = {id: 'HsPu', base: 'Uany', name: '퓨트리스', primary: 'INT',
     model: 'Units\\Forsaken\\Hero_Putress\\Hero_Putress.mdl',
     icon: 'ReplaceableTextures\\CommandButtons\\BTNPutress.blp'};
 export function installPutressHero(bytes, skin = false) {
@@ -709,8 +710,9 @@ export function installPutressHero(bytes, skin = false) {
     const fields = skin
         ? [['umdl', putressHero.model], ['unam', putressHero.name], ['uico', putressHero.icon], ['upro', putressHero.name], ['usnd', '']]
             .map(([id, value]) => ({id, type: 3, level: 0, column: 0, value, endId: putressHero.id}))
-        : source[0].fields.map(field => ({id: field.id, type: field.type, level: field.level, column: field.column,
-            value: field.value, endId: putressHero.id}));
+        : [...source[0].fields.filter(field => field.id !== 'upra').map(field => ({id: field.id, type: field.type,
+            level: field.level, column: field.column, value: field.value, endId: putressHero.id})),
+            {id: 'upra', type: 3, level: 0, column: 0, value: putressHero.primary, endId: putressHero.id}];
     const rows = data.tables[1].filter(row => row.newId === putressHero.id);
     assert(rows.length <= 1, 'Duplicate Putress hero');
     const same = row => row.oldId === putressHero.base && row.fields.length === fields.length

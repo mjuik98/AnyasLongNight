@@ -35,9 +35,9 @@ do
         soulchain = {kind = "weapon", name = "영혼 사슬", icon = icons .. "BTNCurse.blp", text = "연쇄 공격·저주 · 지상·공중"},
         wraithguard = {kind = "weapon", name = "망령의 호위", icon = icons .. "BTNUnholyFrenzy.blp", text = "회전 망령·저주 대상 추가 피해 · 지상"},
         shadowscythe = {kind = "weapon", name = "그림자 낫", icon = icons .. "BTNShadowStrike.blp", text = "왕복 낫·저주 · 지상"},
-        plaguejar = {kind = "weapon", name = "역병 단지", icon = icons .. "BTNAcidBomb.blp", text = "포물선 투척 범위·반응·중독 잔여물 · 지상·공중"},
-        catalyst = {kind = "weapon", name = "휘발성 촉매", icon = icons .. "BTNTransmute.blp", text = "무작위 적 위치 폭발·강한 반응 · 지상·공중"},
-        boilingflask = {kind = "weapon", name = "끓어오르는 플라스크", icon = icons .. "BTNHealingSpray.blp", text = "전진 후 머무는 구체·반응 · 지상·공중"},
+        plaguejar = {kind = "weapon", name = "역병 단지", icon = icons .. "BTNUnstableConcoction.blp", text = "포물선 투척 범위·반응·중독 잔여물 · 지상·공중"},
+        catalyst = {kind = "weapon", name = "휘발성 촉매", icon = icons .. "BTNRejuvenationPotion.blp", text = "무작위 적 위치 폭발·강한 반응 · 지상·공중"},
+        boilingflask = {kind = "weapon", name = "끓어오르는 플라스크", icon = icons .. "BTNChemicalRage.blp", text = "전진 후 머무는 구체·반응 · 지상·공중"},
         acidvials = {kind = "weapon", name = "산성 약병 산포", icon = icons .. "BTNHealingSalve.blp", text = "무작위 포물선 투척·반응 · 지상·공중"},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
             text = "모든 무기 피해 증가", statName = "모든 무기 피해", amount = 0.10},
@@ -206,6 +206,11 @@ do
         if weapon.hero == "putress" then bonusKeys[id].poison, bonusKeys[id].reactionPct = true, true end
     end
     function SurvivorAugments.Get(id) return catalog[id] end
+    -- Coloured school tag, e.g. "[독]" in green. labelled: use the gear wording (냉기).
+    function SurvivorAugments.ElementTag(element, labelled)
+        local school = SurvivorConfig.elements[element]
+        return "|cff" .. school.color .. "[" .. (labelled and school.label or element) .. "]|r"
+    end
     function SurvivorAugments.Level(build, id) return build.levels[id] or 0 end
     -- Trailing zeros are dropped so 30.0 reads as 30 and 2.40 as 2.4.
     local function StatNumber(value, decimals)
@@ -291,7 +296,7 @@ do
         if stats.multiCount > 0 then
             rows[#rows + 1] = {"추가 공격", string.format("%d회 (개별 피해 %.0f%%)", stats.multiCount, stats.multiDamage * 100)}
         end
-        local lines = {kind}
+        local lines = {SurvivorAugments.ElementTag(entry.element) .. " " .. kind}
         StatLines(lines, rows)
         for _, note in ipairs(notes or {}) do lines[#lines + 1] = "※ " .. note end
         return table.concat(lines, "\n")
@@ -458,7 +463,7 @@ do
             local view = EngineFields(weapon.engine, id, levels[id] or 0, base)
             view.weaponId, view.model, view.thrown, view.lightning = id, weapon.model, weapon.thrown, weapon.lightning
             view.throwSpeed = weapon.thrown and projectileSpeed or nil
-            view.throwModel, view.throwScale = weapon.throwModel, weapon.throwScale
+            view.throwModel, view.throwScale, view.hitModel = weapon.throwModel, weapon.throwScale, weapon.hitModel
             result.views[id] = view
         end
         -- Putress status per owned weapon; evolutions below may adjust it.

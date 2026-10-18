@@ -954,15 +954,72 @@ Cast('deathcoil')
 assert(Find('hsMissile').visual.model==[[Abilities\Spells\Undead\DeathCoil\DeathCoilMissile.mdl]]);SurvivorCombat.Cleanup()
 local build=Cast('shadowscythe');local scythe=Find('hsScythe')
 assert(scythe.visual.model==[[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]] and scythe.visual.alpha==255,'The scythe is opaque')
-assert(scythe.visual.scale==build.stats.extraWeapons.shadowscythe.size*1.6 and scythe.visual.color==nil,'The scythe is enlarged and untinted')
+local dark,alchemy=SurvivorConfig.elements['어둠'].tint,SurvivorConfig.elements['연금술'].tint
+assert(scythe.visual.scale==build.stats.extraWeapons.shadowscythe.size*1.6,'The scythe is enlarged')
+assert(scythe.visual.color[1]==dark[1] and scythe.visual.color[3]==dark[3],'Dark weapons are tinted purple instead of the glaive tint')
 SurvivorCombat.Cleanup()
 build=Cast('plaguejar');local jar=Find('hsThrow')
-assert(jar.visual.model==[[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]] and jar.visual.scale==1.8,'The plague jar flies as an enlarged venom orb')
+assert(jar.visual.model==[[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]] and jar.visual.scale==SurvivorConfig.weapons.plaguejar.throwScale,'The plague jar flies as an enlarged venom orb')
+assert(jar.visual.color[1]==alchemy[1] and jar.visual.color[2]==alchemy[2],'Alchemy throws are tinted orange')
+local steps=0;repeat steps=steps+1;now=now+.02;jar.selfInteractions(jar)until jar.cleaned or steps>200
+local residue=Find('hsExtraZone');assert(residue and residue.visual.model==SurvivorConfig.jarExplosionModel,'The jar leaves a visible residue')
+SurvivorCombat.Cleanup()
+Cast('boilingflask');assert(Find('hsOrb').visual.scale==build.stats.extraWeapons.boilingflask.size*SurvivorConfig.weapons.boilingflask.modelScale,'The flask is enlarged')
+SurvivorCombat.Cleanup()
+Cast('plaguepool');assert(Find('hsThrow').visual.scale==SurvivorConfig.weapons.plaguepool.throwScale,'The pool bottle is enlarged')
 SurvivorCombat.Cleanup()
 Cast('acidvials');local vial=Find('hsThrow')
 assert(vial.visual.model==[[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]],'Acid vials fly as bottles')
 SurvivorCombat.Cleanup()
 assert(SurvivorAugments.Get('acidvials').icon:find('BTNHealingSalve',1,true) and SurvivorAugments.Get('shadowscythe').icon:find('BTNShadowStrike',1,true))
+Cast('plaguedart');assert(Find('hsFrostShard').visual.color==nil,'Poison keeps its natural green');SurvivorCombat.Cleanup()
+assert(SurvivorAugments.ElementTag('연금술')=='|cffffa040[연금술]|r' and SurvivorAugments.ElementTag('얼음',true)=='|cff6fa8ff[냉기]|r')
+local hero2,build2=NewCombat('plaguejar');assert(SurvivorAugments.OwnedTooltip('plaguejar',build2):find('|cffffa040[연금술]|r',1,true)==1,'Weapon tooltips open with their school tag')
+SurvivorCombat.Cleanup()
+`);
+
+suite('combat effects keep one model per role and boss blasts show one sized ring', mocks + String.raw`
+function AddLightningEx()return {}end
+function BlzSetSpecialEffectScale(e,v)e.scale=v end
+`, [config,metrics,augments,combat], String.raw`
+local c,w=SurvivorConfig,SurvivorConfig.weapons
+local roles={enemy=c.enemyProjectileModel,meteor=c.meteorModel,bossImpact=c.bossImpactModel,fireBurst=c.fireBurstModel,
+    ember=c.emberBurstModel,blade=c.bladeModel,bladeProc=c.bladeProcModel,slashHit=c.slashModel,corrosionHit=w.corrosion.hitModel,
+    reaction=c.reactionModel,residue=c.residueModel,pool=w.plaguepool.model,soulBurst=c.soulBurstModel,
+    flask=w.boilingflask.model,poolThrow=w.plaguepool.throwModel,vialThrow=w.acidvials.throwModel,
+    catalyst=w.catalyst.model,vialImpact=w.acidvials.model}
+local seen={}
+for role,model in pairs(roles)do
+    local key=assert(model,role):lower();assert(not seen[key],role..' shares a model with '..tostring(seen[key]));seen[key]=role
+end
+local hero,build,units=NewCombat('firebolt')
+Local(SurvivorCombat.WarnLava,'WarnBossBlast')(0,0,240,1.25,true)
+local warning;for _,a in ipairs(actors)do if a.identifier=='hsBossWarning' then warning=a end end
+assert(#warning.markers==1 and warning.markers[1].model==c.warningRingModel,'A boss blast shows one ring')
+assert(warning.markers[1].scale==240/c.warningRingRadius,'The ring matches the blast radius')
+SurvivorCombat.Cleanup()
+`);
+
+suite('elite dashes show one direction arrow while boss dashes keep their lane', mocks + String.raw`
+function AddLightningEx()return {}end
+function BlzSetSpecialEffectScale(e,v)e.scale=v end
+function BlzSetSpecialEffectYaw(e,v)e.yaw=v end
+function IsTerrainPathable()return false end
+function IsUnitPaused(u)return u.paused==true end
+function PauseUnit(u,v)u.paused=v end
+function SetUnitFacing()end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local elite=EnemyAt(units,-300,0,false);units[elite].elite=true;units[elite].damageScale=1
+Local(SurvivorCombat.UpdateEnemies,'StartSpecial')('dash',units[elite],elite)
+local special;for _,a in ipairs(actors)do if a.identifier=='hsBossSpecial' then special=a end end
+local c=SurvivorConfig;local expected=math.max(1,math.floor((special.distance-c.dashArrowOffset)/c.dashArrowSpacing)+1)
+assert(#special.markers==expected and expected>1,'Elite dash arrows repeat along the dash')
+for i,arrow in ipairs(special.markers)do
+    assert(arrow.model==c.dashArrowModel and math.abs(arrow.yaw)<1e-9 and arrow.scale==c.dashArrowScale)
+    assert(math.abs(arrow.x-(-300+c.dashArrowOffset+(i-1)*c.dashArrowSpacing))<1e-9 and arrow.x<=-300+special.distance+1e-9,'Arrows are evenly spaced up to the dash end')
+end
+SurvivorCombat.Cleanup()
 `);
 
 suite('putress evolutions apply their engine, status and mode changes', mocks, [config,augments], String.raw`
@@ -5377,6 +5434,7 @@ for _,id in ipairs(SurvivorConfig.heroes.putress.startingWeapons)do
     local nextHero=Local(HeroSurvivor.BeginRun,'hero')
     assert(RunSession.GetState()=='STAGE_CLEAR'and nextHero and GetUnitTypeId(nextHero)==SurvivorConfig.heroes.putress.unitId,
         'Selecting Putress creates the Putress hero unit')
+    assert(nextHero.properName=='퓨트리스','The Putress hero is named Putress, not Anya')
     SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
     StartCountdown()
     assert(RunSession.IsRunning()and selectedUnit==nextHero and lastFirstCast==id,'Putress starts with '..id)
@@ -7034,7 +7092,11 @@ console.log('PASS MPQ replace/base sync never accumulate unused archive bytes an
         const row=installed.tables[1].find(row=>row.newId===putressHero.id),anya=installed.tables[0].find(row=>row.oldId==='Uany');
         assert.equal(row.oldId,'Uany');
         if(skin)assert.deepEqual(row.fields.map(field=>[field.id,field.value]),[['umdl',putressHero.model],['unam','퓨트리스'],['uico',putressHero.icon],['upro','퓨트리스'],['usnd','']]);
-        else assert.deepEqual(row.fields.map(field=>[field.id,field.value]),anya.fields.map(field=>[field.id,field.value]),'Putress copies every Anya gameplay override');
+        else {
+            assert.deepEqual(row.fields.filter(field=>field.id!=='upra').map(field=>[field.id,field.value]),
+                anya.fields.filter(field=>field.id!=='upra').map(field=>[field.id,field.value]),'Putress copies every Anya gameplay override');
+            assert.deepEqual(row.fields.filter(field=>field.id==='upra').map(field=>[field.type,field.value]),[[3,'INT']],'Putress uses intelligence');
+        }
     }
     const abilities=parseObjectData(fs.readFileSync(path.join(root,'assets/war3mapSkin.w3a')),'ability');
     for(const object of putressWeaponObjects)assert.equal(abilities.tables[1].find(row=>row.newId===object.id).fields.find(field=>field.id==='aart').value,object.icon);

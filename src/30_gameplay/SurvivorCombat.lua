@@ -204,7 +204,11 @@ do
             object.alpha = FriendlyEffectAlpha(object, RunSession.GetElapsed() < warningUntil)
             BlzSetSpecialEffectAlpha(object.visual, object.alpha)
         end
-        if object.readableBlade then
+        local weapon = object.weapon and SurvivorConfig.weapons[object.weapon]
+        local tint = weapon and (weapon.tint or SurvivorConfig.elements[weapon.element].tint)
+        if tint then
+            BlzSetSpecialEffectColor(object.visual, tint[1], tint[2], tint[3])
+        elseif object.readableBlade then
             BlzSetSpecialEffectColor(object.visual, 235, 245, 255)
         elseif object.identifier == "hsReturnBlade" then
             BlzSetSpecialEffectColor(object.visual, 190, 165, 225)
@@ -284,7 +288,7 @@ do
             Hit(target, damage, missile.weapon, nil, nil, missile.statusScale)
             if evolution == "evolution1" and RunSession.IsRunning() then
                 CreateObject({identifier = "hsFireBurst", x = x, y = y, z = z, life = 0.4,
-                    isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.bossImpactModel, 0.55)
+                    isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.fireBurstModel, 0.7)
                 local victims = {}
                 local candidates = Candidates(x, y, x, y, 140, "firebolt.area")
                 for _, u in ipairs(candidates) do
@@ -451,7 +455,7 @@ do
             objects[bolt] = true
             ALICE_Create(bolt)
             -- Unattached: an attached effect inherits each unit's model and SetUnitScale size.
-            CreateObject({identifier = "hsChainHit", x = tx, y = ty, z = tz,
+            CreateObject({identifier = "hsChainHit", weapon = stats.weaponId, x = tx, y = ty, z = tz,
                 life = SurvivorConfig.chainHitDuration,
                 isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime},
                 stats.model or SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
@@ -612,7 +616,7 @@ do
         local x, y, z, radius, damage = strike.x, strike.y, strike.z, strike.radius, strike.damage
         ALICE_Kill(strike)
         if not Alive(hero) then return dt end
-        CreateObject({identifier = "hsMonsoonEffect", x = x, y = y, z = z, life = 0.9,
+        CreateObject({identifier = "hsMonsoonEffect", weapon = strike.weapon, x = x, y = y, z = z, life = 0.9,
             isAnonymous = true, selfInteractions = ZoneLifetime}, strike.model or SurvivorConfig.monsoonModel, radius / 150)
         -- A column of lightning hits ground and flying enemies at the locked point.
         local started, checked = SurvivorMetrics.Begin(), 0
@@ -648,7 +652,7 @@ do
             if stats.thrown then
                 -- A vial lands exactly when its strike resolves; the strike owns the damage.
                 local hx, hy, hz = ImpactPoint(hero)
-                life = Throw(hx, hy, hz, tx, ty, tz, stats.throwSpeed, (i - 1) * stats.monsoonSpacing, nil, stats.throwScale, stats.throwModel)
+                life = Throw(hx, hy, hz, tx, ty, tz, stats.throwSpeed, (i - 1) * stats.monsoonSpacing, nil, stats.throwScale, stats.throwModel, stats.weaponId)
             end
             local strike = {identifier = "hsMonsoon", weapon = stats.weaponId or "monsoon", model = stats.model,
                 statusScale = stats.statusScale, x = tx, y = ty, z = tz,
@@ -683,7 +687,7 @@ do
                     area.hitTimes[u] = true
                     local tx, ty, tz = ImpactPoint(u)
                     CreateObject({identifier = "hsSlashHit", x = tx, y = ty, z = tz, life = 0.4,
-                        isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.slashModel, area.scale)
+                        isAnonymous = true, selfInteractions = ZoneLifetime}, area.hitModel or SurvivorConfig.slashModel, area.scale)
                     Hit(u, area.damage, area.weapon, nil, nil, area.statusScale)
                 end
             end
@@ -706,13 +710,14 @@ do
         local facing, arc = GetUnitFacing(hero) * bj_DEGTORAD, stats.slashAngle * bj_DEGTORAD
         local radius = stats.slashRange
         local sweepRadius, startAngle = radius * 0.7, facing - arc / 2
-        CreateObject({identifier = stats.weaponId and "hsBreath" or "hsSlash", originX = x, originY = y,
+        CreateObject({identifier = stats.weaponId and "hsBreath" or "hsSlash", weapon = stats.weaponId, originX = x, originY = y,
             x = x + math.cos(startAngle) * sweepRadius, y = y + math.sin(startAngle) * sweepRadius,
             z = Height(x, y) + 65, facing = facing, arc = arc, radius = sweepRadius,
             life = math.max(stats.slashSweepTime, stats.slashDuration), sweepTime = stats.slashSweepTime, sweepElapsed = 0,
             isAnonymous = true, selfInteractions = SweepSlash}, stats.model or SurvivorConfig.bladeModel, 1.3 * stats.slashScale)
         -- Snapshot origin/facing/damage for the whole cast. A lingering cone hits each enemy once.
-        local area = {identifier = "hsSlashArea", weapon = stats.weaponId or "frontslash", statusScale = stats.statusScale, x = x, y = y, z = Height(x, y),
+        local area = {identifier = "hsSlashArea", weapon = stats.weaponId or "frontslash", statusScale = stats.statusScale,
+            hitModel = stats.hitModel, x = x, y = y, z = Height(x, y),
             facing = facing, arc = arc, radius = radius, damage = stats.slashDamage, scale = stats.slashScale,
             life = stats.slashDuration, hitTimes = {}, isAnonymous = true, isStationary = true,
             selfInteractions = LingerSlash, destroy = DestroyObject}
@@ -746,8 +751,8 @@ do
         PauseUnit(target, true)
         return true
     end
-    local function ProcVisual(x, y, z, model, scale)
-        CreateObject({identifier = "hsSetEffect", x = x, y = y, z = z, life = 0.7,
+    local function ProcVisual(x, y, z, model, scale, weapon)
+        CreateObject({identifier = "hsSetEffect", weapon = weapon, x = x, y = y, z = z, life = 0.7,
             isAnonymous = true, selfInteractions = ZoneLifetime}, model, scale)
     end
     -- Putress statuses. Reaction consumes poison before this hit adds new stacks.
@@ -766,7 +771,7 @@ do
             local consumed = status.reactionAll and record.poison or math.ceil(record.poison / 2)
             record.poison, record.reactionReady = record.poison - consumed, now + config.reactionCooldown
             local x, y, z = ImpactPoint(target)
-            ProcVisual(x, y, z, [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]], 0.7)
+            ProcVisual(x, y, z, SurvivorConfig.reactionModel, SurvivorConfig.reactionScale, weapon)
             Hit(target, consumed * config.reactionDamage * status.reaction * stats.poisonDamage / config.poisonDamage
                 * (stats.sets.apprentice and 1.6 or 1), weapon, true)
             if not Enemy(target) then
@@ -808,20 +813,20 @@ do
         return dt
     end
     -- Returns delay + flight time so callers can resolve damage on landing.
-    Throw = function(x0, y0, z0, x1, y1, z1, speed, delay, onLand, scale, model)
+    Throw = function(x0, y0, z0, x1, y1, z1, speed, delay, onLand, scale, model, weapon)
         local config = SurvivorConfig.throw
         local distance = math.sqrt((x1 - x0) ^ 2 + (y1 - y0) ^ 2)
         local height = math.min(config.maxHeight, math.max(config.minHeight, distance * config.arc))
         local flight = (config.minFlight + (config.maxFlight - config.minFlight) * math.min(1, distance / config.flightRange))
             / math.max(0.1, speed or 1)
-        CreateObject({identifier = "hsThrow", x = x0, y = y0, z = z0, x0 = x0, y0 = y0, z0 = z0, x1 = x1, y1 = y1, z1 = z1,
+        CreateObject({identifier = "hsThrow", weapon = weapon, x = x0, y = y0, z = z0, x0 = x0, y0 = y0, z0 = z0, x1 = x1, y1 = y1, z1 = z1,
             cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2 + height, age = -(delay or 0), flight = flight,
             onLand = onLand, isAnonymous = true, selfInteractions = MoveThrow}, model or config.model, scale or 1)
         return (delay or 0) + flight
     end
     ExpireEmber = function(zone)
         if not stats or not stats.sets.ember or zone.weapon ~= "flamefield" or not Alive(hero) then return end
-        ProcVisual(zone.x, zone.y, zone.z, SurvivorConfig.bossImpactModel, zone.radius / 240)
+        ProcVisual(zone.x, zone.y, zone.z, SurvivorConfig.emberBurstModel, zone.radius / 240)
         local candidates = AreaCandidates(zone.x, zone.y, zone.radius, "ember")
         for _, u in ipairs(candidates) do
             if GroundEnemy(u) then
@@ -863,7 +868,7 @@ do
         elseif stats.sets.blade and now >= bladeReady and (weapon == "orbitblade" or weapon == "frontslash" or weapon == "returnblade") then
             bladeReady = now + 8
             local x, y = GetUnitX(target), GetUnitY(target)
-            ProcVisual(x, y, Height(x, y) + 65, SurvivorConfig.bladeModel, 1.5)
+            ProcVisual(x, y, Height(x, y) + 65, SurvivorConfig.bladeProcModel, 1.5)
             local candidates = AreaCandidates(x, y, 220, "bladeSet")
             for _, u in ipairs(candidates) do
                 if GroundEnemy(u) then
@@ -927,7 +932,7 @@ do
     end
     Residue = function(weapon, x, y)
         NewZone(weapon, x, y, {radius = 150, duration = 2, pulse = 0.5, slow = 0,
-            model = [[Abilities\Spells\Undead\DeathandDecay\DeathandDecayTarget.mdl]]}, 0, {poison = 1, curse = 0, reaction = 0})
+            model = SurvivorConfig.residueModel}, 0, {poison = 1, curse = 0, reaction = 0})
     end
     -- Putress 4-piece set effects that trigger when a statused enemy dies.
     StatusDeath = function(dead, record)
@@ -954,7 +959,7 @@ do
         end
         if stats.sets.gravewarden and CurseStacks(record) >= config.curseMax and now >= soulReady then
             soulReady = now + 1
-            ProcVisual(x, y, z, [[Abilities\Spells\Undead\DeathCoil\DeathCoilSpecialArt.mdl]], 1.2)
+            ProcVisual(x, y, z, SurvivorConfig.soulBurstModel, 1.2, record.lastWeapon)
             for _, target in ipairs(Nearby(200)) do
                 Hit(target.unit, (record.lastHit or 0) * 1.5, record.lastWeapon, true)
                 if Enemy(target.unit) then ApplyStatus(target.unit, record.lastWeapon, {curse = 1}, 1) end
@@ -1060,7 +1065,7 @@ do
             ReleaseCandidates(candidates)
             if not target then return end
             x, y, z = ImpactPoint(target)
-            CreateObject({identifier = "hsNova", x = x, y = y, z = Height(x, y) + GetUnitFlyHeight(target), life = 0.6,
+            CreateObject({identifier = "hsNova", weapon = id, x = x, y = y, z = Height(x, y) + GetUnitFlyHeight(target), life = 0.6,
                 isAnonymous = true, selfInteractions = ZoneLifetime}, w.model or [[Abilities\Spells\Undead\FrostNova\FrostNovaTarget.mdl]], w.radius / 150)
             AreaHit({x = x, y = y, z = z, radius = w.radius, slow = w.slow, statusScale = w.statusScale,
                 slowDuration = w.duration + (w.slowDurationBonus or 0), weapon = id}, w.damage)
@@ -1075,16 +1080,18 @@ do
             local status = stats.status and stats.status[id]
             local function Land(lx, ly, lz, scale, split)
                 if engine == "field" then NewZone(id, lx, ly, w, w.damage * scale); return end
-                NewZone(id, lx, ly, w, w.damage * 0.2 * scale, {poison = status and status.residuePoison or 0, curse = 0, reaction = 0})
+                local residue = {radius = w.radius, duration = w.duration, pulse = w.pulse, slow = 0, statusScale = w.statusScale,
+                    model = SurvivorConfig.jarExplosionModel}
+                NewZone(id, lx, ly, residue, w.damage * 0.2 * scale, {poison = status and status.residuePoison or 0, curse = 0, reaction = 0})
                 AreaHit({x = lx, y = ly, z = lz, radius = w.radius * (split and 1 or 0.6), slow = 0, weapon = id, statusScale = w.statusScale}, w.damage * scale)
                 for k = 1, split and status and status.splitJars or 0 do
                     local angle = GetUnitFacing(hero) * bj_DEGTORAD + (k - 0.5) * 2 * math.pi / status.splitJars
                     local sx, sy = lx + math.cos(angle) * 150, ly + math.sin(angle) * 150
                     Throw(lx, ly, lz, sx, sy, Height(sx, sy), w.speed, 0, function() Land(sx, sy, Height(sx, sy), 0.4, false) end,
-                        0.6 * (w.throwScale or 1), w.throwModel)
+                        0.6 * (w.throwScale or 1), w.throwModel, id)
                 end
             end
-            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() Land(tx, ty, tz, 1, true) end, w.throwScale, w.throwModel)
+            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() Land(tx, ty, tz, 1, true) end, w.throwScale, w.throwModel, id)
             return
         end
         if engine == "field" then NewZone(id, tx, ty, w, w.damage); return end
@@ -1371,16 +1378,11 @@ do
             life = delay, markers = {}, isStationary = true, isAnonymous = true,
             selfInteractions = ResolveBossBlast, destroy = DestroyObject}
         objects[blast] = true
-        for i = 1, 20 do
-            local angle = 2 * math.pi * i / 20
-            local mx, my = x + math.cos(angle) * blast.radius, y + math.sin(angle) * blast.radius
-            local marker = AddSpecialEffect(SurvivorConfig.warningModel, mx, my)
-            blast.markers[#blast.markers + 1] = marker
-            BlzSetSpecialEffectZ(marker, Height(mx, my) + 95)
-            BlzSetSpecialEffectScale(marker, 0.5)
-            local color = SurvivorStage.Get(stage).warning
-            BlzSetSpecialEffectColor(marker, color[1], color[2], color[3])
-        end
+        -- One red ground ring sized to the blast radius marks the whole danger area.
+        local marker = AddSpecialEffect(SurvivorConfig.warningRingModel, x, y)
+        blast.markers[1] = marker
+        BlzSetSpecialEffectZ(marker, blast.z + 5)
+        BlzSetSpecialEffectScale(marker, blast.radius / SurvivorConfig.warningRingRadius)
         ALICE_Create(blast)
     end
     function SurvivorCombat.WarnLava()
@@ -1400,12 +1402,11 @@ do
         end
     end
     local function SpecialMarker(self, x, y, green)
-        local effect = AddSpecialEffect(SurvivorConfig.warningModel, x, y)
+        -- Red spell markers outline danger; green ones mark the safe gaps.
+        local effect = AddSpecialEffect(green and SurvivorConfig.specialSafeMarkerModel or SurvivorConfig.specialMarkerModel, x, y)
         self.markers[#self.markers + 1] = effect
         BlzSetSpecialEffectScale(effect, green and 0.55 or 0.38)
-        BlzSetSpecialEffectZ(effect, Height(x, y) + 55)
-        local color = SurvivorStage.Get(stage).warning
-        BlzSetSpecialEffectColor(effect, green and 70 or color[1], green and 255 or color[2], green and 90 or color[3])
+        BlzSetSpecialEffectZ(effect, Height(x, y) + 5)
         return effect
     end
     local function ClearMarkers(self)
@@ -1518,9 +1519,23 @@ do
             self.bx = math.max(bounds.minX + 32, math.min(bounds.maxX - 32, x + math.cos(angle) * self.distance))
             self.by = math.max(bounds.minY + 32, math.min(bounds.maxY - 32, y + math.sin(angle) * self.distance))
             self.distance = math.max(1, math.sqrt((self.bx - x)^2 + (self.by - y)^2))
-            for i = 0, 8 do
-                local px, py = x + (self.bx - x) * i / 8, y + (self.by - y) * i / 8
-                for side = -1, 1, 2 do SpecialMarker(self, px - math.sin(angle) * self.width * side, py + math.cos(angle) * self.width * side) end
+            if record.elite then
+                -- Arrows along the path show the direction and how far the dash reaches.
+                local c, distance = SurvivorConfig, SurvivorConfig.dashArrowOffset
+                repeat
+                    local px, py = x + math.cos(angle) * distance, y + math.sin(angle) * distance
+                    local arrow = AddSpecialEffect(c.dashArrowModel, px, py)
+                    self.markers[#self.markers + 1] = arrow
+                    BlzSetSpecialEffectScale(arrow, c.dashArrowScale)
+                    BlzSetSpecialEffectYaw(arrow, angle)
+                    BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
+                    distance = distance + c.dashArrowSpacing
+                until distance > self.distance
+            else
+                for i = 0, 8 do
+                    local px, py = x + (self.bx - x) * i / 8, y + (self.by - y) * i / 8
+                    for side = -1, 1, 2 do SpecialMarker(self, px - math.sin(angle) * self.width * side, py + math.cos(angle) * self.width * side) end
+                end
             end
         elseif kind == "wave" then
             self.gap, self.gapWidth, self.angles = angle + math.pi / 2, math.pi / 2, {}

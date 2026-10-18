@@ -420,7 +420,7 @@ do
             end)
             if not ok then RunSession.Fail(message) end
         end, function() RunSession.Finish("defeated") end, selectedDifficulty)
-        BlzSetHeroProperName(hero, "안야")
+        BlzSetHeroProperName(hero, SurvivorConfig.heroes[selectedHero].name)
         SuspendHeroXP(hero, true)
         observedLevel = GetHeroLevel(hero)
         QueueLevelRewards()

@@ -49,11 +49,28 @@ SurvivorConfig = {
         speed = 190, range = 550, interval = 2.4, projectileSpeed = 420},
     flyingEnemy = {life = 75, damage = 10,
         speed = 245, range = 400, interval = 2.0, projectileSpeed = 380},
-    enemyProjectileModel = "Abilities\\Weapons\\FireBallMissile\\FireBallMissile.mdl",
+    -- 3.0 DE-only hidden models keep enemy shots distinct from the meteor weapon.
+    enemyProjectileModel = [[abilities\spells\undead\cultistflame\cultistflamemissile.mdl]],
     bossLife = 2400, bossDamage = 25,
     bossMoveSpeed = 210, bossBlastInterval = 5, bossBlastDelay = 1.25,
     bossBlastRadius = 240, bossBlastDamage = 75,
-    bossImpactModel = "Abilities\\Spells\\Orc\\WarStomp\\WarStompCaster.mdl",
+    bossImpactModel = [[abilities\spells\undead\darkhorizon\darkhorizoncasterred.mdl]],
+    -- Boss/hazard blasts show one ground ring; its scale is radius / warningRingRadius.
+    warningRingModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]], warningRingRadius = 100,
+    specialMarkerModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]],
+    specialSafeMarkerModel = [[abilities\spells\other\spellmarker\spellmarkergreen.mdl]],
+    -- Elite dashes show only their direction: one arrow placed ahead of the elite.
+    -- Arrows repeat every dashArrowSpacing from the first offset to the dash end.
+    dashArrowModel = [[abilities\spells\other\spellmarker\spellarrowred.mdl]], dashArrowScale = 1.2, dashArrowOffset = 150,
+    dashArrowSpacing = 150,
+    -- One effect per role: weapon procs and set effects never share a model.
+    fireBurstModel = [[abilities\spells\other\renault\firenova.mdl]],
+    emberBurstModel = [[Abilities\Spells\Orc\WarStomp\WarStompCaster.mdl]],
+    bladeProcModel = [[abilities\spells\orc\criticalstrike\criticalstriketarget.mdl]],
+    reactionModel = [[doodads\underground\props\poisongas\poisonexplosion.mdl]], reactionScale = 0.08,
+    residueModel = [[doodads\underground\props\poisongas\poisonrise.mdl]],
+    jarExplosionModel = [[Units\Undead\Abomination\AbominationExplosion.mdl]],
+    soulBurstModel = [[abilities\spells\undead\witheringfire\witheringfireimpact.mdl]],
     equipmentDropChance = 0.04, equipmentPityKills = 24,
     equipmentPickupRadius = 140, equipmentGroundLimit = 24, equipmentGroundLifetime = 60,
     weaponSlots = 6, trinketSlots = 6, growthMaxLevel = 7,
@@ -93,14 +110,17 @@ SurvivorConfig = {
         -- thrown = delivered by a Bezier arc that lands on the locked target point; throwModel/throwScale
         -- pick the flying model (default throw.model), model stays the landing/residue effect.
         -- modelScale enlarges a profile weapon's own model; opaque keeps it fully visible.
+        -- tint overrides the school tint (a grey fog becomes a green poison pool).
         plaguedart = {hero = "putress", engine = "pierce", element = "독", projectile = true,
             poison = {2, 2, 3, 3, 3, 4, 4}, model = [[Abilities\Weapons\ChimaeraAcidMissile\ChimaeraAcidMissile.mdl]]},
         plaguetrail = {hero = "putress", engine = "zone", element = "독",
             poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Units\Undead\PlagueCloud\PlagueCloud.mdl]]},
         corrosion = {hero = "putress", engine = "cone", element = "독",
-            poison = {3, 3, 4, 4, 4, 5, 5}, model = [[Abilities\Weapons\GreenDragonMissile\GreenDragonMissile.mdl]]},
+            poison = {3, 3, 4, 4, 4, 5, 5}, model = [[Abilities\Weapons\GreenDragonMissile\GreenDragonMissile.mdl]],
+            hitModel = [[abilities\spells\undead\minddeath\mindcontroldeath.mdl]]},
         plaguepool = {hero = "putress", engine = "field", element = "독", projectile = true, thrown = true,
-            poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Undead\DeathandDecay\DeathandDecayTarget.mdl]]},
+            poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\CloudOfFog\CloudOfFog.mdl]], tint = {120, 255, 90},
+            throwModel = [[abilities\weapons\blightweavermissile\blightweavermissile.mdl]], throwScale = 2.2},
         deathcoil = {hero = "putress", engine = "missile", element = "어둠", projectile = true,
             curse = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Undead\DeathCoil\DeathCoilMissile.mdl]]},
         soulchain = {hero = "putress", engine = "chain", element = "어둠",
@@ -111,15 +131,22 @@ SurvivorConfig = {
             curse = {1, 1, 1, 1, 1, 1, 1}, returnBonus = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5},
             model = [[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]], modelScale = 1.6, opaque = true},
         plaguejar = {hero = "putress", engine = "meteor", element = "연금술", projectile = true, thrown = true,
-            reaction = {1, 1, 1, 1, 1, 1, 1}, residuePoison = 1, model = [[Abilities\Weapons\MeatwagonMissile\MeatwagonMissile.mdl]],
-            throwModel = [[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]], throwScale = 1.8},
+            reaction = {1, 1, 1, 1, 1, 1, 1}, residuePoison = 1,
+            throwModel = [[Abilities\Spells\Items\OrbVenom\OrbVenomMissile.mdl]], throwScale = 2.6},
         catalyst = {hero = "putress", engine = "nova", element = "연금술",
-            reaction = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]]},
+            reaction = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}, model = [[abilities\spells\undead\shadownova\shadownova.mdl]]},
         boilingflask = {hero = "putress", engine = "orb", element = "연금술", projectile = true,
-            reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
+            reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Weapons\RedDragonBreath\RedDragonMissile.mdl]], modelScale = 1.4},
         acidvials = {hero = "putress", engine = "strike", element = "연금술", projectile = true, thrown = true,
             reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]],
             throwModel = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
+    },
+    -- One colour per weapon school: UI tags use the hex colour; tint multiplies
+    -- that school's effect models so poison (green), dark and alchemy stay apart.
+    elements = {
+        ["화염"] = {color = "ff8040"}, ["번개"] = {color = "80d0ff"}, ["칼날"] = {color = "d8d8e0"},
+        ["얼음"] = {color = "6fa8ff", label = "냉기"}, ["독"] = {color = "80ff60"},
+        ["어둠"] = {color = "b080ff", tint = {190, 130, 255}}, ["연금술"] = {color = "ffa040", tint = {255, 170, 70}},
     },
     -- Status effects applied by Putress weapons (draft values).
     status = {poisonDamage = 6, poisonTick = 0.5, poisonMax = 12, poisonDuration = 4,
