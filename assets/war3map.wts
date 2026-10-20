@@ -559,13 +559,13 @@ STRING 94
 STRING 95
 // 아이템: Hs11 (|cff609fff낙성을 부르는 장갑|r), Ubertip (설명 - 확장)
 {
-|cff609fff희귀 장비|r|n|cffffcc00장착 부위: 장갑|r|n잿불 낙성과 잔불 피해 +25%|n|cffaaaaaa검게 그을린 손끝에서 붉은 빛이 떨어진다.|r
+|cff609fff희귀 장비|r|n|cffffcc00장착 부위: 장갑|r|n잿불 낙성 충돌 피해 +25%|n|cffaaaaaa검게 그을린 손끝에서 붉은 빛이 떨어진다.|r
 }
 
 STRING 96
 // 아이템: Hs11 (|cff609fff낙성을 부르는 장갑|r), Description (설명)
 {
-|cff609fff희귀 장비|r|n|cffffcc00장착 부위: 장갑|r|n잿불 낙성과 잔불 피해 +25%|n|cffaaaaaa검게 그을린 손끝에서 붉은 빛이 떨어진다.|r
+|cff609fff희귀 장비|r|n|cffffcc00장착 부위: 장갑|r|n잿불 낙성 충돌 피해 +25%|n|cffaaaaaa검게 그을린 손끝에서 붉은 빛이 떨어진다.|r
 }
 
 STRING 97
@@ -655,13 +655,13 @@ STRING 110
 STRING 111
 // 아이템: Hs14 (|cffffffff빛바랜 목걸이|r), Ubertip (설명 - 확장)
 {
-|cffffffff일반 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +50|n|cffaaaaaa주인의 이름은 지워졌지만 무게는 남아 있다.|r
+|cffffffff일반 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +50|n|cffaaaaaa주인의 이름은 지워졌지만 무게는 남아 있다.|r
 }
 
 STRING 112
 // 아이템: Hs14 (|cffffffff빛바랜 목걸이|r), Description (설명)
 {
-|cffffffff일반 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +50|n|cffaaaaaa주인의 이름은 지워졌지만 무게는 남아 있다.|r
+|cffffffff일반 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +50|n|cffaaaaaa주인의 이름은 지워졌지만 무게는 남아 있다.|r
 }
 
 STRING 113
@@ -895,13 +895,13 @@ STRING 150
 STRING 151
 // 아이템: He09 (|cffc080ff잿불지기의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 수비대의 유품> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 수비대의 두건|r|n|cff888888[미장착] 스트라솔름 수비대의 외투|r|n|cff888888[미장착] 스트라솔름 수비대의 장갑|r|n|cff888888[미장착] 스트라솔름 수비대의 장화|r|n|cff888888[미장착] 스트라솔름 수비대의 서약|r|n|cff888888[미장착] 스트라솔름 수비대의 결의|r|n|cff888888[미장착] 스트라솔름 수비대의 발톱|r|n|cff888888[미장착] 스트라솔름 수비대의 봉인서|r|n|cff888888[미장착] 스트라솔름 수비대의 부적|r|n|cff888888(2) 화염 계열 피해 +15%p · 비활성|r|n|cff888888(4) 잿불 발자취 종료 시 장판 피해 200%로 폭발 (지상) · 비활성|r|n|cffaaaaaa정화의 불길 속에서도 피난처를 지키던 수비대의 유품.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 수비대의 유품> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 수비대의 두건|r|n|cff888888[미장착] 스트라솔름 수비대의 외투|r|n|cff888888[미장착] 스트라솔름 수비대의 장갑|r|n|cff888888[미장착] 스트라솔름 수비대의 장화|r|n|cff888888[미장착] 스트라솔름 수비대의 서약|r|n|cff888888[미장착] 스트라솔름 수비대의 결의|r|n|cff888888[미장착] 스트라솔름 수비대의 발톱|r|n|cff888888[미장착] 스트라솔름 수비대의 봉인서|r|n|cff888888[미장착] 스트라솔름 수비대의 부적|r|n|cff888888(2) 화염 계열 피해 +15%p · 비활성|r|n|cff888888(4) 잿불 발자취 종료 시 장판 피해 200%로 폭발 (지상) · 비활성|r|n|cffaaaaaa정화의 불길 속에서도 피난처를 지키던 수비대의 유품.|r
 }
 
 STRING 152
 // 아이템: He09 (|cffc080ff잿불지기의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 수비대의 유품> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 수비대의 두건|r|n|cff888888[미장착] 스트라솔름 수비대의 외투|r|n|cff888888[미장착] 스트라솔름 수비대의 장갑|r|n|cff888888[미장착] 스트라솔름 수비대의 장화|r|n|cff888888[미장착] 스트라솔름 수비대의 서약|r|n|cff888888[미장착] 스트라솔름 수비대의 결의|r|n|cff888888[미장착] 스트라솔름 수비대의 발톱|r|n|cff888888[미장착] 스트라솔름 수비대의 봉인서|r|n|cff888888[미장착] 스트라솔름 수비대의 부적|r|n|cff888888(2) 화염 계열 피해 +15%p · 비활성|r|n|cff888888(4) 잿불 발자취 종료 시 장판 피해 200%로 폭발 (지상) · 비활성|r|n|cffaaaaaa정화의 불길 속에서도 피난처를 지키던 수비대의 유품.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 수비대의 유품> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 수비대의 두건|r|n|cff888888[미장착] 스트라솔름 수비대의 외투|r|n|cff888888[미장착] 스트라솔름 수비대의 장갑|r|n|cff888888[미장착] 스트라솔름 수비대의 장화|r|n|cff888888[미장착] 스트라솔름 수비대의 서약|r|n|cff888888[미장착] 스트라솔름 수비대의 결의|r|n|cff888888[미장착] 스트라솔름 수비대의 발톱|r|n|cff888888[미장착] 스트라솔름 수비대의 봉인서|r|n|cff888888[미장착] 스트라솔름 수비대의 부적|r|n|cff888888(2) 화염 계열 피해 +15%p · 비활성|r|n|cff888888(4) 잿불 발자취 종료 시 장판 피해 200%로 폭발 (지상) · 비활성|r|n|cffaaaaaa정화의 불길 속에서도 피난처를 지키던 수비대의 유품.|r
 }
 
 STRING 153
@@ -1087,13 +1087,13 @@ STRING 182
 STRING 183
 // 아이템: Ht09 (|cffc080ff폭풍 파수꾼의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<성벽 파수꾼의 장구> 0/9 장착|r|n|cff888888[미장착] 성벽 파수꾼의 두건|r|n|cff888888[미장착] 성벽 파수꾼의 외투|r|n|cff888888[미장착] 성벽 파수꾼의 장갑|r|n|cff888888[미장착] 성벽 파수꾼의 장화|r|n|cff888888[미장착] 성벽 파수꾼의 서약|r|n|cff888888[미장착] 성벽 파수꾼의 결의|r|n|cff888888[미장착] 성벽 파수꾼의 발톱|r|n|cff888888[미장착] 성벽 파수꾼의 봉인서|r|n|cff888888[미장착] 성벽 파수꾼의 부적|r|n|cff888888(2) 번개 계열 쿨다운 13.0% 감소 · 비활성|r|n|cff888888(4) 번개 6회 적중마다 추가 낙뢰: 해당 타격 피해 100% (재사용 2초) · 비활성|r|n|cffaaaaaa로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<성벽 파수꾼의 장구> 0/9 장착|r|n|cff888888[미장착] 성벽 파수꾼의 두건|r|n|cff888888[미장착] 성벽 파수꾼의 외투|r|n|cff888888[미장착] 성벽 파수꾼의 장갑|r|n|cff888888[미장착] 성벽 파수꾼의 장화|r|n|cff888888[미장착] 성벽 파수꾼의 서약|r|n|cff888888[미장착] 성벽 파수꾼의 결의|r|n|cff888888[미장착] 성벽 파수꾼의 발톱|r|n|cff888888[미장착] 성벽 파수꾼의 봉인서|r|n|cff888888[미장착] 성벽 파수꾼의 부적|r|n|cff888888(2) 번개 계열 쿨다운 13.0% 감소 · 비활성|r|n|cff888888(4) 번개 6회 적중마다 추가 낙뢰: 해당 타격 피해 100% (재사용 2초) · 비활성|r|n|cffaaaaaa로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.|r
 }
 
 STRING 184
 // 아이템: Ht09 (|cffc080ff폭풍 파수꾼의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<성벽 파수꾼의 장구> 0/9 장착|r|n|cff888888[미장착] 성벽 파수꾼의 두건|r|n|cff888888[미장착] 성벽 파수꾼의 외투|r|n|cff888888[미장착] 성벽 파수꾼의 장갑|r|n|cff888888[미장착] 성벽 파수꾼의 장화|r|n|cff888888[미장착] 성벽 파수꾼의 서약|r|n|cff888888[미장착] 성벽 파수꾼의 결의|r|n|cff888888[미장착] 성벽 파수꾼의 발톱|r|n|cff888888[미장착] 성벽 파수꾼의 봉인서|r|n|cff888888[미장착] 성벽 파수꾼의 부적|r|n|cff888888(2) 번개 계열 쿨다운 13.0% 감소 · 비활성|r|n|cff888888(4) 번개 6회 적중마다 추가 낙뢰: 해당 타격 피해 100% (재사용 2초) · 비활성|r|n|cffaaaaaa로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<성벽 파수꾼의 장구> 0/9 장착|r|n|cff888888[미장착] 성벽 파수꾼의 두건|r|n|cff888888[미장착] 성벽 파수꾼의 외투|r|n|cff888888[미장착] 성벽 파수꾼의 장갑|r|n|cff888888[미장착] 성벽 파수꾼의 장화|r|n|cff888888[미장착] 성벽 파수꾼의 서약|r|n|cff888888[미장착] 성벽 파수꾼의 결의|r|n|cff888888[미장착] 성벽 파수꾼의 발톱|r|n|cff888888[미장착] 성벽 파수꾼의 봉인서|r|n|cff888888[미장착] 성벽 파수꾼의 부적|r|n|cff888888(2) 번개 계열 쿨다운 13.0% 감소 · 비활성|r|n|cff888888(4) 번개 6회 적중마다 추가 낙뢰: 해당 타격 피해 100% (재사용 2초) · 비활성|r|n|cffaaaaaa로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.|r
 }
 
 STRING 185
@@ -1255,13 +1255,13 @@ STRING 210
 STRING 211
 // 아이템: Hi09 (|cffc080ff서리 기록관의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<납골당 기록관의 유물> 0/9 장착|r|n|cff888888[미장착] 납골당 기록관의 두건|r|n|cff888888[미장착] 납골당 기록관의 외투|r|n|cff888888[미장착] 납골당 기록관의 장갑|r|n|cff888888[미장착] 납골당 기록관의 장화|r|n|cff888888[미장착] 납골당 기록관의 서약|r|n|cff888888[미장착] 납골당 기록관의 결의|r|n|cff888888[미장착] 납골당 기록관의 발톱|r|n|cff888888[미장착] 납골당 기록관의 봉인서|r|n|cff888888[미장착] 납골당 기록관의 부적|r|n|cff888888(2) 냉기 계열 둔화 지속 +1초 · 비활성|r|n|cff888888(4) 둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가 · 비활성|r|n|cffaaaaaa스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<납골당 기록관의 유물> 0/9 장착|r|n|cff888888[미장착] 납골당 기록관의 두건|r|n|cff888888[미장착] 납골당 기록관의 외투|r|n|cff888888[미장착] 납골당 기록관의 장갑|r|n|cff888888[미장착] 납골당 기록관의 장화|r|n|cff888888[미장착] 납골당 기록관의 서약|r|n|cff888888[미장착] 납골당 기록관의 결의|r|n|cff888888[미장착] 납골당 기록관의 발톱|r|n|cff888888[미장착] 납골당 기록관의 봉인서|r|n|cff888888[미장착] 납골당 기록관의 부적|r|n|cff888888(2) 냉기 계열 둔화 지속 +1초 · 비활성|r|n|cff888888(4) 둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가 · 비활성|r|n|cffaaaaaa스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.|r
 }
 
 STRING 212
 // 아이템: Hi09 (|cffc080ff서리 기록관의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<납골당 기록관의 유물> 0/9 장착|r|n|cff888888[미장착] 납골당 기록관의 두건|r|n|cff888888[미장착] 납골당 기록관의 외투|r|n|cff888888[미장착] 납골당 기록관의 장갑|r|n|cff888888[미장착] 납골당 기록관의 장화|r|n|cff888888[미장착] 납골당 기록관의 서약|r|n|cff888888[미장착] 납골당 기록관의 결의|r|n|cff888888[미장착] 납골당 기록관의 발톱|r|n|cff888888[미장착] 납골당 기록관의 봉인서|r|n|cff888888[미장착] 납골당 기록관의 부적|r|n|cff888888(2) 냉기 계열 둔화 지속 +1초 · 비활성|r|n|cff888888(4) 둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가 · 비활성|r|n|cffaaaaaa스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<납골당 기록관의 유물> 0/9 장착|r|n|cff888888[미장착] 납골당 기록관의 두건|r|n|cff888888[미장착] 납골당 기록관의 외투|r|n|cff888888[미장착] 납골당 기록관의 장갑|r|n|cff888888[미장착] 납골당 기록관의 장화|r|n|cff888888[미장착] 납골당 기록관의 서약|r|n|cff888888[미장착] 납골당 기록관의 결의|r|n|cff888888[미장착] 납골당 기록관의 발톱|r|n|cff888888[미장착] 납골당 기록관의 봉인서|r|n|cff888888[미장착] 납골당 기록관의 부적|r|n|cff888888(2) 냉기 계열 둔화 지속 +1초 · 비활성|r|n|cff888888(4) 둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가 · 비활성|r|n|cffaaaaaa스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.|r
 }
 
 STRING 213
@@ -1423,13 +1423,13 @@ STRING 238
 STRING 239
 // 아이템: Hb09 (|cffc080ff그림자 순찰자의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<하수구 순찰병의 장구> 0/9 장착|r|n|cff888888[미장착] 하수구 순찰병의 두건|r|n|cff888888[미장착] 하수구 순찰병의 외투|r|n|cff888888[미장착] 하수구 순찰병의 장갑|r|n|cff888888[미장착] 하수구 순찰병의 장화|r|n|cff888888[미장착] 하수구 순찰병의 서약|r|n|cff888888[미장착] 하수구 순찰병의 결의|r|n|cff888888[미장착] 하수구 순찰병의 발톱|r|n|cff888888[미장착] 하수구 순찰병의 봉인서|r|n|cff888888[미장착] 하수구 순찰병의 부적|r|n|cff888888(2) 칼날 계열 피해 +15%p · 비활성|r|n|cff888888(4) 칼날 적중 시 원형 검격: 해당 타격 피해 150% (지상·재사용 8초) · 비활성|r|n|cffaaaaaa수도 아래 물길까지 살피던 경비대 순찰병의 장구.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<하수구 순찰병의 장구> 0/9 장착|r|n|cff888888[미장착] 하수구 순찰병의 두건|r|n|cff888888[미장착] 하수구 순찰병의 외투|r|n|cff888888[미장착] 하수구 순찰병의 장갑|r|n|cff888888[미장착] 하수구 순찰병의 장화|r|n|cff888888[미장착] 하수구 순찰병의 서약|r|n|cff888888[미장착] 하수구 순찰병의 결의|r|n|cff888888[미장착] 하수구 순찰병의 발톱|r|n|cff888888[미장착] 하수구 순찰병의 봉인서|r|n|cff888888[미장착] 하수구 순찰병의 부적|r|n|cff888888(2) 칼날 계열 피해 +15%p · 비활성|r|n|cff888888(4) 칼날 적중 시 원형 검격: 해당 타격 피해 150% (지상·재사용 8초) · 비활성|r|n|cffaaaaaa수도 아래 물길까지 살피던 경비대 순찰병의 장구.|r
 }
 
 STRING 240
 // 아이템: Hb09 (|cffc080ff그림자 순찰자의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<하수구 순찰병의 장구> 0/9 장착|r|n|cff888888[미장착] 하수구 순찰병의 두건|r|n|cff888888[미장착] 하수구 순찰병의 외투|r|n|cff888888[미장착] 하수구 순찰병의 장갑|r|n|cff888888[미장착] 하수구 순찰병의 장화|r|n|cff888888[미장착] 하수구 순찰병의 서약|r|n|cff888888[미장착] 하수구 순찰병의 결의|r|n|cff888888[미장착] 하수구 순찰병의 발톱|r|n|cff888888[미장착] 하수구 순찰병의 봉인서|r|n|cff888888[미장착] 하수구 순찰병의 부적|r|n|cff888888(2) 칼날 계열 피해 +15%p · 비활성|r|n|cff888888(4) 칼날 적중 시 원형 검격: 해당 타격 피해 150% (지상·재사용 8초) · 비활성|r|n|cffaaaaaa수도 아래 물길까지 살피던 경비대 순찰병의 장구.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<하수구 순찰병의 장구> 0/9 장착|r|n|cff888888[미장착] 하수구 순찰병의 두건|r|n|cff888888[미장착] 하수구 순찰병의 외투|r|n|cff888888[미장착] 하수구 순찰병의 장갑|r|n|cff888888[미장착] 하수구 순찰병의 장화|r|n|cff888888[미장착] 하수구 순찰병의 서약|r|n|cff888888[미장착] 하수구 순찰병의 결의|r|n|cff888888[미장착] 하수구 순찰병의 발톱|r|n|cff888888[미장착] 하수구 순찰병의 봉인서|r|n|cff888888[미장착] 하수구 순찰병의 부적|r|n|cff888888(2) 칼날 계열 피해 +15%p · 비활성|r|n|cff888888(4) 칼날 적중 시 원형 검격: 해당 타격 피해 150% (지상·재사용 8초) · 비활성|r|n|cffaaaaaa수도 아래 물길까지 살피던 경비대 순찰병의 장구.|r
 }
 
 STRING 241
@@ -1711,13 +1711,13 @@ STRING 286
 STRING 287
 // 아이템: Ha09 (|cffc080ff잿길 인도자의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 인도자의 유산> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 인도자의 두건|r|n|cff888888[미장착] 스트라솔름 인도자의 외투|r|n|cff888888[미장착] 스트라솔름 인도자의 장갑|r|n|cff888888[미장착] 스트라솔름 인도자의 장화|r|n|cff888888[미장착] 스트라솔름 인도자의 서약|r|n|cff888888[미장착] 스트라솔름 인도자의 결의|r|n|cff888888[미장착] 스트라솔름 인도자의 발톱|r|n|cff888888[미장착] 스트라솔름 인도자의 봉인서|r|n|cff888888[미장착] 스트라솔름 인도자의 부적|r|n|cff888888(3) 화염 계열 피해 +20%p · 비활성|r|n|cff888888(5) 잿불 화살 +2발|n잿불 발자취 지속 +2초 · 잿불 낙성 타격 범위 +30%p · 비활성|r|n|cffaaaaaa불타는 스트라솔름에서 꺼지지 않는 불씨로 피난민을 이끌었던 자의 유산.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 인도자의 유산> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 인도자의 두건|r|n|cff888888[미장착] 스트라솔름 인도자의 외투|r|n|cff888888[미장착] 스트라솔름 인도자의 장갑|r|n|cff888888[미장착] 스트라솔름 인도자의 장화|r|n|cff888888[미장착] 스트라솔름 인도자의 서약|r|n|cff888888[미장착] 스트라솔름 인도자의 결의|r|n|cff888888[미장착] 스트라솔름 인도자의 발톱|r|n|cff888888[미장착] 스트라솔름 인도자의 봉인서|r|n|cff888888[미장착] 스트라솔름 인도자의 부적|r|n|cff888888(3) 화염 계열 피해 +20%p · 비활성|r|n|cff888888(5) 잿불 화살 +2발|n잿불 발자취 지속 +2초 · 잿불 낙성 타격 범위 +30%p · 비활성|r|n|cffaaaaaa불타는 스트라솔름에서 꺼지지 않는 불씨로 피난민을 이끌었던 자의 유산.|r
 }
 
 STRING 288
 // 아이템: Ha09 (|cffc080ff잿길 인도자의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 인도자의 유산> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 인도자의 두건|r|n|cff888888[미장착] 스트라솔름 인도자의 외투|r|n|cff888888[미장착] 스트라솔름 인도자의 장갑|r|n|cff888888[미장착] 스트라솔름 인도자의 장화|r|n|cff888888[미장착] 스트라솔름 인도자의 서약|r|n|cff888888[미장착] 스트라솔름 인도자의 결의|r|n|cff888888[미장착] 스트라솔름 인도자의 발톱|r|n|cff888888[미장착] 스트라솔름 인도자의 봉인서|r|n|cff888888[미장착] 스트라솔름 인도자의 부적|r|n|cff888888(3) 화염 계열 피해 +20%p · 비활성|r|n|cff888888(5) 잿불 화살 +2발|n잿불 발자취 지속 +2초 · 잿불 낙성 타격 범위 +30%p · 비활성|r|n|cffaaaaaa불타는 스트라솔름에서 꺼지지 않는 불씨로 피난민을 이끌었던 자의 유산.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 인도자의 유산> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 인도자의 두건|r|n|cff888888[미장착] 스트라솔름 인도자의 외투|r|n|cff888888[미장착] 스트라솔름 인도자의 장갑|r|n|cff888888[미장착] 스트라솔름 인도자의 장화|r|n|cff888888[미장착] 스트라솔름 인도자의 서약|r|n|cff888888[미장착] 스트라솔름 인도자의 결의|r|n|cff888888[미장착] 스트라솔름 인도자의 발톱|r|n|cff888888[미장착] 스트라솔름 인도자의 봉인서|r|n|cff888888[미장착] 스트라솔름 인도자의 부적|r|n|cff888888(3) 화염 계열 피해 +20%p · 비활성|r|n|cff888888(5) 잿불 화살 +2발|n잿불 발자취 지속 +2초 · 잿불 낙성 타격 범위 +30%p · 비활성|r|n|cffaaaaaa불타는 스트라솔름에서 꺼지지 않는 불씨로 피난민을 이끌었던 자의 유산.|r
 }
 
 STRING 289
@@ -1927,13 +1927,13 @@ STRING 322
 STRING 323
 // 아이템: Hn09 (|cffc080ff황혼 뇌우의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<로데론 왕궁의 유산> 0/9 장착|r|n|cff888888[미장착] 로데론 왕궁의 두건|r|n|cff888888[미장착] 로데론 왕궁의 외투|r|n|cff888888[미장착] 로데론 왕궁의 장갑|r|n|cff888888[미장착] 로데론 왕궁의 장화|r|n|cff888888[미장착] 로데론 왕궁의 서약|r|n|cff888888[미장착] 로데론 왕궁의 결의|r|n|cff888888[미장착] 로데론 왕궁의 발톱|r|n|cff888888[미장착] 로데론 왕궁의 봉인서|r|n|cff888888[미장착] 로데론 왕궁의 부적|r|n|cff888888(3) 번개 계열 피해 +20%p · 비활성|r|n|cff888888(5) 연쇄 번개 탐색·전이 거리 +35%p|n폭풍의 부름 +2회 · 폭풍 구슬 지속 +2초 · 비활성|r|n|cffaaaaaa무너진 왕궁 첨탑 위로 마지막까지 응답했던 뇌우의 흔적.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<로데론 왕궁의 유산> 0/9 장착|r|n|cff888888[미장착] 로데론 왕궁의 두건|r|n|cff888888[미장착] 로데론 왕궁의 외투|r|n|cff888888[미장착] 로데론 왕궁의 장갑|r|n|cff888888[미장착] 로데론 왕궁의 장화|r|n|cff888888[미장착] 로데론 왕궁의 서약|r|n|cff888888[미장착] 로데론 왕궁의 결의|r|n|cff888888[미장착] 로데론 왕궁의 발톱|r|n|cff888888[미장착] 로데론 왕궁의 봉인서|r|n|cff888888[미장착] 로데론 왕궁의 부적|r|n|cff888888(3) 번개 계열 피해 +20%p · 비활성|r|n|cff888888(5) 연쇄 번개 탐색·전이 거리 +35%p|n폭풍의 부름 +2회 · 폭풍 구슬 지속 +2초 · 비활성|r|n|cffaaaaaa무너진 왕궁 첨탑 위로 마지막까지 응답했던 뇌우의 흔적.|r
 }
 
 STRING 324
 // 아이템: Hn09 (|cffc080ff황혼 뇌우의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<로데론 왕궁의 유산> 0/9 장착|r|n|cff888888[미장착] 로데론 왕궁의 두건|r|n|cff888888[미장착] 로데론 왕궁의 외투|r|n|cff888888[미장착] 로데론 왕궁의 장갑|r|n|cff888888[미장착] 로데론 왕궁의 장화|r|n|cff888888[미장착] 로데론 왕궁의 서약|r|n|cff888888[미장착] 로데론 왕궁의 결의|r|n|cff888888[미장착] 로데론 왕궁의 발톱|r|n|cff888888[미장착] 로데론 왕궁의 봉인서|r|n|cff888888[미장착] 로데론 왕궁의 부적|r|n|cff888888(3) 번개 계열 피해 +20%p · 비활성|r|n|cff888888(5) 연쇄 번개 탐색·전이 거리 +35%p|n폭풍의 부름 +2회 · 폭풍 구슬 지속 +2초 · 비활성|r|n|cffaaaaaa무너진 왕궁 첨탑 위로 마지막까지 응답했던 뇌우의 흔적.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<로데론 왕궁의 유산> 0/9 장착|r|n|cff888888[미장착] 로데론 왕궁의 두건|r|n|cff888888[미장착] 로데론 왕궁의 외투|r|n|cff888888[미장착] 로데론 왕궁의 장갑|r|n|cff888888[미장착] 로데론 왕궁의 장화|r|n|cff888888[미장착] 로데론 왕궁의 서약|r|n|cff888888[미장착] 로데론 왕궁의 결의|r|n|cff888888[미장착] 로데론 왕궁의 발톱|r|n|cff888888[미장착] 로데론 왕궁의 봉인서|r|n|cff888888[미장착] 로데론 왕궁의 부적|r|n|cff888888(3) 번개 계열 피해 +20%p · 비활성|r|n|cff888888(5) 연쇄 번개 탐색·전이 거리 +35%p|n폭풍의 부름 +2회 · 폭풍 구슬 지속 +2초 · 비활성|r|n|cffaaaaaa무너진 왕궁 첨탑 위로 마지막까지 응답했던 뇌우의 흔적.|r
 }
 
 STRING 325
@@ -2143,13 +2143,13 @@ STRING 358
 STRING 359
 // 아이템: Hc09 (|cffc080ff침묵 묘역의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 묘지의 기억> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 묘지의 두건|r|n|cff888888[미장착] 스트라솔름 묘지의 외투|r|n|cff888888[미장착] 스트라솔름 묘지의 장갑|r|n|cff888888[미장착] 스트라솔름 묘지의 장화|r|n|cff888888[미장착] 스트라솔름 묘지의 서약|r|n|cff888888[미장착] 스트라솔름 묘지의 결의|r|n|cff888888[미장착] 스트라솔름 묘지의 발톱|r|n|cff888888[미장착] 스트라솔름 묘지의 봉인서|r|n|cff888888[미장착] 스트라솔름 묘지의 부적|r|n|cff888888(3) 냉기 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 서리 화살 관통 +2명|n서리 폭발 범위 +35%p · 납골당의 눈보라 지속 +2초 · 비활성|r|n|cffaaaaaa이름 없는 묘비 아래에서도 사라지지 않은 기억.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 묘지의 기억> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 묘지의 두건|r|n|cff888888[미장착] 스트라솔름 묘지의 외투|r|n|cff888888[미장착] 스트라솔름 묘지의 장갑|r|n|cff888888[미장착] 스트라솔름 묘지의 장화|r|n|cff888888[미장착] 스트라솔름 묘지의 서약|r|n|cff888888[미장착] 스트라솔름 묘지의 결의|r|n|cff888888[미장착] 스트라솔름 묘지의 발톱|r|n|cff888888[미장착] 스트라솔름 묘지의 봉인서|r|n|cff888888[미장착] 스트라솔름 묘지의 부적|r|n|cff888888(3) 냉기 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 서리 화살 관통 +2명|n서리 폭발 범위 +35%p · 납골당의 눈보라 지속 +2초 · 비활성|r|n|cffaaaaaa이름 없는 묘비 아래에서도 사라지지 않은 기억.|r
 }
 
 STRING 360
 // 아이템: Hc09 (|cffc080ff침묵 묘역의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 묘지의 기억> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 묘지의 두건|r|n|cff888888[미장착] 스트라솔름 묘지의 외투|r|n|cff888888[미장착] 스트라솔름 묘지의 장갑|r|n|cff888888[미장착] 스트라솔름 묘지의 장화|r|n|cff888888[미장착] 스트라솔름 묘지의 서약|r|n|cff888888[미장착] 스트라솔름 묘지의 결의|r|n|cff888888[미장착] 스트라솔름 묘지의 발톱|r|n|cff888888[미장착] 스트라솔름 묘지의 봉인서|r|n|cff888888[미장착] 스트라솔름 묘지의 부적|r|n|cff888888(3) 냉기 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 서리 화살 관통 +2명|n서리 폭발 범위 +35%p · 납골당의 눈보라 지속 +2초 · 비활성|r|n|cffaaaaaa이름 없는 묘비 아래에서도 사라지지 않은 기억.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<스트라솔름 묘지의 기억> 0/9 장착|r|n|cff888888[미장착] 스트라솔름 묘지의 두건|r|n|cff888888[미장착] 스트라솔름 묘지의 외투|r|n|cff888888[미장착] 스트라솔름 묘지의 장갑|r|n|cff888888[미장착] 스트라솔름 묘지의 장화|r|n|cff888888[미장착] 스트라솔름 묘지의 서약|r|n|cff888888[미장착] 스트라솔름 묘지의 결의|r|n|cff888888[미장착] 스트라솔름 묘지의 발톱|r|n|cff888888[미장착] 스트라솔름 묘지의 봉인서|r|n|cff888888[미장착] 스트라솔름 묘지의 부적|r|n|cff888888(3) 냉기 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 서리 화살 관통 +2명|n서리 폭발 범위 +35%p · 납골당의 눈보라 지속 +2초 · 비활성|r|n|cffaaaaaa이름 없는 묘비 아래에서도 사라지지 않은 기억.|r
 }
 
 STRING 361
@@ -2359,13 +2359,13 @@ STRING 394
 STRING 395
 // 아이템: Hv09 (|cffc080ff긴 밤 파수꾼의 부적|r), Ubertip (설명 - 확장)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<긴 밤 파수꾼의 맹세> 0/9 장착|r|n|cff888888[미장착] 긴 밤 파수꾼의 두건|r|n|cff888888[미장착] 긴 밤 파수꾼의 외투|r|n|cff888888[미장착] 긴 밤 파수꾼의 장갑|r|n|cff888888[미장착] 긴 밤 파수꾼의 장화|r|n|cff888888[미장착] 긴 밤 파수꾼의 서약|r|n|cff888888[미장착] 긴 밤 파수꾼의 결의|r|n|cff888888[미장착] 긴 밤 파수꾼의 발톱|r|n|cff888888[미장착] 긴 밤 파수꾼의 봉인서|r|n|cff888888[미장착] 긴 밤 파수꾼의 부적|r|n|cff888888(3) 칼날 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 순찰자의 칼날 피해 +35%p|n그림자 베기 각도 +45도 · 귀환 칼날 지속 +2초 · 비활성|r|n|cffaaaaaa긴 수색의 끝에서 돌아올 이를 기다리던 파수꾼의 맹세.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<긴 밤 파수꾼의 맹세> 0/9 장착|r|n|cff888888[미장착] 긴 밤 파수꾼의 두건|r|n|cff888888[미장착] 긴 밤 파수꾼의 외투|r|n|cff888888[미장착] 긴 밤 파수꾼의 장갑|r|n|cff888888[미장착] 긴 밤 파수꾼의 장화|r|n|cff888888[미장착] 긴 밤 파수꾼의 서약|r|n|cff888888[미장착] 긴 밤 파수꾼의 결의|r|n|cff888888[미장착] 긴 밤 파수꾼의 발톱|r|n|cff888888[미장착] 긴 밤 파수꾼의 봉인서|r|n|cff888888[미장착] 긴 밤 파수꾼의 부적|r|n|cff888888(3) 칼날 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 순찰자의 칼날 피해 +35%p|n그림자 베기 각도 +45도 · 귀환 칼날 지속 +2초 · 비활성|r|n|cffaaaaaa긴 수색의 끝에서 돌아올 이를 기다리던 파수꾼의 맹세.|r
 }
 
 STRING 396
 // 아이템: Hv09 (|cffc080ff긴 밤 파수꾼의 부적|r), Description (설명)
 {
-|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구 (장비용)|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<긴 밤 파수꾼의 맹세> 0/9 장착|r|n|cff888888[미장착] 긴 밤 파수꾼의 두건|r|n|cff888888[미장착] 긴 밤 파수꾼의 외투|r|n|cff888888[미장착] 긴 밤 파수꾼의 장갑|r|n|cff888888[미장착] 긴 밤 파수꾼의 장화|r|n|cff888888[미장착] 긴 밤 파수꾼의 서약|r|n|cff888888[미장착] 긴 밤 파수꾼의 결의|r|n|cff888888[미장착] 긴 밤 파수꾼의 발톱|r|n|cff888888[미장착] 긴 밤 파수꾼의 봉인서|r|n|cff888888[미장착] 긴 밤 파수꾼의 부적|r|n|cff888888(3) 칼날 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 순찰자의 칼날 피해 +35%p|n그림자 베기 각도 +45도 · 귀환 칼날 지속 +2초 · 비활성|r|n|cffaaaaaa긴 수색의 끝에서 돌아올 이를 기다리던 파수꾼의 맹세.|r
+|cffc080ff영웅 장비|r|n|cffffcc00장착 부위: 장신구|r|n최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p|n|n|cffffcc00<긴 밤 파수꾼의 맹세> 0/9 장착|r|n|cff888888[미장착] 긴 밤 파수꾼의 두건|r|n|cff888888[미장착] 긴 밤 파수꾼의 외투|r|n|cff888888[미장착] 긴 밤 파수꾼의 장갑|r|n|cff888888[미장착] 긴 밤 파수꾼의 장화|r|n|cff888888[미장착] 긴 밤 파수꾼의 서약|r|n|cff888888[미장착] 긴 밤 파수꾼의 결의|r|n|cff888888[미장착] 긴 밤 파수꾼의 발톱|r|n|cff888888[미장착] 긴 밤 파수꾼의 봉인서|r|n|cff888888[미장착] 긴 밤 파수꾼의 부적|r|n|cff888888(3) 칼날 계열 쿨다운 16.7% 감소 · 비활성|r|n|cff888888(5) 순찰자의 칼날 피해 +35%p|n그림자 베기 각도 +45도 · 귀환 칼날 지속 +2초 · 비활성|r|n|cffaaaaaa긴 수색의 끝에서 돌아올 이를 기다리던 파수꾼의 맹세.|r
 }
 
 STRING 397
@@ -2383,7 +2383,7 @@ STRING 398
 STRING 399
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 추적 투사체|n|cffffcc00투사체 수:|r 1|n|cffffcc00피해:|r 40 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
+|cffff8040[화염]|r |cffffb86b[유도]|r|n추적 투사체|n|cffffcc00투사체 수:|r 1|n|cffffcc00피해:|r 40 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 400
@@ -2395,7 +2395,7 @@ STRING 400
 STRING 401
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 추적 투사체|n|cffffcc00투사체 수:|r 1|n|cffffcc00피해:|r 50 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
+|cffff8040[화염]|r |cffffb86b[유도]|r|n추적 투사체|n|cffffcc00투사체 수:|r 1|n|cffffcc00피해:|r 50 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 402
@@ -2407,7 +2407,7 @@ STRING 402
 STRING 403
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 추적 투사체|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 60 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
+|cffff8040[화염]|r |cffffb86b[유도]|r|n추적 투사체|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 60 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 404
@@ -2419,7 +2419,7 @@ STRING 404
 STRING 405
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 추적 투사체|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 75 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
+|cffff8040[화염]|r |cffffb86b[유도]|r|n추적 투사체|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 75 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 406
@@ -2431,7 +2431,7 @@ STRING 406
 STRING 407
 // 능력: HsW1 (잿불 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 추적 투사체|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 90 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
+|cffff8040[화염]|r |cffffb86b[유도]|r|n추적 투사체|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 90 (지상·공중)|n|cffffcc00거리:|r 1000|n|cffffcc00범위:|r 32|n|cffffcc00지속 시간:|r 5초|n|cffffcc00쿨다운:|r 0.8초|n|cffffcc00투사체 속도:|r 850
 }
 
 STRING 408
@@ -2449,7 +2449,7 @@ STRING 409
 STRING 410
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 발밑 장판|n|cffffcc00피해:|r 12 (지상)|n|cffffcc00범위:|r 230|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
+|cffff8040[화염]|r |cff9cdb70[장판]|r|n발밑 장판|n|cffffcc00피해:|r 12 (지상)|n|cffffcc00범위:|r 230|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 411
@@ -2461,7 +2461,7 @@ STRING 411
 STRING 412
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 발밑 장판|n|cffffcc00피해:|r 15.6 (지상)|n|cffffcc00범위:|r 230|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
+|cffff8040[화염]|r |cff9cdb70[장판]|r|n발밑 장판|n|cffffcc00피해:|r 15.6 (지상)|n|cffffcc00범위:|r 230|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 413
@@ -2473,7 +2473,7 @@ STRING 413
 STRING 414
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 발밑 장판|n|cffffcc00피해:|r 19.2 (지상)|n|cffffcc00범위:|r 265|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
+|cffff8040[화염]|r |cff9cdb70[장판]|r|n발밑 장판|n|cffffcc00피해:|r 19.2 (지상)|n|cffffcc00범위:|r 265|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 415
@@ -2485,7 +2485,7 @@ STRING 415
 STRING 416
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 발밑 장판|n|cffffcc00피해:|r 24 (지상)|n|cffffcc00범위:|r 265|n|cffffcc00지속 시간:|r 4초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
+|cffff8040[화염]|r |cff9cdb70[장판]|r|n발밑 장판|n|cffffcc00피해:|r 24 (지상)|n|cffffcc00범위:|r 265|n|cffffcc00지속 시간:|r 4초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 417
@@ -2497,7 +2497,7 @@ STRING 417
 STRING 418
 // 능력: HsW2 (잿불 발자취), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 발밑 장판|n|cffffcc00피해:|r 30 (지상)|n|cffffcc00범위:|r 299|n|cffffcc00지속 시간:|r 4초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
+|cffff8040[화염]|r |cff9cdb70[장판]|r|n발밑 장판|n|cffffcc00피해:|r 30 (지상)|n|cffffcc00범위:|r 299|n|cffffcc00지속 시간:|r 4초|n|cffffcc00쿨다운:|r 4초|n|cffffcc00타격 간격:|r 0.5초
 }
 
 STRING 419
@@ -2515,7 +2515,7 @@ STRING 420
 STRING 421
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 연쇄 공격|n|cffffcc00최대 대상:|r 3|n|cffffcc00피해:|r 45 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+|cff80d0ff[번개]|r |cffffe66d[연쇄]|r|n연쇄 공격|n|cffffcc00최대 대상:|r 3|n|cffffcc00피해:|r 45 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 422
@@ -2527,7 +2527,7 @@ STRING 422
 STRING 423
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 연쇄 공격|n|cffffcc00최대 대상:|r 4|n|cffffcc00피해:|r 58.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+|cff80d0ff[번개]|r |cffffe66d[연쇄]|r|n연쇄 공격|n|cffffcc00최대 대상:|r 4|n|cffffcc00피해:|r 58.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 424
@@ -2539,7 +2539,7 @@ STRING 424
 STRING 425
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 연쇄 공격|n|cffffcc00최대 대상:|r 5|n|cffffcc00피해:|r 72 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+|cff80d0ff[번개]|r |cffffe66d[연쇄]|r|n연쇄 공격|n|cffffcc00최대 대상:|r 5|n|cffffcc00피해:|r 72 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 426
@@ -2551,7 +2551,7 @@ STRING 426
 STRING 427
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 연쇄 공격|n|cffffcc00최대 대상:|r 6|n|cffffcc00피해:|r 85.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+|cff80d0ff[번개]|r |cffffe66d[연쇄]|r|n연쇄 공격|n|cffffcc00최대 대상:|r 6|n|cffffcc00피해:|r 85.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 428
@@ -2563,7 +2563,7 @@ STRING 428
 STRING 429
 // 능력: HsW3 (연쇄 번개), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 연쇄 공격|n|cffffcc00최대 대상:|r 7|n|cffffcc00피해:|r 103.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
+|cff80d0ff[번개]|r |cffffe66d[연쇄]|r|n연쇄 공격|n|cffffcc00최대 대상:|r 7|n|cffffcc00피해:|r 103.5 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00쿨다운:|r 2.2초|n|cffffcc00연쇄 거리:|r 350|n※ 전이마다 피해 -15%
 }
 
 STRING 430
@@ -2581,7 +2581,7 @@ STRING 431
 STRING 432
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 회전 칼날|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 30 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n회전 칼날|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 30 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 433
@@ -2593,7 +2593,7 @@ STRING 433
 STRING 434
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 회전 칼날|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 39 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n회전 칼날|n|cffffcc00투사체 수:|r 2|n|cffffcc00피해:|r 39 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 435
@@ -2605,7 +2605,7 @@ STRING 435
 STRING 436
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 회전 칼날|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 48 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n회전 칼날|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 48 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 437
@@ -2617,7 +2617,7 @@ STRING 437
 STRING 438
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 회전 칼날|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 60 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n회전 칼날|n|cffffcc00투사체 수:|r 3|n|cffffcc00피해:|r 60 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 439
@@ -2629,7 +2629,7 @@ STRING 439
 STRING 440
 // 능력: HsW4 (순찰자의 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 회전 칼날|n|cffffcc00투사체 수:|r 4|n|cffffcc00피해:|r 75 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n회전 칼날|n|cffffcc00투사체 수:|r 4|n|cffffcc00피해:|r 75 (지상)|n|cffffcc00범위:|r 180|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 5초|n|cffffcc00타격 간격:|r 0.45초|n※ 새 칼날은 기존 칼날과 중첩
 }
 
 STRING 441
@@ -2647,7 +2647,7 @@ STRING 442
 STRING 443
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 낙뢰|n|cffffcc00낙뢰 수:|r 1|n|cffffcc00피해:|r 55 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
+|cff80d0ff[번개]|r |cffb9b4ff[낙하]|r|n낙뢰|n|cffffcc00낙뢰 수:|r 1|n|cffffcc00피해:|r 55 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 444
@@ -2659,7 +2659,7 @@ STRING 444
 STRING 445
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 낙뢰|n|cffffcc00낙뢰 수:|r 1|n|cffffcc00피해:|r 71.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
+|cff80d0ff[번개]|r |cffb9b4ff[낙하]|r|n낙뢰|n|cffffcc00낙뢰 수:|r 1|n|cffffcc00피해:|r 71.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 446
@@ -2671,7 +2671,7 @@ STRING 446
 STRING 447
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 낙뢰|n|cffffcc00낙뢰 수:|r 2|n|cffffcc00피해:|r 88 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
+|cff80d0ff[번개]|r |cffb9b4ff[낙하]|r|n낙뢰|n|cffffcc00낙뢰 수:|r 2|n|cffffcc00피해:|r 88 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 448
@@ -2683,7 +2683,7 @@ STRING 448
 STRING 449
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 낙뢰|n|cffffcc00낙뢰 수:|r 2|n|cffffcc00피해:|r 104.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
+|cff80d0ff[번개]|r |cffb9b4ff[낙하]|r|n낙뢰|n|cffffcc00낙뢰 수:|r 2|n|cffffcc00피해:|r 104.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 450
@@ -2695,7 +2695,7 @@ STRING 450
 STRING 451
 // 능력: HsW5 (폭풍의 부름), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 낙뢰|n|cffffcc00낙뢰 수:|r 3|n|cffffcc00피해:|r 126.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
+|cff80d0ff[번개]|r |cffb9b4ff[낙하]|r|n낙뢰|n|cffffcc00낙뢰 수:|r 3|n|cffffcc00피해:|r 126.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 150|n|cffffcc00쿨다운:|r 3.2초
 }
 
 STRING 452
@@ -2713,7 +2713,7 @@ STRING 453
 STRING 454
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 전방 부채꼴|n|cffffcc00피해:|r 65 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 100도|n※ 대상별 1회 타격
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n전방 부채꼴|n|cffffcc00피해:|r 65 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 100도|n※ 대상별 1회 타격
 }
 
 STRING 455
@@ -2725,7 +2725,7 @@ STRING 455
 STRING 456
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 전방 부채꼴|n|cffffcc00피해:|r 84.5 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 110도|n※ 대상별 1회 타격
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n전방 부채꼴|n|cffffcc00피해:|r 84.5 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 110도|n※ 대상별 1회 타격
 }
 
 STRING 457
@@ -2737,7 +2737,7 @@ STRING 457
 STRING 458
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 전방 부채꼴|n|cffffcc00피해:|r 104 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 120도|n※ 대상별 1회 타격
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n전방 부채꼴|n|cffffcc00피해:|r 104 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 120도|n※ 대상별 1회 타격
 }
 
 STRING 459
@@ -2749,7 +2749,7 @@ STRING 459
 STRING 460
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 전방 부채꼴|n|cffffcc00피해:|r 130 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 130도|n※ 대상별 1회 타격
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n전방 부채꼴|n|cffffcc00피해:|r 130 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 130도|n※ 대상별 1회 타격
 }
 
 STRING 461
@@ -2761,7 +2761,7 @@ STRING 461
 STRING 462
 // 능력: HsW6 (그림자 베기), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 전방 부채꼴|n|cffffcc00피해:|r 162.5 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 140도|n※ 대상별 1회 타격
+|cffd8d8e0[칼날]|r |cffffa3b8[근접]|r|n전방 부채꼴|n|cffffcc00피해:|r 162.5 (지상)|n|cffffcc00거리:|r 320|n|cffffcc00쿨다운:|r 1.8초|n|cffffcc00각도:|r 140도|n※ 대상별 1회 타격
 }
 
 STRING 463
@@ -2779,7 +2779,7 @@ STRING 464
 STRING 465
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 관통·둔화 투사체|n|cffffcc00최대 관통:|r 2|n|cffffcc00피해:|r 30 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
+|cff6fa8ff[냉기]|r |cff64d8ff[관통]|r|n관통·둔화 투사체|n|cffffcc00최대 관통:|r 2|n|cffffcc00피해:|r 30 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 466
@@ -2791,7 +2791,7 @@ STRING 466
 STRING 467
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 관통·둔화 투사체|n|cffffcc00최대 관통:|r 3|n|cffffcc00피해:|r 39 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
+|cff6fa8ff[냉기]|r |cff64d8ff[관통]|r|n관통·둔화 투사체|n|cffffcc00최대 관통:|r 3|n|cffffcc00피해:|r 39 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 468
@@ -2803,7 +2803,7 @@ STRING 468
 STRING 469
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 관통·둔화 투사체|n|cffffcc00최대 관통:|r 3|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
+|cff6fa8ff[냉기]|r |cff64d8ff[관통]|r|n관통·둔화 투사체|n|cffffcc00최대 관통:|r 3|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 470
@@ -2815,7 +2815,7 @@ STRING 470
 STRING 471
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 관통·둔화 투사체|n|cffffcc00최대 관통:|r 4|n|cffffcc00피해:|r 60 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
+|cff6fa8ff[냉기]|r |cff64d8ff[관통]|r|n관통·둔화 투사체|n|cffffcc00최대 관통:|r 4|n|cffffcc00피해:|r 60 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 472
@@ -2827,7 +2827,7 @@ STRING 472
 STRING 473
 // 능력: HsW7 (서리 화살), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 관통·둔화 투사체|n|cffffcc00최대 관통:|r 5|n|cffffcc00피해:|r 75 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
+|cff6fa8ff[냉기]|r |cff64d8ff[관통]|r|n관통·둔화 투사체|n|cffffcc00최대 관통:|r 5|n|cffffcc00피해:|r 75 (지상·공중)|n|cffffcc00거리:|r 900|n|cffffcc00범위:|r 45|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 1.6초|n|cffffcc00투사체 속도:|r 650|n|cffffcc00둔화:|r -30% · 2초
 }
 
 STRING 474
@@ -2845,7 +2845,7 @@ STRING 475
 STRING 476
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 38 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
+|cff6fa8ff[냉기]|r |cffff786b[폭발]|r|n무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 38 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 477
@@ -2857,7 +2857,7 @@ STRING 477
 STRING 478
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 51.3 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
+|cff6fa8ff[냉기]|r |cffff786b[폭발]|r|n무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 51.3 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 479
@@ -2869,7 +2869,7 @@ STRING 479
 STRING 480
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 64.6 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
+|cff6fa8ff[냉기]|r |cffff786b[폭발]|r|n무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 64.6 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 481
@@ -2881,7 +2881,7 @@ STRING 481
 STRING 482
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 77.9 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
+|cff6fa8ff[냉기]|r |cffff786b[폭발]|r|n무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 77.9 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 483
@@ -2893,7 +2893,7 @@ STRING 483
 STRING 484
 // 능력: HsW8 (서리 폭발), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 91.2 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
+|cff6fa8ff[냉기]|r |cffff786b[폭발]|r|n무작위 적 위치에 냉기 폭발·둔화|n|cffffcc00피해:|r 91.2 (지상·공중)|n|cffffcc00거리:|r 280|n|cffffcc00범위:|r 280|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 4초
 }
 
 STRING 485
@@ -2911,7 +2911,7 @@ STRING 486
 STRING 487
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 적 위치에 눈보라·둔화|n|cffffcc00피해:|r 20 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
+|cff6fa8ff[냉기]|r |cff9cdb70[장판]|r|n적 위치에 눈보라·둔화|n|cffffcc00피해:|r 20 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 488
@@ -2923,7 +2923,7 @@ STRING 488
 STRING 489
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 적 위치에 눈보라·둔화|n|cffffcc00피해:|r 27 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
+|cff6fa8ff[냉기]|r |cff9cdb70[장판]|r|n적 위치에 눈보라·둔화|n|cffffcc00피해:|r 27 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 490
@@ -2935,7 +2935,7 @@ STRING 490
 STRING 491
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 적 위치에 눈보라·둔화|n|cffffcc00피해:|r 34 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
+|cff6fa8ff[냉기]|r |cff9cdb70[장판]|r|n적 위치에 눈보라·둔화|n|cffffcc00피해:|r 34 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 492
@@ -2947,7 +2947,7 @@ STRING 492
 STRING 493
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 적 위치에 눈보라·둔화|n|cffffcc00피해:|r 41 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
+|cff6fa8ff[냉기]|r |cff9cdb70[장판]|r|n적 위치에 눈보라·둔화|n|cffffcc00피해:|r 41 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 494
@@ -2959,7 +2959,7 @@ STRING 494
 STRING 495
 // 능력: HsW9 (묘역의 눈보라), Ubertip (설명 - 일반 - 확장)
 {
-|cff6fa8ff[얼음]|r 적 위치에 눈보라·둔화|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
+|cff6fa8ff[냉기]|r |cff9cdb70[장판]|r|n적 위치에 눈보라·둔화|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 750|n|cffffcc00범위:|r 240|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 6초
 }
 
 STRING 496
@@ -2977,7 +2977,7 @@ STRING 497
 STRING 498
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 적 위치에 운석·잔불|n|cffffcc00피해:|r 110 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+|cffff8040[화염]|r |cffb9b4ff[낙하]|r |cffff786b[폭발]|r|n적 위치에 운석 충돌|n|cffffcc00피해:|r 110 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00쿨다운:|r 5.5초
 }
 
 STRING 499
@@ -2989,7 +2989,7 @@ STRING 499
 STRING 500
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 적 위치에 운석·잔불|n|cffffcc00피해:|r 148.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+|cffff8040[화염]|r |cffb9b4ff[낙하]|r |cffff786b[폭발]|r|n적 위치에 운석 충돌|n|cffffcc00피해:|r 148.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00쿨다운:|r 5.5초
 }
 
 STRING 501
@@ -3001,7 +3001,7 @@ STRING 501
 STRING 502
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 적 위치에 운석·잔불|n|cffffcc00피해:|r 187 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+|cffff8040[화염]|r |cffb9b4ff[낙하]|r |cffff786b[폭발]|r|n적 위치에 운석 충돌|n|cffffcc00피해:|r 187 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00쿨다운:|r 5.5초
 }
 
 STRING 503
@@ -3013,7 +3013,7 @@ STRING 503
 STRING 504
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 적 위치에 운석·잔불|n|cffffcc00피해:|r 225.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+|cffff8040[화염]|r |cffb9b4ff[낙하]|r |cffff786b[폭발]|r|n적 위치에 운석 충돌|n|cffffcc00피해:|r 225.5 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00쿨다운:|r 5.5초
 }
 
 STRING 505
@@ -3025,7 +3025,7 @@ STRING 505
 STRING 506
 // 능력: HsWA (잿불 낙성), Ubertip (설명 - 일반 - 확장)
 {
-|cffff8040[화염]|r 적 위치에 운석·잔불|n|cffffcc00피해:|r 264 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00지속 시간:|r 2초|n|cffffcc00쿨다운:|r 5.5초|n※ 잔불: 충돌 피해 20%/타격
+|cffff8040[화염]|r |cffb9b4ff[낙하]|r |cffff786b[폭발]|r|n적 위치에 운석 충돌|n|cffffcc00피해:|r 264 (지상·공중)|n|cffffcc00거리:|r 800|n|cffffcc00범위:|r 220|n|cffffcc00쿨다운:|r 5.5초
 }
 
 STRING 507
@@ -3043,7 +3043,7 @@ STRING 508
 STRING 509
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 20 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
+|cff80d0ff[번개]|r |cffffb86b[유도]|r |cffffe66d[연쇄]|r|n적을 추적하는 구체·주변 1회 전이|n|cffffcc00피해:|r 20 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초|n※ 전이: 피해 35% · 주변 적 1명 · 간격 0.8초 · 재전이 없음
 }
 
 STRING 510
@@ -3055,7 +3055,7 @@ STRING 510
 STRING 511
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 27 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
+|cff80d0ff[번개]|r |cffffb86b[유도]|r |cffffe66d[연쇄]|r|n적을 추적하는 구체·주변 1회 전이|n|cffffcc00피해:|r 27 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초|n※ 전이: 피해 35% · 주변 적 1명 · 간격 0.8초 · 재전이 없음
 }
 
 STRING 512
@@ -3067,7 +3067,7 @@ STRING 512
 STRING 513
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 34 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
+|cff80d0ff[번개]|r |cffffb86b[유도]|r |cffffe66d[연쇄]|r|n적을 추적하는 구체·주변 1회 전이|n|cffffcc00피해:|r 34 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초|n※ 전이: 피해 35% · 주변 적 1명 · 간격 0.8초 · 재전이 없음
 }
 
 STRING 514
@@ -3079,7 +3079,7 @@ STRING 514
 STRING 515
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 41 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
+|cff80d0ff[번개]|r |cffffb86b[유도]|r |cffffe66d[연쇄]|r|n적을 추적하는 구체·주변 1회 전이|n|cffffcc00피해:|r 41 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초|n※ 전이: 피해 35% · 주변 적 1명 · 간격 0.8초 · 재전이 없음
 }
 
 STRING 516
@@ -3091,7 +3091,7 @@ STRING 516
 STRING 517
 // 능력: HsWB (폭풍 구슬), Ubertip (설명 - 일반 - 확장)
 {
-|cff80d0ff[번개]|r 전진 후 머무는 지속 타격 구체|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초
+|cff80d0ff[번개]|r |cffffb86b[유도]|r |cffffe66d[연쇄]|r|n적을 추적하는 구체·주변 1회 전이|n|cffffcc00피해:|r 48 (지상·공중)|n|cffffcc00거리:|r 850|n|cffffcc00범위:|r 150|n|cffffcc00지속 시간:|r 2.5초|n|cffffcc00쿨다운:|r 3초|n※ 전이: 피해 35% · 주변 적 1명 · 간격 0.8초 · 재전이 없음
 }
 
 STRING 518
@@ -3109,7 +3109,7 @@ STRING 519
 STRING 520
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 42 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+|cffd8d8e0[칼날]|r |cff64d8ff[관통]|r|n왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 42 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 521
@@ -3121,7 +3121,7 @@ STRING 521
 STRING 522
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 56.7 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+|cffd8d8e0[칼날]|r |cff64d8ff[관통]|r|n왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 56.7 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 523
@@ -3133,7 +3133,7 @@ STRING 523
 STRING 524
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 71.4 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+|cffd8d8e0[칼날]|r |cff64d8ff[관통]|r|n왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 71.4 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 525
@@ -3145,7 +3145,7 @@ STRING 525
 STRING 526
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 86.1 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+|cffd8d8e0[칼날]|r |cff64d8ff[관통]|r|n왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 86.1 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 
 STRING 527
@@ -3157,6 +3157,6 @@ STRING 527
 STRING 528
 // 능력: HsWC (귀환 칼날), Ubertip (설명 - 일반 - 확장)
 {
-|cffd8d8e0[칼날]|r 왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 100.8 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
+|cffd8d8e0[칼날]|r |cff64d8ff[관통]|r|n왕복 칼날 · 구간별 1회 타격|n|cffffcc00피해:|r 100.8 (지상)|n|cffffcc00거리:|r 650|n|cffffcc00범위:|r 60|n|cffffcc00지속 시간:|r 3초|n|cffffcc00쿨다운:|r 2.8초|n※ 귀환 후 남은 시간 동안 재발사
 }
 

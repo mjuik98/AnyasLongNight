@@ -5,7 +5,7 @@ do
     local icons = [[ReplaceableTextures\CommandButtons\]]
     local order = {"firebolt", "flamefield", "chainlightning", "orbitblade", "monsoon", "frontslash", "frostshard", "frostnova", "blizzard", "meteor", "thunderorb", "returnblade",
         "plaguedart", "plaguetrail", "corrosion", "plaguepool", "deathcoil", "soulchain", "wraithguard", "shadowscythe",
-        "plaguejar", "catalyst", "boilingflask", "acidvials",
+        "plaguejar", "catalyst", "boilingflask", "acidvials", "banshee", "shadowarcher", "plaguezombie", "experiment",
         "power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"}
     local catalog = {
         firebolt = {kind = "weapon", name = "잿불 화살", icon = icons .. "BTNFireBolt.blp",
@@ -24,8 +24,8 @@ do
             text = "관통·둔화 투사체 · 지상·공중"},
         frostnova = {kind = "weapon", name = "서리 폭발", icon = icons .. "BTNGlacier.blp", text = "무작위 적 위치에 냉기 폭발·둔화 · 지상·공중"},
         blizzard = {kind = "weapon", name = "납골당의 눈보라", icon = icons .. "BTNBlizzard.blp", text = "적 위치에 눈보라·둔화 · 지상·공중"},
-        meteor = {kind = "weapon", name = "잿불 낙성", icon = icons .. "BTNInfernal.blp", text = "적 위치에 운석·잔불 · 지상·공중"},
-        thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "전진 후 머무는 지속 타격 구체 · 지상·공중"},
+        meteor = {kind = "weapon", name = "잿불 낙성", icon = icons .. "BTNInfernal.blp", text = "적 위치에 운석 충돌 · 지상·공중"},
+        thunderorb = {kind = "weapon", name = "폭풍 구슬", icon = icons .. "BTNLightningShield.blp", text = "적을 추적하는 구체·주변 1회 전이 · 지상·공중"},
         returnblade = {kind = "weapon", name = "귀환 칼날", icon = icons .. "BTNGlaiveThrower.blp", text = "왕복 칼날 · 구간별 1회 타격 · 지상"},
         plaguedart = {kind = "weapon", name = "역병 침", icon = icons .. "BTNEnvenomedSpear.blp", text = "관통 투사체·중독 · 지상·공중"},
         plaguetrail = {kind = "weapon", name = "역병 발자취", icon = icons .. "BTNPlagueCloud.blp", text = "발밑 독구름·중독 · 지상"},
@@ -35,10 +35,14 @@ do
         soulchain = {kind = "weapon", name = "영혼 사슬", icon = icons .. "BTNCurse.blp", text = "연쇄 공격·저주 · 지상·공중"},
         wraithguard = {kind = "weapon", name = "망령의 호위", icon = icons .. "BTNUnholyFrenzy.blp", text = "회전 망령·저주 대상 추가 피해 · 지상"},
         shadowscythe = {kind = "weapon", name = "그림자 낫", icon = icons .. "BTNShadowStrike.blp", text = "왕복 낫·저주 · 지상"},
-        plaguejar = {kind = "weapon", name = "역병 단지", icon = icons .. "BTNUnstableConcoction.blp", text = "포물선 투척 범위·반응·중독 잔여물 · 지상·공중"},
+        plaguejar = {kind = "weapon", name = "역병 단지", icon = icons .. "BTNUnstableConcoction.blp", text = "낙하 단지·착탄 범위 폭발·중독·반응 · 지상·공중"},
         catalyst = {kind = "weapon", name = "휘발성 촉매", icon = icons .. "BTNRejuvenationPotion.blp", text = "무작위 적 위치 폭발·강한 반응 · 지상·공중"},
-        boilingflask = {kind = "weapon", name = "끓어오르는 플라스크", icon = icons .. "BTNChemicalRage.blp", text = "전진 후 머무는 구체·반응 · 지상·공중"},
-        acidvials = {kind = "weapon", name = "산성 약병 산포", icon = icons .. "BTNHealingSalve.blp", text = "무작위 포물선 투척·반응 · 지상·공중"},
+        boilingflask = {kind = "weapon", name = "끓어오르는 플라스크", icon = icons .. "BTNChemicalRage.blp", text = "적을 추적하는 구체·주변 1회 전이·반응 · 지상·공중"},
+        acidvials = {kind = "weapon", name = "산성 약병 산포", icon = icons .. "BTNHealingSalve.blp", text = "여러 적 위치에 약병 낙하·반응 · 지상·공중"},
+        banshee = {kind = "weapon", name = "울부짖는 밴시", icon = icons .. "BTNBanshee.blp", text = "밴시 소환·범위 비명·둔화 · 지상·공중"},
+        shadowarcher = {kind = "weapon", name = "그림자 궁수", icon = icons .. "BTNSkeletonArcher.blp", text = "궁수 소환·원거리 집중 사격 · 지상·공중"},
+        plaguezombie = {kind = "weapon", name = "역병 좀비", icon = icons .. "BTNGhoul.blp", text = "좀비 무리 소환·근접 중독 · 지상"},
+        experiment = {kind = "weapon", name = "봉합 실험체", icon = icons .. "BTNAbomination.blp", text = "실험체 소환·범위 내려찍기 · 지상"},
         power = {kind = "trinket", name = "힘의 인장", icon = icons .. "BTNGauntletsOfOgrePower.blp",
             text = "모든 무기 피해 증가", statName = "모든 무기 피해", amount = 0.10},
         haste = {kind = "trinket", name = "신속의 인장", icon = icons .. "BTNGlove.blp",
@@ -89,6 +93,10 @@ do
         catalyst = "한 방울로 고여 있던 독을 깨운다.",
         boilingflask = "끓어 넘친 약액은 식을 줄 모른다.",
         acidvials = "흩뿌린 약병마다 다른 실험 결과.",
+        banshee = "사라진 이들의 목소리가 수색 길에 함께한다.",
+        shadowarcher = "잊힌 순찰병의 화살은 아직 길을 지킨다.",
+        plaguezombie = "실험이 끝나도 역병은 걸음을 멈추지 않는다.",
+        experiment = "봉합한 육신에 마지막 명령을 새긴다.",
         power = "긴 수색을 버틸 힘을 새긴 인장.",
         haste = "망설임보다 빠르게 움직이기 위해.",
         velocity = "놓치기 전에 닿아야 한다.",
@@ -109,7 +117,7 @@ do
     local multiCounts, multiDamage = {1, 1, 2, 2, 2, 3, 3}, {0.30, 0.45, 0.30, 0.40, 0.50, 0.35, 0.45}
     -- Each max-level weapon chooses one permanent branch without another equipment requirement.
     local evolutions = {
-        {"firebolt", "폭렬 화살", "발사 수 +2 · 피해 -15% · 적중 시 주변 140에 30% 폭발 피해(최대 12명)", {missileDamage = 0.85}, {missileCount = 2}},
+        {"firebolt", "폭렬 화살", "발사 수 +2 · 피해 -15% · 적중 시 주변 범위에 30% 폭발 피해(최대 12명)", {missileDamage = 0.85}, {missileCount = 2}},
         {"firebolt", "심판의 불꽃", "피해 +25% · 쿨다운 20% 증가 · 같은 적 연속 적중 시 피해 +15%씩 최대 60%(3초 유지)", {missileDamage = 1.25, missileInterval = 1.2}},
         {"flamefield", "불바다", "반경 +45% · 피해 -10%", {zoneRadius = 1.45, zoneDamage = 0.9}},
         {"flamefield", "지옥의 화로", "타격 간격 -35% · 반경 -15%", {zonePulse = 0.65, zoneRadius = 0.85}},
@@ -127,8 +135,8 @@ do
         {"frostnova", "빙결 파동", "쿨다운 40% 감소 · 반경 -15%", {interval = 0.6, radius = 0.85}},
         {"blizzard", "백색 폭풍", "반경 +40% · 지속 +30%", {radius = 1.4, duration = 1.3}},
         {"blizzard", "우박 세례", "피해 +50% · 타격 간격 -20% · 반경 -20%", {damage = 1.5, pulse = 0.8, radius = 0.8}},
-        {"meteor", "재앙의 운석", "충돌·잔불 피해 +80% · 쿨다운 20% 증가", {damage = 1.8, interval = 1.2}},
-        {"meteor", "잿불 분화구", "반경 +40% · 잔불 지속 +100%", {radius = 1.4, duration = 2}},
+        {"meteor", "재앙의 운석", "충돌 피해 +80% · 쿨다운 20% 증가", {damage = 1.8, interval = 1.2}},
+        {"meteor", "잿불 분화구", "반경 +40% · 충돌 피해 +40%", {radius = 1.4, damage = 1.4}},
         {"thunderorb", "뇌운 구체", "반경 +45% · 지속 +50% · 투사체 속도 -25%", {radius = 1.45, duration = 1.5, speed = 0.75}},
         {"thunderorb", "과부하", "타격 간격 -40% · 피해 +20%", {pulse = 0.6, damage = 1.2}},
         {"returnblade", "윤회 칼날", "지속 +80% · 투사체 속도 +20%", {duration = 1.8, speed = 1.2}},
@@ -152,13 +160,21 @@ do
         {"shadowscythe", "수확의 원", "지속 +80% · 투사체 속도 +20%", {duration = 1.8, speed = 1.2}},
         {"shadowscythe", "사신의 낫", "피해 +70% · 타격 크기 +50% · 투사체 속도 -20%", {damage = 1.7, radius = 1.5, size = 1.5, speed = 0.8}},
         {"plaguejar", "연쇄 폭발", "착탄 후 주변 2곳에 작은 단지(피해 40%)", {}, {}, {}, {splitJars = 2}},
-        {"plaguejar", "대역병", "반경 +40% · 잔여물 지속 +100%", {radius = 1.4, duration = 2}},
+        {"plaguejar", "대역병", "반경 +40% · 착탄 피해 +40%", {radius = 1.4, damage = 1.4}},
         {"catalyst", "불안정 혼합물", "쿨다운 40% 감소 · 반경 -15%", {interval = 0.6, radius = 0.85}},
         {"catalyst", "임계 반응", "반응 시 중독 전부 소모 · 소모 스택당 피해 +30%", {}, {}, {}, {reactionAll = true, reactionMul = 1.3}},
         {"boilingflask", "증기 구름", "반경 +45% · 지속 +50% · 투사체 속도 -25%", {radius = 1.45, duration = 1.5, speed = 0.75}},
         {"boilingflask", "과열", "타격 간격 -40% · 피해 +20%", {pulse = 0.6, damage = 1.2}},
         {"acidvials", "약병 폭우", "약병 +2개 · 범위 +20%", {monsoonRadius = 1.2}, {monsoonCount = 2}},
         {"acidvials", "농축 산성", "피해 +300% · 약병 1개 고정 · 개수 증가 효과는 피해 배율로 전환", {monsoonDamage = 4}, {}, {monsoonCount = 1}},
+        {"banshee", "비명의 합창", "소환 수 +1 · 지속 +40%", {duration = 1.4}, {count = 1}},
+        {"banshee", "혹한의 애가", "피해 +50% · 비명 반경 +40%", {damage = 1.5, radius = 1.4}},
+        {"shadowarcher", "잊힌 순찰대", "소환 수 +1 · 지속 +40%", {duration = 1.4}, {count = 1}},
+        {"shadowarcher", "침묵의 사수", "사격 간격 -30% · 피해 +30%", {pulse = 0.7, damage = 1.3}},
+        {"plaguezombie", "역병 행진", "소환 수 +1 · 지속 +40%", {duration = 1.4}, {count = 1}},
+        {"plaguezombie", "괴사 군체", "피해 +50% · 중독 +2스택", {damage = 1.5}, {}, {}, {poison = 2}},
+        {"experiment", "이중 실험", "소환 수 +1 · 피해 -20%", {damage = 0.8}, {count = 1}},
+        {"experiment", "완성된 괴물", "피해 +70% · 타격 반경 +30%", {damage = 1.7, radius = 1.3}},
     }
     for i, definition in ipairs(evolutions) do
         local weapon, id = definition[1], "evolution" .. i
@@ -182,7 +198,9 @@ do
     local slashPower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
     local frostPower, frostPierce = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, {2, 3, 3, 4, 5, 5, 6}
     local bonusKeys = {
-        set = {ember = true, storm = true, frost = true, blade = true, apothecary = true, gravewarden = true, apprentice = true},
+        set = {ember = true, storm = true, frost = true, blade = true, apothecary = true, gravewarden = true, apprentice = true,
+            commander = true, bombardier = true, destroyer = true, tracker = true,
+            pursuer = true, bulwark = true, mire = true, conductor = true},
         all = {damagePct = true, speedPct = true, areaPct = true, moveSpeed = true, extraProjectiles = true, duration = true, maxLife = true,
             projectileSpeedPct = true, projectileSizePct = true, projectileRangePct = true, projectileDurationPct = true},
         firebolt = {damagePct = true, speedPct = true, areaPct = true, extraProjectiles = true},
@@ -211,6 +229,22 @@ do
         local school = SurvivorConfig.elements[element]
         return "|cff" .. school.color .. "[" .. (labelled and school.label or element) .. "]|r"
     end
+    function SurvivorAugments.AttackTag(tag)
+        local color = assert(SurvivorConfig.weaponTagColors[tag], "Unknown weapon tag color")
+        return "|cff" .. color .. "[" .. tag .. "]|r"
+    end
+    function SurvivorAugments.WeaponTags(id)
+        local weapon = assert(SurvivorConfig.weapons[id], "Unknown weapon tags")
+        local tags = {SurvivorAugments.ElementTag(weapon.element, true)}
+        for _, tag in ipairs(weapon.tags) do
+            tags[#tags + 1] = SurvivorAugments.AttackTag(tag)
+        end
+        return table.concat(tags, " ")
+    end
+    function SurvivorAugments.Description(id)
+        local entry = catalog[id]
+        return entry.kind == "weapon" and SurvivorAugments.WeaponTags(id) .. "\n" .. entry.text or entry.text
+    end
     function SurvivorAugments.Level(build, id) return build.levels[id] or 0 end
     -- Trailing zeros are dropped so 30.0 reads as 30 and 2.40 as 2.4.
     local function StatNumber(value, decimals)
@@ -230,7 +264,7 @@ do
     end
     -- Weapons list shared stats in a fixed order (count, damage, range, area, duration, cooldown),
     -- followed by weapon-specific stats and notes.
-    local function WeaponTooltip(id, entry, stats)
+    local function WeaponRows(id, entry, stats)
         local kind, target = entry.text:match("^(.*) · (지상.*)$")
         assert(kind, "Weapon text must end with its target type")
         local hit = " (" .. target .. ")"
@@ -275,10 +309,14 @@ do
             end
         else
             local w = stats.extraWeapons[id]
-            rows = {{"피해", w.damage, 1, hit}, {"거리", w.range}, {"범위", w.radius},
-                {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"}}
-            if id == "meteor" then notes = {"잔불: 충돌 피해 20%/타격"}
-            elseif id == "plaguejar" then notes = {"잔여물: 충돌 피해 20%/타격"}
+            rows = {{"피해", w.damage, 1, hit}, {"거리", w.range}, {"범위", w.radius}}
+            if id ~= "meteor" and id ~= "plaguejar" then rows[#rows + 1] = {"지속 시간", w.duration, 2, "초"} end
+            rows[#rows + 1] = {"쿨다운", w.interval, 2, "초"}
+            if engine == "summon" then
+                rows[#rows + 1] = {"소환 수", math.min(w.cap, w.count)}
+                rows[#rows + 1] = {"공격 간격", w.pulse, 2, "초"}
+                notes = {"충돌 없음 · 지속 종료 시 사라짐 · 소환 상한 " .. w.cap}
+            elseif engine == "orb" then notes = {string.format("전이: 피해 %.0f%% · 주변 적 1명 · 간격 %.1f초 · 재전이 없음", w.chainFraction * 100, w.chainInterval)}
             elseif engine == "boomerang" then notes = {"귀환 후 남은 시간 동안 재발사"} end
         end
         local status = stats.status and stats.status[id]
@@ -296,7 +334,11 @@ do
         if stats.multiCount > 0 then
             rows[#rows + 1] = {"추가 공격", string.format("%d회 (개별 피해 %.0f%%)", stats.multiCount, stats.multiDamage * 100)}
         end
-        local lines = {SurvivorAugments.ElementTag(entry.element) .. " " .. kind}
+        return rows, notes, kind
+    end
+    local function WeaponTooltip(id, entry, stats)
+        local rows, notes, kind = WeaponRows(id, entry, stats)
+        local lines = {SurvivorAugments.WeaponTags(id), kind}
         StatLines(lines, rows)
         for _, note in ipairs(notes or {}) do lines[#lines + 1] = "※ " .. note end
         return table.concat(lines, "\n")
@@ -462,6 +504,7 @@ do
             local weapon = c.weapons[id]
             local view = EngineFields(weapon.engine, id, levels[id] or 0, base)
             view.weaponId, view.model, view.thrown, view.lightning = id, weapon.model, weapon.thrown, weapon.lightning
+            view.falling = weapon.falling
             view.throwSpeed = weapon.thrown and projectileSpeed or nil
             view.throwModel, view.throwScale, view.hitModel = weapon.throwModel, weapon.throwScale, weapon.hitModel
             result.views[id] = view
@@ -495,10 +538,14 @@ do
                 range = math.min(2500, profile.range * weaponRange), size = weaponSize,
                 duration = math.min(20, math.max(0.1, profile.duration + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife),
                 speed = profile.speed * (c.weapons[id].projectile and projectileSpeed or 1),
-                model = c.weapons[id].model, thrown = c.weapons[id].thrown,
+                model = c.weapons[id].model, thrown = c.weapons[id].thrown, falling = c.weapons[id].falling,
+                summonKind = c.weapons[id].summonKind,
+                count = profile.count and math.min(profile.cap, profile.count + (profile.countGrowth or 1) * math.floor(math.max(0, level - 1) / 6)) or 0,
+                cap = profile.cap or 0,
+                chainInterval = profile.chainInterval, chainRange = profile.chainRange, chainFraction = profile.chainFraction,
                 throwModel = c.weapons[id].throwModel, throwScale = c.weapons[id].throwScale,
                 modelScale = c.weapons[id].modelScale, opaque = c.weapons[id].opaque,
-                pulse = math.max(0.1, profile.pulse),
+                pulse = math.max(0.1, profile.pulse / (c.weapons[id].engine == "summon" and math.max(0.1, 1 + speed + Bonus(build, id, "speedPct")) or 1)),
                 slow = profile.slow, delay = 0.8,
                 slowDurationBonus = Bonus(build, id, "slowDuration"),
             }
@@ -512,6 +559,7 @@ do
             if entry.set.chainTargets then target.chainDamage = target.chainDamage * target.chainTargets / chainTargets[levels[weapon]] end
             if entry.set.monsoonCount then target.monsoonDamage = target.monsoonDamage * target.monsoonCount / monsoonCount[levels[weapon]] end
             for key, value in pairs(entry.set) do target[key] = value end
+            if target.cap and target.cap > 0 then target.count = math.min(target.cap, target.count) end
             if entry.mode then target.bladeEvolution = entry.mode end
             local status = result.status[weapon]
             for key, value in pairs(entry.status) do
@@ -724,20 +772,29 @@ do
         if level == 0 then return "|cff80ff80신규 " .. kind .. " · Lv.1|r" end
         return "|cffffdd7d" .. kind .. " 강화 · Lv." .. level .. " → " .. (level + 1) .. "|r"
     end
-    local function Delta(label, before, after, decimals, suffix)
-        local fmt = "%." .. (decimals or 0) .. "f"
-        suffix = suffix or ""
-        return label .. " " .. string.format(fmt, before) .. suffix .. " → |cff80ff80"
-            .. string.format(fmt, after) .. suffix .. "|r"
+    local function Delta(label, before, after, decimals, suffix, relative)
+        decimals, suffix = decimals or 0, suffix or ""
+        -- Preserve small real changes instead of rounding both sides to the same value.
+        while decimals < 4 and string.format("%." .. decimals .. "f", before) == string.format("%." .. decimals .. "f", after)
+            and before ~= after do decimals = decimals + 1 end
+        local change = relative and before > 0 and string.format(" (%+.1f%%)", (after / before - 1) * 100) or ""
+        change = change:gsub("%.0%%", "%%")
+        return label .. " " .. StatNumber(before, decimals) .. suffix .. " → |cff80ff80"
+            .. StatNumber(after, decimals) .. suffix .. change .. "|r"
     end
     function SurvivorAugments.Preview(id, build)
         if id == "recovery" then return "생명력 30% 회복\n무기·장신구 슬롯을 사용하지 않습니다." end
         local entry = catalog[id]
         if entry.kind == "evolution" then return "진화 선택 후 변경 불가" end
         if id == "multicast" then
-            local level = SurvivorAugments.Level(build, id) + 1
-            return Delta("추가 공격", build.stats.multiCount, multiCounts[level]) .. "\n"
-                .. Delta("추가 공격 피해", build.stats.multiDamage * 100, multiDamage[level] * 100, 0, "%")
+            local level, lines = SurvivorAugments.Level(build, id) + 1, {}
+            if build.stats.multiCount ~= multiCounts[level] then
+                lines[#lines + 1] = Delta("추가 공격", build.stats.multiCount, multiCounts[level], 0, "회")
+            end
+            if build.stats.multiDamage ~= multiDamage[level] then
+                lines[#lines + 1] = Delta("추가 공격 피해", build.stats.multiDamage * 100, multiDamage[level] * 100, 0, "%")
+            end
+            return table.concat(lines, "\n")
         end
         if id == "haste" then
             local level = SurvivorAugments.Level(build, id)
@@ -751,44 +808,42 @@ do
                 .. (id == "velocity" and not SurvivorAugments.HasProjectileWeapon(build)
                     and "\n|cffffcc00현재 적용 무기 없음|r" or "")
         end
-        local preview = {levels = {}, equipmentBonuses = build.equipmentBonuses, evolutions = build.evolutions}
+        local preview = {levels = {}, equipmentBonuses = build.equipmentBonuses,
+            talentTotals = build.talentTotals, evolutions = build.evolutions}
         for key, value in pairs(build.levels) do preview.levels[key] = value end
-        preview.levels[id] = (preview.levels[id] or 0) + 1
-        local old, new = build.stats, Calculate(preview)
-        local engine = SurvivorConfig.weapons[id].engine
-        if SurvivorConfig.extraWeapons[id] then
-            local a, b = old.extraWeapons[id], new.extraWeapons[id]
-            return Delta("피해", a.damage, b.damage, 1) .. "\n" .. string.format("쿨다운 %.2f초 · 지속 %.1f초", b.interval, b.duration)
-        end
-        old, new = old.views and old.views[id] or old, new.views[id] or new
-        if engine == "missile" then
-            return Delta("피해", old.missileDamage, new.missileDamage, 1) .. "\n"
-                .. Delta("발사 수", old.missileCount, new.missileCount)
-        elseif engine == "zone" then
-            if SurvivorAugments.Level(build, id) == 0 then
-                return string.format("피해 %.1f / 반경 %.0f\n%.1f초 지속 · 쿨다운 %.2f초", new.zoneDamage, new.zoneRadius, new.zoneDuration, new.zoneInterval)
+        local level = SurvivorAugments.Level(build, id)
+        preview.levels[id] = level + 1
+        local old, new = WeaponRows(id, entry, build.stats), WeaponRows(id, entry, Calculate(preview))
+        local before, lines = {}, {}
+        for _, row in ipairs(old) do before[row[1]] = row[2] end
+        -- First acquisition shows core performance; existing weapons show only real differences.
+        local core = { ["피해"] = true, ["투사체 수"] = true, ["최대 대상"] = true,
+            ["최대 관통"] = true, ["약병 수"] = true, ["낙뢰 수"] = true, ["소환 수"] = true,
+            ["쿨다운"] = true }
+        for _, row in ipairs(new) do
+            local label, value, decimals, suffix = row[1], row[2], row[3] or 0, row[4] or ""
+            if label == "피해" then
+                suffix = ""
+                if id == "meteor" or id == "plaguejar" then label = "충돌 피해"
+                elseif SurvivorConfig.weapons[id].engine == "summon" then label = "소환 피해" end
             end
-            return Delta("피해", old.zoneDamage, new.zoneDamage, 1) .. "\n"
-                .. Delta("반경", old.zoneRadius, new.zoneRadius) .. "\n"
-                .. Delta("지속", old.zoneDuration, new.zoneDuration, 1, "초")
-        elseif engine == "chain" then
-            return Delta("첫 피해", old.chainDamage, new.chainDamage, 1) .. "\n"
-                .. Delta("최대 대상", old.chainTargets, new.chainTargets) .. "\n대상별 1회 타격"
-        elseif engine == "orbit" then
-            return Delta("피해", old.bladeDamage, new.bladeDamage, 1) .. "\n"
-                .. Delta(id == "orbitblade" and "칼날 수" or "망령 수", old.bladeCount, new.bladeCount) .. "\n영웅과 함께 이동"
-        elseif engine == "strike" then
-            return Delta("피해", old.monsoonDamage, new.monsoonDamage, 1) .. "\n"
-                .. Delta(SurvivorConfig.weapons[id].thrown and "약병 수" or "낙뢰 수", old.monsoonCount, new.monsoonCount)
-        elseif engine == "cone" then
-            return Delta("피해", old.slashDamage, new.slashDamage, 1) .. "\n"
-                .. Delta("베기 각도", old.slashAngle, new.slashAngle, 0, "도")
-        elseif engine == "pierce" then
-            return Delta("피해", old.frostDamage, new.frostDamage, 1) .. "\n"
-                .. Delta("최대 관통", old.frostPierce, new.frostPierce)
-                .. (new.frostSlow > 0 and "\n이동 속도 30% 감소" or "")
+            if level == 0 then
+                if core[row[1]] and type(value) == "number" and value > 0 then
+                    lines[#lines + 1] = label .. " " .. StatNumber(value, decimals) .. suffix
+                end
+            else
+                local previous = before[row[1]]
+                if type(value) == "number" then
+                    previous = previous or 0
+                    if math.abs(value - previous) > 0.0000001 then
+                        lines[#lines + 1] = Delta(label, previous, value, decimals, suffix, row[1] == "피해")
+                    end
+                elseif value ~= previous then
+                    lines[#lines + 1] = label .. " " .. tostring(previous or "없음") .. " → |cff80ff80" .. value .. "|r"
+                end
+            end
         end
-        return entry.text
+        return #lines > 0 and table.concat(lines, "\n") or "현재 적용 수치 변화 없음"
     end
     function SurvivorAugments.Apply(id, build, hero)
         if id == "recovery" then

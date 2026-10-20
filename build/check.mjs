@@ -7,15 +7,20 @@ import zlib from 'node:zlib';
 import fengari from 'fengari';
 import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo, mapInfo,
     parseUnits, serializeUnits, installPortraitUnits, portraitUnits, validatePortraitObjects, publishTransaction, editorBundle,
+    installBonusUnits, bonusUnits, prepareBonusUnits, installEnemyCombatFields, installBonusItems, bonusItems, prepareBonusItems,
     parseObjectData, serializeObjectData, installStatDetails, prepareStatDetails, statDisplays, statDetailRows, installInterfaceTooltip, installHeroRegeneration,
     prepareHeroRegeneration, validateStrengthRegeneration, loadTalentCatalog, talentLua, installNativeTalents,
     prepareNativeTalents, loadItemTooltipCatalog, loadWeaponTooltipCatalog, cleanWeaponTooltipEntries,
-    installGrowthObjects, weaponObjectPattern, weaponObjectCount, putressWeaponObjects, installPutressHero, putressHero,
+    installGrowthObjects, weaponObjectPattern, weaponObjectCount, additionalWeaponObjects, installPutressHero, putressHero,
     cleanItemTooltipText, cleanItemTooltipEntries, prepareItemTooltipCleanup,
     removeGoldObjectData, removeGoldStrings, removeGoldMisc,
     prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, installGameInterfaceLabel, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
 import {syncBase} from './sync-base.mjs';
+const testArgs = process.argv.slice(2);
+assert(testArgs.length === 0 || testArgs.length === 2 && testArgs[0] === '--input', 'Usage: npm test -- --input <test-map>');
+const testMapPath = testArgs.length ? path.resolve(testArgs[1]) : path.join(root, 'dist/AnyasLongNight-playtest.w3x');
+console.log('Verifying test map:', testMapPath);
 const {lua, lauxlib, lualib, to_luastring, to_jsstring} = fengari;
 const talentCatalog = loadTalentCatalog();
 function suite(name, before, files, after) {
@@ -38,6 +43,7 @@ ALICE_Config = {MIN_INTERVAL = 0.02}
 ALICE_Initialized = true
 bj_DEGTORAD, bj_RADTODEG = math.pi / 180, 180 / math.pi
 UNIT_TYPE_FLYING, EVENT_PLAYER_UNIT_DEATH, EVENT_PLAYER_UNIT_DAMAGED = "flying", "death", "damage"
+EVENT_PLAYER_UNIT_PICKUP_ITEM = "pickup"
 UNIT_STATE_MANA, UNIT_STATE_MAX_MANA = "mana", "maxMana"
 UNIT_RF_HIT_POINTS_REGENERATION_RATE = 'uhpr'
 function FourCC(x) return x end
@@ -112,6 +118,9 @@ function AddSpecialEffect(model,x,y) return {model=model,x=x,y=y} end
 function AddSpecialEffectTarget(model,u) return AddSpecialEffect(model,u.x,u.y) end
 function DestroyEffect(e) assert(not e.destroyed); e.destroyed=true end
 function DestroyLightning(e) assert(not e.destroyed); e.destroyed=true end
+function AddLightningEx(kind,visible,x,y,z,tx,ty,tz)return {kind=kind,x=x,y=y,z=z,tx=tx,ty=ty,tz=tz}end
+ANIM_TYPE_ATTACK,ANIM_TYPE_WALK,ANIM_TYPE_STAND='attack','walk','stand'
+function BlzPlaySpecialEffect(effect,animation)effect.animation=animation end
 function ALICE_Create(o) actors[#actors+1]=o end
 function ALICE_Kill(o) if o.destroy then o:destroy() end end
 function ALICE_RemoveIdentifier() end
@@ -199,6 +208,276 @@ const config = 'src/00_bootstrap/SurvivorConfig.lua';
 const metrics = 'src/20_system/SurvivorMetrics.lua';
 const augments = 'src/20_system/SurvivorAugments.lua';
 const combat = 'src/30_gameplay/SurvivorCombat.lua';
+
+suite('breakable supplies spawn on accessible ground, reward once, pause and clean without enemy kills', mocks + String.raw`
+PATHING_TYPE_WALKABILITY,PLAYER_NEUTRAL_PASSIVE='walk',24
+local angle=0
+function GetRandomReal(a,b)if b==2*math.pi then angle=angle+math.pi/2;return angle end;return a end
+bonusRoll,bonusRollCalls=1,0
+function GetRandomInt()bonusRollCalls=bonusRollCalls+1;return bonusRoll end
+function IsTerrainPathable()return blocked==true end
+function ALICE_AddIdentifier(u,id)u.identifier=id end
+function ALICE_RemoveIdentifier(u)u.identifier=nil end
+function BlzSetUnitName(u,name)u.name=name end
+function GetTriggerUnit()return eventUnit end
+function GetEventDamage()return eventDamage end
+function GetEventDamageSource()return eventSource end
+function BlzSetEventDamage(amount)eventDamage=amount end
+function GetItemX(item)return item.x end
+function GetItemY(item)return item.y end
+function GetManipulatedItem()return eventItem end
+function UnitDamageTarget(source,u,amount)
+    eventUnit,eventSource,eventDamage=u,source,amount
+    for _,t in ipairs(triggers)do if not t.destroyed and t.event=='damage'then t.action()end end
+    hits[#hits+1]={unit=u,damage=eventDamage};u.life=math.max(0,u.life-eventDamage)
+    if u.life==0 then for _,t in ipairs(triggers)do if not t.destroyed and t.event=='death'then t.action()end end end
+end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local rewards,kills,deaths={},0,0
+SetLocal(SurvivorCombat.Init,'onBonus',function(kind)rewards[#rewards+1]=kind end)
+SetLocal(SurvivorCombat.Init,'onKill',function()kills=kills+1 end)
+SetLocal(SurvivorCombat.Init,'onDeath',function()deaths=deaths+1 end)
+local update=Local(SurvivorCombat.UpdateEnemies,'UpdateBonuses')
+local hit=Local(SurvivorCombat.FireMissile,'Hit')
+local function Props()local list={};for u,r in pairs(units)do if r.bonus and r.alive then list[#list+1]=u end end;return list end
+local items=Local(SurvivorCombat.Init,'bonusItems')
+local function OnlyItem()local item=next(items);assert(item and next(items,item)==nil);return item end
+local function Pickup(item,unit)
+    eventUnit,eventItem=unit or hero,item
+    Local(SurvivorCombat.Init,'bonusPickupTrigger').action()
+end
+now=19;SurvivorCombat.UpdateEnemies(now);assert(#Props()==0)
+state='CHOOSING';now=20;SurvivorCombat.UpdateEnemies(now);assert(#Props()==0)
+state='RUNNING';blocked=true;SurvivorCombat.UpdateEnemies(now);assert(#Props()==0)
+blocked=false;now=25;SurvivorCombat.UpdateEnemies(now)
+local prop=Props()[1];assert(prop and prop.identifier=='hsEnemy' and prop.owner==24 and prop.paused)
+assert(prop.life==2 and SurvivorCombat.Counts()==0 and units[prop].bonus==true)
+local propType,propName=prop.id,prop.name
+assert(propType==SurvivorConfig.bonusProps.unitId and propName==SurvivorConfig.bonusProps.name and bonusRollCalls==0,
+    'One common prop has no reward classification and does not roll at spawn')
+assert((prop.x-hero.x)^2+(prop.y-hero.y)^2>=SurvivorConfig.bonusProps.distanceMin^2)
+UnitDamageTarget(CreateUnit(12,'enemy',0,0,0),prop,999);assert(prop.life==2,'Enemies cannot break supplies')
+state='CHOOSING';UnitDamageTarget(hero,prop,999);assert(prop.life==2)
+SurvivorCombat.SetPaused(true);SurvivorCombat.SetPaused(false);assert(prop.paused)
+state='RUNNING';SurvivorCombat.FireMissile();assert(actors[#actors].target==prop,'Homing weapons select supplies')
+hit(prop,999,'firebolt');assert(prop.life==1 and #rewards==0)
+hit(prop,999,'firebolt');assert(prop.life==0 and #rewards==0,'Destruction drops an item without granting its reward')
+local drop=OnlyItem();assert(drop.id==SurvivorConfig.bonusProps.recovery.itemId and drop.x==prop.x and drop.y==prop.y)
+assert(bonusRollCalls==1,'Choose the reward only on destruction')
+assert(kills==0 and deaths==0 and SurvivorCombat.Counts()==0,'Supplies do not invoke kill, drop or hero-death callbacks')
+assert(SurvivorCombat.DamageRows({'firebolt'})[1].damage==0,'Supplies do not inflate weapon damage')
+Local(SurvivorCombat.Init,'deathTrigger').action();assert(OnlyItem()==drop and bonusRollCalls==1,'Repeated deaths cannot duplicate or reroll drops')
+SurvivorCombat.UpdateWeapons(.02);assert(#rewards==0 and not drop.removed,'A distant drop waits for collection')
+hero.inventory={};for i=1,6 do hero.inventory[i]=CreateItem('occupied',0,0)end
+hero.x,hero.y=drop.x+SurvivorConfig.bonusProps.pickupRadius,drop.y
+SurvivorCombat.UpdateWeapons(.02)
+assert(drop.removed and next(items)==nil and #rewards==1 and rewards[1]=='recovery','Approach consumes the reward even with a full inventory')
+Pickup(drop);assert(#rewards==1,'Manual pickup after proximity cannot award twice')
+hero.x,hero.y=0,0
+now=25.5;SurvivorCombat.UpdateEnemies(now);assert(prop.removed and #Props()==0)
+bonusRoll=31;now=60;SurvivorCombat.UpdateEnemies(now);prop=Props()[1]
+assert(units[prop].bonus==true and prop.id==propType and prop.name==propName and bonusRollCalls==1,
+    'Spawn appearance and name cannot reveal the future drop')
+local marker=units[prop].cosmetic
+-- Keep spawning under control to inspect expiry and pause independently.
+SetLocal(update,'nextBonusAt',10000)
+state='INVENTORY';now=120;SurvivorCombat.UpdateEnemies(now);assert(not prop.removed)
+state='RUNNING';SurvivorCombat.UpdateEnemies(now);assert(prop.removed and marker.destroyed and #rewards==1)
+SurvivorCombat.BeginStage(2,120);assert(Local(update,'nextBonusAt')==140)
+now=140;SurvivorCombat.UpdateEnemies(now);assert(#Props()==1)
+now=175;SurvivorCombat.UpdateEnemies(now);assert(#Props()==2 and SurvivorCombat.Counts()==0)
+now=195;SurvivorCombat.UpdateEnemies(now);assert(#Props()==2,'Live supply limit is independent of enemies')
+prop=Props()[1];hit(prop,99,'firebolt');hit(prop,99,'firebolt');drop=OnlyItem()
+state='STAGE_CLEAR';local completed=false
+SurvivorCombat.ClearBattlefieldAsync(function()completed=true end)
+while SurvivorCombat.IsClearing()do TickTimers()end
+assert(completed and #Props()==0 and #rewards==1 and drop.removed,'Stage cleanup removes drops without a reward')
+state='RUNNING';SurvivorCombat.BeginStage(3,200);bonusRoll=1;now=220;SurvivorCombat.UpdateEnemies(now);prop=Props()[1]
+bonusRoll=31 -- Changing the roll after spawn must change the drop at destruction.
+hit(prop,99,'firebolt');hit(prop,99,'firebolt');drop=OnlyItem()
+assert(drop.id==SurvivorConfig.bonusProps.experienceProp.itemId and prop.id==propType)
+Pickup(drop,CreateUnit(12,'other',0,0,0));assert(#rewards==1 and not drop.removed)
+Pickup(drop);assert(drop.removed and #rewards==2 and rewards[2]=='experienceProp','Direct pickup grants XP without requiring proximity')
+Pickup(drop);assert(#rewards==2)
+local makeDrop=Local(SurvivorCombat.Init,'DropBonusItem')
+makeDrop('recovery',400,0);drop=OnlyItem()
+state='CHOOSING';Pickup(drop);RemoveItem(drop) -- Emulate native automatic powerup consumption after the event.
+SurvivorCombat.UpdateWeapons(.02);assert(#rewards==2 and items[drop].pending)
+state='RUNNING';SurvivorCombat.UpdateWeapons(.02);assert(#rewards==3 and next(items)==nil,'Paused native pickup resumes exactly once even after native removal')
+makeDrop('experienceProp',400,0);drop=OnlyItem()
+now=280;SurvivorCombat.UpdateWeapons(.02);assert(drop.removed and #rewards==3,'Expired drops grant nothing')
+makeDrop('recovery',400,0);drop=OnlyItem()
+SurvivorCombat.BeginStage(4,280);assert(drop.removed and #rewards==3)
+makeDrop('experienceProp',400,0);drop=OnlyItem()
+local pickupTrigger=Local(SurvivorCombat.Init,'bonusPickupTrigger')
+SurvivorCombat.Cleanup();assert(prop.removed and drop.removed and pickupTrigger.destroyed and #rewards==3)
+hero,build,units=NewCombat('plaguedart');update=Local(SurvivorCombat.UpdateEnemies,'UpdateBonuses')
+now=20;SurvivorCombat.UpdateEnemies(now);assert(#Props()==1,'Restart resets the supply schedule')
+SurvivorCombat.CastWeapon('plaguedart');assert(actors[#actors].identifier=='hsFrostShard','Putress attacks supplies too')
+SurvivorCombat.ClearBattlefield();assert(#Props()==0)
+now=SurvivorConfig.StageTiming(1).bossStart;SurvivorCombat.UpdateEnemies(now)
+assert(#Props()==0,'No new supplies appear during the boss encounter')
+SurvivorCombat.Cleanup()
+`);
+
+suite('bonus rolls implement exactly 30 healing, 60 experience, 5 purge and 5 time stop outcomes', mocks + String.raw`
+function GetRandomInt(a,b)assert(a==1 and b==100);return roll end
+`, [config,metrics,augments,combat], String.raw`
+local choose=Local(SurvivorCombat.Init,'RollBonus')
+local counts={recovery=0,experienceProp=0,purge=0,timeStop=0}
+for i=1,100 do roll=i;local kind=choose();counts[kind]=counts[kind]+1
+    assert(kind==(i<=30 and 'recovery' or i<=90 and 'experienceProp' or i<=95 and 'purge' or 'timeStop'))
+end
+assert(counts.recovery==30 and counts.experienceProp==60 and counts.purge==5 and counts.timeStop==5)
+`);
+
+suite('purge kills nearby ordinary and elite enemies, spares props and caps boss damage without death procs', mocks + String.raw`
+function GetTriggerUnit()return eventUnit end
+function KillUnit(u)
+    u.life=0;eventUnit=u
+    for _,t in ipairs(triggers)do if not t.destroyed and t.event=='death'then t.action()end end
+end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local near=EnemyAt(units,100,0,false)
+local elite=EnemyAt(units,400,0,false);units[elite].elite=true
+local edge=EnemyAt(units,700,0,false)
+local far=EnemyAt(units,701,0,false)
+local boss=EnemyAt(units,600,0,false);units[boss].boss=true;boss.maxLife=1000;boss.life=1000
+local prop=CreateUnit(24,'hsBC',100,50,0);prop.life=2;units[prop]={bonus=true,alive=true}
+build.stats.sets.gravewarden=true
+for _,u in ipairs({near,elite,edge})do units[u].curse=3;units[u].curseUntil=10;units[u].lastHit=100000;units[u].lastWeapon='firebolt'end
+local kills=0;SetLocal(SurvivorCombat.Init,'onKill',function()kills=kills+1 end)
+assert(SurvivorCombat.PurgeNearby()==3 and kills==3 and near.life==0 and elite.life==0 and edge.life==0)
+assert(far.life==far.maxLife and prop.life==2 and hero.life==hero.maxLife,'No bonus or out-of-range target is killed by secondary death effects')
+assert(boss.life==900 and units[boss].alive and SurvivorCombat.Counts()==2)
+assert(SurvivorCombat.DamageRows({'firebolt'})[1].damage==0,'Item kills are not attributed to the last weapon')
+boss.life=50;assert(SurvivorCombat.PurgeNearby()==0 and boss.life==1 and units[boss].alive)
+state='CHOOSING';boss.life=100;assert(SurvivorCombat.PurgeNearby()==0 and boss.life==100)
+SurvivorCombat.Cleanup()
+`);
+
+suite('time stop preserves enemy missiles, hazards and special clocks for eight seconds while friendly weapons continue', mocks + String.raw`
+PATHING_TYPE_WALKABILITY,PLAYER_NEUTRAL_AGGRESSIVE='walk',12
+function GetRandomInt(a,b)return a end
+function GetRandomReal(a,b)return a end
+function IsTerrainPathable()return false end
+function BlzSetUnitName(u,n)u.name=n end
+function BlzSetUnitBaseDamage(u,d)u.damage=d end
+function BlzGetUnitAttackCooldown()return 1.5 end
+function BlzSetUnitAttackCooldown(u,v)u.attackCooldown=v end
+function SetUnitScale()end
+function SetUnitVertexColor(u,r,g,b,a)u.color={r,g,b,a}end
+function SetUnitCreepGuard()end
+function RemoveGuardPosition()end
+function SetUnitFacing()end
+function SetUnitAnimation()end
+function ALICE_AddIdentifier()end
+function IssueTargetOrder(u,o)u.order=o end
+function IssuePointOrder(u,o)u.order=o end
+function GetUnitCurrentOrder(u)return u.order or 'attack'end
+function OrderId(x)return x end
+function SetUnitTimeScale(u,s)u.timeScale=s end
+function BlzSetSpecialEffectTimeScale(e,s)e.timeScale=s end
+SurvivorStage.Get=function()return{ids={melee='sm01',ranged='sr01',boss='sb01'},color={180,220,185}}end
+function GetTriggerUnit()return eventUnit end
+function GetEventDamage()return eventDamage end
+function GetEventDamageSource()return eventSource end
+function BlzSetEventDamage(d)eventDamage=d end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,400,0,false);units[source].damageScale=1
+units[source].baseColor={210,150,90,220}
+units[source].nextShot,units[source].nextBlast,units[source].nextTrait,units[source].supportAt=2,3,4,5
+local elite=EnemyAt(units,600,0,false);units[elite].elite=true;units[elite].damageScale=1
+units[elite].baseColor={120,200,180,255}
+local boss=EnemyAt(units,700,0,false);units[boss].boss=true;units[boss].nextBlast=100
+units[boss].baseColor={180,100,230,255}
+local fire=Local(SurvivorCombat.UpdateEnemies,'FireEnemyMissile')
+fire(source,{projectileSpeed=420,damage=12});local missile=actors[#actors]
+local warn=Local(SurvivorCombat.WarnLava,'WarnBossBlast');warn(0,0,200,1.8,true);local blast=actors[#actors]
+Local(SurvivorCombat.UpdateEnemies,'WarnPlague')(source,units[source]);local plague=actors[#actors]
+Local(SurvivorCombat.UpdateEnemies,'StartSpecial')('dash',units[elite],elite);local dash=actors[#actors]
+SurvivorCombat.FireMissile();local friendly=actors[#actors];assert(friendly.identifier=='hsMissile')
+SurvivorCombat.StopTime()
+assert(source.paused and elite.paused and boss.paused and not hero.paused and not build.stats.combatPaused)
+assert(source.timeScale==0 and missile.visual.timeScale==0 and blast.markers[1].timeScale==0)
+assert(source.color[1]==94 and source.color[2]==67 and source.color[3]==40 and source.color[4]==220)
+assert(boss.color[1]==81 and elite.color[1]==54 and hero.color==nil,'Only stopped enemies are dimmed; original colors and alpha remain distinct')
+local mx,my,life=missile.x,missile.y,missile.life
+for i=1,30 do missile:selfInteractions();blast:selfInteractions();plague:selfInteractions();dash:selfInteractions()end
+assert(missile.x==mx and missile.y==my and missile.life==life and blast.life==1.8 and plague.elapsed==0 and dash.elapsed==0)
+local fx=friendly.x;friendly:selfInteractions();assert(friendly.x~=fx,'Friendly projectiles continue moving')
+local hit=Local(SurvivorCombat.FireMissile,'Hit');local hp=source.life;hit(source,10,'firebolt');assert(source.life<hp,'Frozen enemies can still be attacked')
+eventUnit,eventSource,eventDamage=hero,source,20;Local(SurvivorCombat.Init,'damageTrigger').action();assert(eventDamage==0,'Native enemy attacks cannot land during stop')
+now=.5;Local(SurvivorCombat.CastExtra,'Freeze')(source,.8)
+state='CHOOSING';SurvivorCombat.SetPaused(true,'CHOICE');SurvivorCombat.UpdateWeapons(.02)
+SurvivorCombat.SetPaused(false);state='RUNNING'
+assert(source.paused and missile.visual.timeScale==0 and friendly.visual.timeScale==1)
+assert(source.color[1]==94 and boss.color[1]==81,'Menu pause does not clear or compound the tint')
+now=2;SurvivorCombat.UpdateWeapons(.02)
+assert(boss.paused and boss.timeScale==0 and units[boss].nextBlast==100,'Boss motion must remain stopped after one second')
+assert(source.paused and units[source].freezeUntil==nil,'Expiring weapon freeze must not release time stop')
+now=3;local ok,late=SurvivorCombat.Spawn(false,'melee');assert(ok and late.paused and late.timeScale==0)
+assert(late.color[1]==81 and late.color[2]==99 and late.color[3]==83)
+local bossOK,lateBoss=SurvivorCombat.SpawnBoss();assert(bossOK and lateBoss.paused and lateBoss.color[1]==81)
+local courier=SurvivorCombat.SpawnCourier({{x=100,y=100},{x=500,y=100}})
+assert(courier.paused and courier.color[1]==105 and courier.color[2]==94 and units[courier].baseColor[1]==235,
+    'A courier spawned during time stop keeps its new gold base color underneath the dimming')
+local dying=EnemyAt(units,900,0,false);units[dying].baseColor={80,160,240,255}
+Local(SurvivorCombat.StopTime,'StopUnitTime')(dying,units[dying],8)
+assert(dying.color[1]==36);dying.life=0;eventUnit=dying;Local(SurvivorCombat.Init,'deathTrigger').action()
+assert(dying.color[1]==80 and dying.timeScale==1,'A unit killed during stop restores its death animation and color')
+local lateShot=units[late].nextShot
+fire(source,{projectileSpeed=420,damage=12});local lateMissile=actors[#actors]
+local lx=lateMissile.x;lateMissile:selfInteractions();assert(lateMissile.x==lx and lateMissile.visual.timeScale==0)
+now=7.99;SurvivorCombat.UpdateWeapons(.02);assert(source.paused and late.paused and boss.paused and lateBoss.paused)
+now=8;SurvivorCombat.UpdateWeapons(.02)
+assert(not source.paused and not late.paused and source.timeScale==1 and missile.visual.timeScale==1)
+assert(not boss.paused and not lateBoss.paused and units[boss].nextBlast==108,'Both existing and new bosses resume at eight seconds')
+assert(source.color[1]==210 and source.color[2]==150 and source.color[3]==90 and source.color[4]==220)
+assert(boss.color[1]==180 and late.color[1]==180 and courier.color[1]==235 and courier.color[2]==210,
+    'Expiry restores each original theme, boss and courier color')
+assert(units[source].nextShot==10 and units[source].nextBlast==11 and units[source].nextTrait==12 and units[source].supportAt==13)
+assert(math.abs(units[late].nextShot-lateShot-5)<1e-9,'New enemies retain their own remaining attack delays')
+missile:selfInteractions();blast:selfInteractions();plague:selfInteractions();dash:selfInteractions()
+assert(missile.x~=mx and missile.life<life and blast.life<1.8 and plague.elapsed>0 and dash.elapsed>0)
+-- Refresh to eight remaining seconds, preserving pre-existing native pauses.
+late.paused=true;now=9;SurvivorCombat.StopTime();now=10;SurvivorCombat.StopTime()
+assert(source.color[1]==94 and boss.color[1]==81,'Repeated pickups cannot darken colors cumulatively')
+now=17.99;SurvivorCombat.UpdateWeapons(.02);assert(source.paused)
+now=18;SurvivorCombat.UpdateWeapons(.02);assert(not source.paused and late.paused and source.color[1]==210 and late.color[1]==180)
+now=19;SurvivorCombat.StopTime();state='STAGE_CLEAR';SurvivorCombat.SetPaused(true,'STAGE_CLEAR')
+SurvivorCombat.ClearBattlefield();assert(Local(SurvivorCombat.StopTime,'timeStopUntil')==0 and source.color[1]==210)
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('firebolt');source=EnemyAt(units,400,0,false)
+assert(Local(SurvivorCombat.StopTime,'timeStopUntil')==0 and not source.paused,'Restart cannot inherit time stop')
+SurvivorCombat.Cleanup()
+`);
+
+suite('supply rewards cap healing and use suspended native XP with deferred multi-level choices', mocks + String.raw`
+OnInit={final=function()end}
+function GetHeroLevel(u)return u.level or 1 end
+function GetHeroSkillPoints()return 0 end
+function SuspendHeroXP(u,on)u.xpSuspended=on end
+function AddHeroXP(u,amount)assert(not u.xpSuspended);u.xp=(u.xp or 0)+amount;u.level=4 end
+purges,stops=0,0
+SurvivorCombat={PurgeNearby=function()purges=purges+1;return 2 end,StopTime=function()stops=stops+1 end}
+`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
+local reward=Local(HeroSurvivor.BeginRun,'BonusReward')
+local hero=CreateUnit(0,'hero',0,0,0);hero.maxLife=500;hero.life=200
+SetLocal(reward,'hero',hero);SetLocal(reward,'stage',1)
+reward('recovery');assert(hero.life==300)
+hero.life=480;reward('recovery');assert(hero.life==500 and lastMessage:find('+20',1,true))
+hero.life=500;reward('recovery');assert(hero.life==500)
+state='CHOOSING';reward('experienceProp');assert(not hero.xp)
+state='RUNNING';reward('experienceProp')
+assert(hero.xp==250 and hero.xpSuspended and #Local(reward,'queuedLevels')==3 and state=='RUNNING')
+SetLocal(reward,'stage',5);reward('experienceProp');assert(hero.xp==650 and #Local(reward,'queuedLevels')==3)
+reward('purge');reward('timeStop');assert(purges==1 and stops==1 and hero.xp==650,'Rare effects must not grant XP rewards')
+hero.life=0;reward('recovery');reward('experienceProp');assert(hero.life==0 and hero.xp==650)
+`);
 
 suite('each stage spawns its boss at the configured minute and times out one minute later', mocks + String.raw`
 OnInit={final=function()end}
@@ -818,7 +1097,7 @@ SurvivorCombat.UpdateEnemies(.5);assert(units[shielded].shieldSource==nil)
 SurvivorCombat.Cleanup()
 `);
 
-suite('meteor impact replaces the flame column while preserving impact damage and lingering pulses', mocks,
+suite('meteor deals one impact with a cosmetic explosion and never creates lingering damage', mocks,
     [config,metrics,augments,combat], String.raw`
 local hero,build,units=NewCombat('meteor')
 local target=EnemyAt(units,100,0,false)
@@ -827,16 +1106,461 @@ local meteor=actors[#actors]
 assert(meteor.identifier=='hsMeteor' and meteor.visual.model==SurvivorConfig.meteorModel)
 local w=meteor.profile
 meteor.life=.001;meteor.selfInteractions(meteor)
-local zone=actors[#actors]
-assert(meteor.cleaned and zone.weapon=='meteor'
-    and zone.visual.model==[[Objects\Spawnmodels\Other\NeutralBuildingExplosion\NeutralBuildingExplosion.mdl]])
-assert(zone.life==w.duration and zone.damage==w.damage*.2 and zone.radius==w.radius)
+local impact=actors[#actors]
+assert(meteor.cleaned and impact.weapon=='meteor' and impact.identifier=='hsMeteorImpact'
+    and impact.visual.model==[[Objects\Spawnmodels\Other\NeutralBuildingExplosion\NeutralBuildingExplosion.mdl]])
+assert(impact.damage==nil and impact.life==.6)
 assert(#hits==1 and hits[1].damage==w.damage,'Landing still deals its full impact damage')
-zone.selfInteractions(zone)
-assert(#hits==2 and hits[2].damage==w.damage*.2,'The impact effect retains the lingering damage callback')
-Local(meteor.selfInteractions,'NewZone')('flamefield',0,0,w,w.damage)
+state='CHOOSING';local life=impact.life;impact.selfInteractions(impact);assert(impact.life==life and #hits==1)
+state='RUNNING'
+for _=1,40 do if not impact.cleaned then impact.selfInteractions(impact)end end
+assert(impact.cleaned and #hits==1,'The impact visual expires without any extra hits')
+for _,actor in ipairs(actors)do assert(actor.identifier~='hsExtraZone','Meteor must not register a zone')end
+Local(SurvivorCombat.CastExtra,'NewZone')('flamefield',0,0,w,w.damage)
 assert(actors[#actors].visual.model==SurvivorConfig.zoneModel,'Other flame zones retain their own effect')
 SurvivorCombat.Cleanup()
+`);
+
+suite('both cone weapons aim at the nearest eligible enemy, fall back to facing and lock the cast direction', mocks,
+    [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'frontslash','corrosion'})do
+    local hero,build,units=NewCombat(weapon)
+    local function Cast()
+        SurvivorCombat.CastWeapon(weapon)
+        local area,visual
+        for _,actor in ipairs(actors)do
+            if actor.identifier=='hsSlashArea'then area=actor end
+            if actor.identifier=='hsSlash'or actor.identifier=='hsBreath'then visual=actor end
+        end
+        assert(area and area.weapon==weapon,weapon..' produced '..tostring(area and area.weapon)..' across '..#actors..' actors')
+        assert(visual and visual.facing==area.facing,'Visual and hit cone share one direction')
+        return area
+    end
+    hero.facing=90
+    local view=weapon=='frontslash'and build.stats or build.stats.views[weapon]
+    view.slashDuration=.5 -- Exercise the lingering variant as well as its immediate hit.
+    local radius=view.slashRange
+    local far=EnemyAt(units,radius+100,0,false)
+    local area=Cast();assert(math.abs(area.facing-math.pi/2)<1e-9 and #hits==0,'No close enemy: retain facing')
+    local dead=EnemyAt(units,1,0,false);dead.life=0
+    local flying=EnemyAt(units,2,0,true)
+    local prop=CreateUnit(24,'hsBC',3,0,0);units[prop]={bonus=true,alive=true}
+    area=Cast();assert(math.abs(area.facing-math.pi/2)<1e-9,'Dead, flying and bonus actors cannot redirect ground cones')
+    local target=EnemyAt(units,-50,0,false)
+    local other=EnemyAt(units,0,100,false)
+    local before=#hits
+    area=Cast();assert(math.abs(math.abs(area.facing)-math.pi)<1e-9 and #hits==before+1 and hits[#hits].unit==target,
+        'A nearby enemy behind the hero takes priority over current facing and farther targets')
+    local facing=area.facing
+    target.x,target.y=50,0;hero.facing=0
+    area.selfInteractions(area)
+    assert(area.facing==facing and #hits==before+1,'A lingering cone never retargets or hits the same target twice')
+    state='CHOOSING';local count=#actors;SurvivorCombat.CastWeapon(weapon);assert(#actors==count)
+    state='RUNNING';SurvivorCombat.Cleanup()
+end
+`);
+
+suite('weapon tags match delivery types and meteor growth and evolutions describe impact only', mocks,
+    [config,metrics,augments], String.raw`
+local melee={orbitblade=true,frontslash=true,wraithguard=true,corrosion=true}
+local counts,total={},0
+for id,weapon in pairs(SurvivorConfig.weapons)do
+    total=total+1
+    local text=SurvivorAugments.WeaponTags(id)
+    local seen={}
+    for _,tag in ipairs(weapon.tags)do
+        assert(not seen[tag] and tag~='회전' and tag~='전방');seen[tag]=true
+        counts[weapon.hero]=counts[weapon.hero] or {};counts[weapon.hero][tag]=(counts[weapon.hero][tag] or 0)+1
+        assert(text:find('['..tag..']',1,true))
+    end
+    assert((seen['근접']==true)==(melee[id]==true))
+    assert(not seen['투사체'],'Broad projectile tag is replaced by homing/piercing roles')
+    local build=SurvivorAugments.NewBuild(id,nil,weapon.hero)
+    assert(SurvivorAugments.Description(id):find(text,1,true)==1)
+    assert(SurvivorAugments.OwnedTooltip(id,build):find(text,1,true)==1)
+end
+assert(total==28)
+for _,hero in ipairs({'anya','putress'})do
+    local categories=0;for _,count in pairs(counts[hero])do assert(count==2);categories=categories+1 end
+    assert(categories==8,'Every hero has eight attack tags, each shared by exactly two weapons')
+end
+local build=SurvivorAugments.NewBuild('meteor')
+for level=1,7 do
+    build.levels.meteor=level;SurvivorAugments.Recalculate(build)
+    local text=SurvivorAugments.OwnedTooltip('meteor',build)
+    assert(text:find('[낙하]',1,true) and not text:find('[장판]',1,true))
+    assert(not text:find('잔불',1,true) and not text:find('지속 시간',1,true))
+    if level<7 then local preview=SurvivorAugments.Preview('meteor',build);assert(not preview:find('지속',1,true))end
+end
+local base=build.stats.extraWeapons.meteor.damage
+for _,evolution in ipairs({'evolution19','evolution20'})do
+    build.evolutions.meteor=evolution;SurvivorAugments.Recalculate(build)
+    local text=SurvivorAugments.OwnedTooltip('meteor',build)
+    assert(not text:find('잔불',1,true) and not text:find('지속 시간',1,true))
+    assert(math.abs(build.stats.extraWeapons.meteor.damage-base*(evolution=='evolution19'and 1.8 or 1.4))<1e-9)
+end
+`);
+
+suite('summons grow through seven levels, stay capped, attack for their owner and clean across pause and restart', mocks + String.raw`
+function SetUnitVertexColor()end
+`, [config,metrics,augments,combat,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+local ids={banshee='HsWP',shadowarcher='HsWQ',plaguezombie='HsWR',experiment='HsWS'}
+for weapon,raw in pairs(ids)do
+    local hero,build,units=NewCombat(weapon)
+    local other=build.hero=='anya'and SurvivorAugments.NewBuild('plaguedart',nil,'putress')or SurvivorAugments.NewBuild('firebolt',nil,'anya')
+    assert(not SurvivorAugments.CanChoose(weapon,other),'Summons stay in their owning hero growth pool')
+    SurvivorNativeLoadout.Init(hero,build)
+    for level=1,7 do
+        if level>1 then SurvivorAugments.Apply(weapon,build,hero);SurvivorNativeLoadout.Refresh()end
+        local tooltip=BlzGetAbilityExtendedTooltip(raw,level-1)
+        assert(tooltip==SurvivorAugments.OwnedTooltip(weapon,build):gsub('\n','|n'))
+        assert(tooltip:find('[소환]',1,true) and tooltip:find('소환 수',1,true) and tooltip:find('공격 간격',1,true))
+    end
+    local target=EnemyAt(units,70,0,false)
+    local flying=weapon=='experiment'and EnemyAt(units,75,0,true)or nil
+    local w=build.stats.extraWeapons[weapon]
+    local function Helpers()
+        local list={};for _,actor in ipairs(actors)do if actor.summon and not actor.cleaned then list[#list+1]=actor end end;return list
+    end
+    SurvivorCombat.CastWeapon(weapon)
+    assert(#Helpers()==math.min(w.cap,w.count) and #world==(flying and 3 or 2),'Summons use collision-free model actors, never native blocking units')
+    for _=1,20 do SurvivorCombat.CastWeapon(weapon)end
+    assert(#Helpers()==math.min(w.cap,w.count),'Repeated casts refresh helpers without exceeding their cap')
+    for step=1,130 do
+        now=now+.02
+        local list={};for _,actor in ipairs(actors)do list[#list+1]=actor end
+        for _,actor in ipairs(list)do if not actor.cleaned and actor.selfInteractions then actor.selfInteractions(actor)end end
+    end
+    assert(#hits>0 and SurvivorCombat.DamageRows({weapon})[1].damage>0,'Summon damage is attributed to its weapon: '..weapon)
+    if flying then assert(flying.life==flying.maxLife,'A ground-only experimental slam cannot hit flying enemies')end
+    if weapon=='banshee'then assert(units[target].slowAmount>0)end
+    if weapon=='plaguezombie'then assert((units[target].poison or 0)>0)end
+    local helper=Helpers()[1];assert(helper)
+    state='CHOOSING';local x,y,life=helper.x,helper.y,helper.life;local before=#hits
+    for _=1,20 do helper.selfInteractions(helper)end
+    assert(helper.x==x and helper.y==y and helper.life==life and #hits==before)
+    state='RUNNING';SurvivorCombat.StopTime();assert(target.paused)
+    helper.selfInteractions(helper);assert(helper.life<life,'Friendly summons continue during enemy time stop')
+    build.stats.multiCount,build.stats.multiDamage=3,.4
+    SurvivorCombat.CastWeapon(weapon)
+    local count=#Helpers()
+    local extra={};for _,actor in ipairs(actors)do if actor.identifier=='hsExtraAttack'and not actor.cleaned then extra[#extra+1]=actor end end
+    assert(#extra==3)
+    for _,actor in ipairs(extra)do actor.life=.001;actor.selfInteractions(actor)end
+    assert(#Helpers()==count,'Multicast adds helper attacks instead of bypassing the summon cap')
+    for _,actor in ipairs(Helpers())do actor.life=.001;actor.selfInteractions(actor);actor.selfInteractions(actor)end
+    -- The expiry boundary permits one final update, then releases exactly once.
+    for _,actor in ipairs(Helpers())do actor.selfInteractions(actor)end
+    assert(#Helpers()==0)
+    SurvivorCombat.CastWeapon(weapon);assert(#Helpers()==math.min(w.cap,w.count),'Expired summon slots can be reused')
+    SurvivorCombat.ClearBattlefield();assert(#Helpers()==0)
+    SurvivorCombat.CastWeapon(weapon);assert(#Helpers()==math.min(w.cap,w.count))
+    SurvivorNativeLoadout.Cleanup();SurvivorCombat.Cleanup();assert(#Helpers()==0)
+    for _,actor in ipairs(actors)do if actor.summon then assert(actor.cleaned and actor.visual==nil)end end
+end
+for index=49,56 do
+    local id='evolution'..index;local entry=SurvivorAugments.Get(id)
+    local build=SurvivorAugments.NewBuild(entry.weapon,nil,SurvivorConfig.weapons[entry.weapon].hero)
+    build.levels[entry.weapon]=7;SurvivorAugments.Recalculate(build)
+    assert(SurvivorAugments.CanChoose(id,build));SurvivorAugments.Apply(id,build)
+    assert(SurvivorAugments.OwnedTooltip(entry.weapon,build):find(entry.text,1,true))
+    local w=build.stats.extraWeapons[entry.weapon];assert(w.count<=w.cap and w.damage>0 and w.pulse>0)
+end
+`);
+
+suite('tag-set explosions and falling attacks have bounded cooldowns and never retrigger sets or status', mocks,
+    [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'frostnova','meteor','catalyst','plaguejar'})do
+    local hero,build,units=NewCombat(weapon);build.stats.sets.destroyer=true
+    local target=EnemyAt(units,100,0,false);local nearby=EnemyAt(units,120,0,false)
+    local rawHit=Local(SurvivorCombat.CastExtra,'Hit')
+    local function hit(target,damage,id)rawHit(target,damage,id,nil,nil,1,{poison=0,curse=0,reaction=0})end
+    units[target].curse,units[target].curseUntil=3,10
+    for _=1,3 do hit(target,100,weapon)end
+    assert(#hits==5 and math.abs(100000-nearby.life-40)<1e-8,'Exactly one small explosion after three direct hits: '..weapon)
+    local record=Local(SurvivorCombat.CastExtra,'tagState')
+    assert(record.burstHits==0 and record.burstReady==2,'Secondary explosion damage does not count toward another proc')
+    assert(not units[nearby].poison and not units[nearby].curse,'Set explosions do not apply status or reactions')
+    local expected=100000-3*124-40*1.24
+    assert(math.abs(target.life-expected)<1e-7,'Each victim receives its own curse amplification exactly once')
+    for _=1,6 do hit(target,100,weapon)end;assert(nearby.life==99960,'Cooldown bounds dense area hits')
+    now=2;hit(target,100,weapon);assert(nearby.life==99920)
+    local before=nearby.life;state='CHOOSING';hit(target,100,weapon);assert(nearby.life==before)
+    state='RUNNING';SurvivorCombat.BeginStage(2,now)
+    assert(Local(SurvivorCombat.CastExtra,'tagState').burstHits==0)
+    SurvivorCombat.Cleanup()
+end
+for _,weapon in ipairs({'meteor','monsoon','plaguejar','acidvials'})do
+    local hero,build,units=NewCombat(weapon)
+    build.stats.sets.bombardier,build.stats.sets.destroyer,build.stats.sets.storm=true,true,true
+    local target=EnemyAt(units,100,0,false)
+    local function Extras()
+        local list={};for _,a in ipairs(actors)do if a.setProc and not a.cleaned then list[#list+1]=a end end;return list
+    end
+    for _=1,3 do SurvivorCombat.CastWeapon(weapon)end;assert(#Extras()==0)
+    SurvivorCombat.CastWeapon(weapon);assert(#Extras()==1,'Every four primary casts includes non-default engines: '..weapon)
+    local extra=Extras()[1];local x,y,life=extra.x,extra.y,extra.life
+    state='CHOOSING';extra.selfInteractions(extra);assert(extra.life==life)
+    state='RUNNING';target.x=130
+    repeat extra.selfInteractions(extra)until extra.cleaned
+    local native=SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine].weapon
+    local damage=native and (native==weapon and build.stats or build.stats.views[weapon]).monsoonDamage or build.stats.extraWeapons[weapon].damage
+    assert(#hits==1 and math.abs(hits[1].damage-damage*.4)<1e-8,'Extra falling damage resolves once, without normal payloads')
+    assert(extra.x==x and extra.y==y,'The extra payload does not follow a moving target')
+    local counters=Local(SurvivorCombat.CastExtra,'tagState')
+    assert(counters.fall[weapon].hits==0 and counters.burstHits==0,'The extra landing never chains into other set effects')
+    for _=1,4 do SurvivorCombat.CastWeapon(weapon)end;assert(#Extras()==0,'Four-second cooldown')
+    now=4;SurvivorCombat.CastWeapon(weapon);assert(#Extras()==1)
+    extra=Extras()[1];build.stats.sets.bombardier=false
+    local before=#hits;repeat extra.selfInteractions(extra)until extra.cleaned
+    assert(#hits==before,'Removing the set cancels a pending set landing')
+    SurvivorCombat.BeginStage(2,now);assert(next(Local(SurvivorCombat.CastExtra,'tagState').fall)==nil)
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('tag-set kills award normal kill rewards without triggering death-based set chains', mocks + String.raw`
+function GetTriggerUnit()return eventUnit end
+function onDamage(unit)
+    if unit.life<=0 then
+        eventUnit=unit
+        for _,trigger in ipairs(triggers)do if not trigger.destroyed and trigger.event=='death'then trigger.action()end end
+    end
+end
+`, [config,metrics,augments,combat], String.raw`
+for _,kind in ipairs({'destroyer','bombardier','conductor'})do
+    local weapon=kind=='conductor'and'soulchain'or'plaguejar'
+    local hero,build,units=NewCombat(weapon)
+    build.stats.sets[kind],build.stats.sets.gravewarden,build.stats.sets.apothecary=true,true,true
+    local primary=EnemyAt(units,100,0,false)
+    local doomed=EnemyAt(units,120,0,false);doomed.life=10
+    units[doomed].poison,units[doomed].poisonUntil,units[doomed].poisonWeapon=8,10,'plaguejar'
+    units[doomed].curse,units[doomed].curseUntil=3,10
+    local outside=EnemyAt(units,280,0,false)
+    local kills=0;SetLocal(SurvivorCombat.Init,'onKill',function()kills=kills+1 end)
+    if kind=='destroyer'then
+        local hit=Local(SurvivorCombat.CastExtra,'Hit')
+        for _=1,3 do hit(primary,100,'plaguejar',nil,nil,1,{poison=0,curse=0,reaction=0})end
+    elseif kind=='bombardier'then
+        local cast=Local(SurvivorCombat.CastExtra,'RecordFallingCast')
+        for _=1,4 do cast('plaguejar',100,0,0,100,200,SurvivorConfig.meteorModel,.5)end
+        local extra;for _,a in ipairs(actors)do if a.setProc then extra=a end end
+        assert(extra);repeat extra.selfInteractions(extra)until extra.cleaned
+    else
+        Local(SurvivorCombat.CastChainLightning,'RelayEnd')(weapon,doomed,100)
+    end
+    assert(kills==1 and not units[doomed].alive,'Set kills retain the normal XP/loot callback')
+    assert(outside.life==100000 and not units[outside].poison and not units[outside].curse,
+        'No poison spread or soul explosion from a tagged set kill: '..kind)
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('summon set counts real attacks and piercing set scales unique victims in travel order', mocks,
+    [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'banshee','shadowarcher','plaguezombie','experiment'})do
+    local hero,build,units=NewCombat(weapon);build.stats.sets.commander=true
+    local target=EnemyAt(units,60,0,false);local w=build.stats.extraWeapons[weapon]
+    SurvivorCombat.CastWeapon(weapon)
+    local summon;for _,a in ipairs(actors)do if a.summon then summon=a;break end end
+    summon.x,summon.y=60,0
+    local attack=Local(SurvivorCombat.CastExtra,'SummonAttack')
+    local function Attack(damage,scale)
+        local before=#actors;assert(attack(summon,w,damage,scale))
+        for i=before+1,#actors do local a=actors[i];if a.identifier=='hsSummonArrow'then a.speed=50000;a.selfInteractions(a)end end
+    end
+    for i=1,6 do Attack(w.damage,1);assert(hits[#hits].damage==w.damage*(i==6 and 2 or 1),weapon)end
+    local counter=Local(SurvivorCombat.CastExtra,'tagState').summon[weapon]
+    Attack(w.damage*.5,.5);assert(counter.hits==0,'Multicast helpers do not charge the reinforced attack')
+    for _=1,6 do Attack(w.damage,1)end;assert(hits[#hits].damage==w.damage,'Reinforcement has a cooldown')
+    now=2;Attack(w.damage,1);assert(hits[#hits].damage==w.damage*2)
+    local life=summon.life;state='CHOOSING';summon.selfInteractions(summon);assert(summon.life==life)
+    state='RUNNING';SurvivorCombat.BeginStage(2,now);assert(next(Local(SurvivorCombat.CastExtra,'tagState').summon)==nil)
+    SurvivorCombat.Cleanup()
+end
+for _,weapon in ipairs({'frostshard','plaguedart','returnblade','shadowscythe'})do
+    local hero,build,units=NewCombat(weapon)
+    build.levels[weapon]=7;SurvivorAugments.Recalculate(build,hero);build.stats.sets.tracker=true
+    local targets={};for i=1,5 do targets[i]=EnemyAt(units,i*100,0,false)end
+    local enumerate=GroupEnumUnitsInRange
+    function GroupEnumUnitsInRange(group,...)
+        enumerate(group,...);local reverse={};for i=#group,1,-1 do reverse[#reverse+1]=group[i]end
+        for i=1,#group do group[i]=reverse[i]end
+    end
+    SurvivorCombat.CastWeapon(weapon)
+    local object;for _,a in ipairs(actors)do if a.identifier=='hsFrostShard'or a.identifier=='hsReturnBlade'or a.identifier=='hsScythe'then object=a;break end end
+    assert(object);local damage=object.damage
+    object.x,object.y,object.z,object.dx,object.dy,object.dz,object.speed,object.remaining=0,0,60,1,0,0,30000,600
+    object.selfInteractions(object);GroupEnumUnitsInRange=enumerate
+    assert(#hits==5,'Five enemies crossed by one projectile: '..weapon)
+    for i=1,5 do assert(hits[i].unit==targets[i]and math.abs(hits[i].damage-damage*(1+math.min(3,i-1)*.2))<1e-7,'Travel order and capped damage: '..weapon)end
+    local pierce=Local(SurvivorCombat.FireFrostShard,'PierceDamage')
+    local extra={weapon=weapon,tagExtra=true};assert(pierce(extra,targets[1],100)==100 and not extra.pierceCount)
+    local repeated={weapon=weapon};assert(pierce(repeated,targets[1],100)==100 and pierce(repeated,targets[1],100)==100 and repeated.pierceCount==1)
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('pursuer homing bonus uses actual chase time, pauses and excludes extra attacks for both engines', mocks,
+    [config,metrics,augments,combat], String.raw`
+local function Find()for _,a in ipairs(actors)do if a.identifier=='hsMissile'or a.identifier=='hsOrb'then return a end end end
+for _,weapon in ipairs({'firebolt','deathcoil','thunderorb','boilingflask'})do
+    for _,distance in ipairs({10,600})do
+        local hero,build,units=NewCombat(weapon);build.stats.sets.pursuer=true
+        EnemyAt(units,distance,0,false);SurvivorCombat.CastWeapon(weapon)
+        local object=assert(Find());local damage,life=object.damage,object.life
+        state='CHOOSING';for _=1,40 do object.selfInteractions(object)end
+        assert(object.life==life and (object.flightAge or 0)==0,'Menus do not charge chase time')
+        state='RUNNING'
+        local steps=0;while #hits==0 and not object.cleaned and steps<400 do object.selfInteractions(object);steps=steps+1 end
+        assert(#hits>0 and math.abs(hits[1].damage-damage*(distance==600 and 1.4 or 1))<1e-8,'Long chase bonus and close-range baseline: '..weapon)
+        SurvivorCombat.Cleanup()
+    end
+    local hero,build,units=NewCombat(weapon);build.stats.sets.pursuer=true;EnemyAt(units,10,0,false)
+    local engine=SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine]
+    if engine.profile then SurvivorCombat.CastExtra(weapon,{stats={extraWeapons={[weapon]=build.stats.extraWeapons[weapon]}},index=1})
+    else SurvivorCombat.FireMissile({stats=engine.weapon==weapon and build.stats or build.stats.views[weapon],index=1})end
+    local object=assert(Find());object.flightAge=.6
+    if object.identifier=='hsOrb'then object.pulseClock=object.pulse end
+    object.selfInteractions(object)
+    assert(#hits>0 and hits[1].damage==object.damage and object.tagExtra,'Additional attacks cannot receive the chase bonus')
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('bulwark reduces incoming damage after melee hits without stacking and respects shields, pause and expiry', mocks + String.raw`
+function BlzIsUnitInvulnerable(u)return u.invulnerable==true end
+function SetUnitInvulnerable(u,value)u.invulnerable=value end
+function BlzSetEventDamage(value)eventDamage=value end
+function GetEventDamage()return eventDamage end
+function GetEventDamageSource()return eventSource end
+function GetTriggerUnit()return eventTarget end
+function Receive(hero,source,damage)
+    eventTarget,eventSource,eventDamage=hero,source,damage
+    Local(SurvivorCombat.Init,'damageTrigger').action();return eventDamage
+end
+function SurvivorExpedition.RiskActive()return risk==true end
+`, [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'orbitblade','frontslash','wraithguard','corrosion'})do
+    local hero,build,units=NewCombat(weapon);hero.life,hero.maxLife=1000,1000;build.stats.sets.bulwark=true
+    local enemy=EnemyAt(units,60,0,false);local hit=Local(SurvivorCombat.CastExtra,'Hit')
+    hit(enemy,1,'firebolt');assert(Receive(hero,enemy,100)==100,'Other tags cannot grant melee protection')
+    hit(enemy,1,weapon);assert(Receive(hero,enemy,100)==85,weapon)
+    now=1;hit(enemy,1,weapon);assert(Receive(hero,enemy,100)==85,'Protection refreshes instead of stacking')
+    risk=true;assert(Receive(hero,enemy,100)==106.25);risk=false
+    SetLocal(SurvivorCombat.WardStatus,'ward',50);SetLocal(SurvivorCombat.WardStatus,'wardUntil',10)
+    assert(Receive(hero,enemy,100)==35,'Apply damage reduction before absorbing the remaining damage with a ward')
+    state='CHOOSING';assert(Receive(hero,enemy,100)==0);state='RUNNING'
+    assert(Receive(hero,enemy,100)==85)
+    now=4;assert(Receive(hero,enemy,100)==100,'The refreshed protection expires after three combat seconds')
+    hit(enemy,1,weapon);build.stats.sets.bulwark=false;assert(Receive(hero,enemy,100)==100,'Unequipping removes protection immediately')
+    build.stats.sets.bulwark=true;SurvivorCombat.BeginStage(2,now)
+    assert(Receive(hero,nil,100)==100,'Stage transitions clear protection')
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('mire stacks per zone and enemy, stays capped and excludes additional attacks and residue', mocks,
+    [config,metrics,augments,combat], String.raw`
+local function Zone()for _,a in ipairs(actors)do if a.identifier=='hsZone'or a.identifier=='hsExtraZone'then return a end end end
+for _,weapon in ipairs({'flamefield','plaguetrail','blizzard','plaguepool'})do
+    local hero,build,units=NewCombat(weapon);build.stats.sets.mire=true
+    local target=EnemyAt(units,10,0,false);SurvivorCombat.CastWeapon(weapon)
+    if not Zone()then
+        local throw;for _,a in ipairs(actors)do if a.identifier=='hsThrow'then throw=a end end
+        assert(throw);for _=1,500 do if not throw.cleaned then throw.selfInteractions(throw)end end
+    end
+    local zone=assert(Zone());target.x,target.y=zone.x,zone.y
+    local area=Local(SurvivorCombat.CastExtra,'AreaHit')
+    local function Pulse()
+        if zone.interactions then zone.interactions.hsEnemy(zone,target)else area(zone,zone.damage)end
+    end
+    for i=1,8 do Pulse();assert(math.abs(hits[#hits].damage-zone.damage*(1+math.min(5,i-1)*.1))<1e-8,'Per-target ramp and cap: '..weapon)end
+    local before=#hits;state='CHOOSING';Pulse();assert(#hits==before);state='RUNNING'
+    local ramp=Local(SurvivorCombat.CreateZone,'ZoneRampDamage')
+    local separate={weapon=weapon};assert(ramp(separate,target,100)==100,'A new overlapping zone starts from its own baseline')
+    local fresh=EnemyAt(units,zone.x,zone.y,false);assert(ramp(zone,fresh,100)==100,'A new enemy starts at baseline')
+    assert(ramp({weapon=weapon,tagExtra=true},target,100)==100)
+    assert(ramp({weapon=weapon,status={poison=1}},target,100)==100,'Secondary residues cannot gain ramp damage')
+    build.stats.sets.mire=false;Pulse();assert(hits[#hits].damage==zone.damage)
+    build.stats.sets.mire=true;Pulse();assert(hits[#hits].damage==zone.damage,'Unequipping clears accumulated damage')
+    SurvivorCombat.Cleanup()
+end
+`);
+
+suite('conductor follows chain endpoints and orb transfers, supports bosses and never recursively transfers', mocks,
+    [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'chainlightning','soulchain'})do
+    local hero,build,units=NewCombat(weapon);build.stats.sets.conductor=true
+    local targets={};for i=1,3 do targets[i]=EnemyAt(units,i*100,0,false)end
+    SurvivorCombat.CastWeapon(weapon);assert(#hits==4 and hits[4].unit==targets[3])
+    local curse=units[targets[3]].curse or 0
+    assert(math.abs(hits[4].damage-hits[3].damage*.6*(1+curse*SurvivorConfig.status.curseAmp))<1e-8)
+    SurvivorCombat.CastWeapon(weapon);assert(#hits==7,'Two-second cooldown is shared by casts of the same weapon')
+    now=2;SurvivorCombat.CastWeapon(weapon);assert(#hits==11)
+    now=4;local engine=SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine]
+    SurvivorCombat.CastChainLightning({stats=engine.weapon==weapon and build.stats or build.stats.views[weapon],index=1})
+    assert(#hits==14,'Additional chain casts do not receive an extra endpoint hit')
+    local total=0;for _,hit in ipairs(hits)do total=total+hit.damage end
+    assert(math.abs(SurvivorCombat.DamageRows({weapon})[1].damage-total)<1e-7,'All damage belongs to its original weapon')
+    SurvivorCombat.BeginStage(2,now);assert(next(Local(SurvivorCombat.CastChainLightning,'tagState').relay)==nil)
+    local boss=EnemyAt(units,100,0,false);units[boss].boss=true;hits={}
+    SurvivorCombat.CastWeapon(weapon);assert(#hits==2 and hits[2].unit==boss,'A single boss is a valid endpoint')
+    SurvivorCombat.Cleanup()
+end
+for _,weapon in ipairs({'thunderorb','boilingflask'})do
+    for _,single in ipairs({false,true})do
+        local hero,build,units=NewCombat(weapon);build.stats.sets.conductor,build.stats.sets.pursuer=true,true
+        local primary=EnemyAt(units,60,0,false);local secondary=not single and EnemyAt(units,220,0,false)
+        SurvivorCombat.CastWeapon(weapon)
+        local orb;for _,a in ipairs(actors)do if a.identifier=='hsOrb'then orb=a;break end end
+        orb.x,orb.y,orb.z,orb.speed,orb.flightAge=60,0,60,0,1
+        orb.pulseClock,orb.chainClock=orb.pulse,orb.chainInterval;orb.selfInteractions(orb)
+        assert(#hits==(single and 2 or 3),'One bounded endpoint hit per transfer, including a lone target')
+        local expected=orb.damage*1.4*(single and 1 or orb.chainFraction)*.6
+        assert(hits[#hits].unit==(single and primary or secondary)and math.abs(hits[#hits].damage-expected)<1e-8,
+            'Chase amplification is applied once before the transfer and endpoint bonus')
+        SurvivorCombat.Cleanup()
+    end
+end
+`);
+
+suite('homing orbs track moving targets and transfer once with their own cooldown', mocks,
+    [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'thunderorb','boilingflask'})do
+    local hero,build,units=NewCombat(weapon)
+    local primary=EnemyAt(units,180,0,false)
+    local secondary=EnemyAt(units,380,0,false)
+    EnemyAt(units,580,0,false)
+    SurvivorCombat.CastWeapon(weapon)
+    local orb=actors[1];assert(orb.identifier=='hsOrb')
+    orb.x,orb.y,orb.z=180,0,60;primary.y=100
+    orb.chainClock,orb.pulseClock=orb.chainInterval,orb.pulse
+    orb.selfInteractions(orb)
+    assert(orb.y>0 and #hits==2 and hits[1].unit==primary and hits[2].unit==secondary)
+    assert(math.abs(hits[2].damage-orb.damage*orb.chainFraction)<1e-9,'Transfer damage never starts another transfer')
+    orb.pulseClock=orb.pulse;orb.selfInteractions(orb)
+    assert(#hits==3 and hits[3].unit==primary,'Orb transfer waits for its separate cooldown')
+    state='CHOOSING';local life,y=orb.life,orb.y;orb.selfInteractions(orb);assert(orb.life==life and orb.y==y)
+    state='RUNNING';primary.life=0;orb.selfInteractions(orb);assert(orb.target==secondary,'A dead target is replaced')
+    SurvivorCombat.Cleanup();assert(orb.cleaned)
+end
+`);
+
+suite('falling jars and vials lock landing points, pause in the air and leave no damage zones', mocks,
+    [config,metrics,augments,combat], String.raw`
+for _,weapon in ipairs({'plaguejar','acidvials'})do
+    local hero,build,units=NewCombat(weapon);local target=EnemyAt(units,400,0,false)
+    SurvivorCombat.CastWeapon(weapon)
+    local falling=actors[1];assert(falling.identifier=='hsFallingPayload'and falling.x==400 and falling.y==0)
+    local x,y,z,life=falling.x,falling.y,falling.z,falling.life
+    state='CHOOSING';falling.selfInteractions(falling);assert(falling.z==z and falling.life==life and #hits==0)
+    state='RUNNING';target.x=1000
+    for _=1,80 do if not falling.cleaned then falling.selfInteractions(falling);assert(falling.x==x and falling.y==y)end end
+    assert(falling.cleaned and #hits==0,'Moving away avoids the locked impact position')
+    for _,actor in ipairs(actors)do assert(actor.identifier~='hsExtraZone')end
+    SurvivorCombat.Cleanup()
+end
 `);
 
 suite('multicast snapshots contain only the selected weapon and retain cast-time values', mocks + String.raw`
@@ -873,8 +1597,8 @@ function AddLightningEx()return {}end
 function GetRandomInt()return 1 end
 `, [config,metrics,augments,combat], String.raw`
 local ids={'plaguedart','plaguetrail','corrosion','plaguepool','deathcoil','soulchain','wraithguard','shadowscythe',
-    'plaguejar','catalyst','boilingflask','acidvials'}
-assert(#ids==12)
+    'plaguejar','catalyst','boilingflask','acidvials','plaguezombie','experiment'}
+assert(#ids==14)
 for _,id in ipairs(ids)do
     local hero,build,units=NewCombat(id);local target=EnemyAt(units,150,0,false);target.life=100000
     assert(build.hero=='putress' and SurvivorConfig.weapons[id].hero=='putress')
@@ -933,12 +1657,12 @@ suite('putress throws follow a Bezier arc and land on the point locked at releas
 function AddLightningEx()return {}end
 function GetRandomInt()return 1 end
 `, [config,metrics,augments,combat], String.raw`
-local hero,build,units=NewCombat('plaguejar');local target=EnemyAt(units,400,0,false);target.life=100000
-SurvivorCombat.CastWeapon('plaguejar')
+local hero,build,units=NewCombat('plaguepool');local target=EnemyAt(units,400,0,false);target.life=100000
+SurvivorCombat.CastWeapon('plaguepool')
 local throw;for _,a in ipairs(actors)do if a.identifier=='hsThrow' then throw=a end end
 assert(throw and throw.x1==400 and throw.y1==0,'The landing point is the target position at release')
 local c=SurvivorConfig.throw
-local expected=(c.minFlight+(c.maxFlight-c.minFlight)*400/c.flightRange)/build.stats.extraWeapons.plaguejar.speed
+local expected=(c.minFlight+(c.maxFlight-c.minFlight)*400/c.flightRange)/build.stats.extraWeapons.plaguepool.speed
 assert(math.abs(throw.flight-expected)<1e-9)
 target.x=1000
 local steps,peak=0,-math.huge
@@ -946,7 +1670,7 @@ repeat steps=steps+1;now=now+.02;throw.selfInteractions(throw);peak=math.max(pea
 assert(throw.cleaned and math.abs(steps*.02-expected)<.021,'Impact waits for the flight time')
 assert(peak>throw.z0 and peak<=throw.cz,'The bottle rises toward its control point')
 local zone;for _,a in ipairs(actors)do if a.identifier=='hsExtraZone' then zone=a end end
-assert(zone and zone.x==400 and zone.status.poison==1,'The poison residue lands where the jar was aimed')
+assert(zone and zone.x==400 and zone.weapon=='plaguepool','The poison pool lands where the bottle was aimed')
 SurvivorCombat.Cleanup()
 `);
 
@@ -970,27 +1694,19 @@ local dark,alchemy=SurvivorConfig.elements['어둠'].tint,SurvivorConfig.element
 assert(scythe.visual.scale==build.stats.extraWeapons.shadowscythe.size*1.6,'The scythe is enlarged')
 assert(scythe.visual.color[1]==dark[1] and scythe.visual.color[3]==dark[3],'Dark weapons are tinted purple instead of the glaive tint')
 SurvivorCombat.Cleanup()
-build=Cast('plaguejar');local jar=Find('hsThrow')
+build=Cast('plaguejar');local jar=Find('hsFallingPayload')
 local jarWeapon=SurvivorConfig.weapons.plaguejar
-assert(jar.visual.model==jarWeapon.throwModel and jar.visual.scale==jarWeapon.throwScale,'The plague jar flies as an enlarged brew')
-assert(jar.visual.color[1]==255 and jar.visual.color[2]==0 and jar.visual.color[3]==255,'The plague jar throw uses its own purple tint')
+assert(jar.visual.model==jarWeapon.throwModel and jar.visual.scale==jarWeapon.throwScale,'The plague jar falls as an enlarged brew')
+assert(jar.visual.color[1]==255 and jar.visual.color[2]==0 and jar.visual.color[3]==255,'The jar retains its purple tint')
 local steps=0;repeat steps=steps+1;now=now+.02;jar.selfInteractions(jar)until jar.cleaned or steps>200
-local residue=Find('hsExtraZone');assert(residue and residue.visual.model==SurvivorConfig.jarExplosionModel and residue.visual.color==nil,
-    'The jar explosion keeps its own colours')
-local victim=EnemyAt(Local(SurvivorCombat.Init,'units'),residue.x,residue.y,false);victim.life=100000
-residue.pulseClock=residue.pulse;residue.selfInteractions(residue)
-local function Marks()local list={};for _,a in ipairs(actors)do if a.identifier=='hsDotMark' and a.unit==victim then list[#list+1]=a end end;return list end
-local mark=Marks()[1];assert(mark and mark.visual.model==SurvivorConfig.jarMarkModel,'Residue damage marks the enemy')
-residue.pulseClock=residue.pulse;residue.selfInteractions(residue)
-local count=#Marks()
-assert(count==1,'Repeated residue hits refresh one mark instead of stacking')
-for i=1,40 do now=now+.02;mark.selfInteractions(mark)end;assert(mark.cleaned,'The mark fades once the damage stops')
+local impact=Find('hsJarImpact');assert(impact and impact.visual.model==SurvivorConfig.jarExplosionModel and impact.visual.color==nil)
+assert(not Find('hsExtraZone'),'The falling jar must not leave poison residue')
 SurvivorCombat.Cleanup()
 Cast('boilingflask');assert(Find('hsOrb').visual.scale==build.stats.extraWeapons.boilingflask.size*SurvivorConfig.weapons.boilingflask.modelScale,'The flask is enlarged')
 SurvivorCombat.Cleanup()
 Cast('plaguepool');assert(Find('hsThrow').visual.scale==SurvivorConfig.weapons.plaguepool.throwScale,'The pool bottle is enlarged')
 SurvivorCombat.Cleanup()
-Cast('acidvials');local vial=Find('hsThrow')
+Cast('acidvials');local vial=Find('hsFallingPayload')
 assert(vial.visual.model==[[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]],'Acid vials fly as bottles')
 SurvivorCombat.Cleanup()
 assert(SurvivorAugments.Get('acidvials').icon:find('BTNHealingSalve',1,true) and SurvivorAugments.Get('shadowscythe').icon:find('BTNShadowStrike',1,true))
@@ -1166,7 +1882,7 @@ function BlzSetAbilityExtendedTooltip(id,text,level)
     weaponText[id..':'..level]=text;return write(id,text,level)
 end
 `, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
-local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC'}
+local ids=Local(SurvivorNativeLoadout.Refresh,'weapons')
 local function Check(id,build)
     local level=build.levels[id];local text=weaponText[ids[id]..':'..(level-1)]
     assert(text==SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n'))
@@ -1176,7 +1892,7 @@ local function Check(id,build)
     if id=='frontslash'then assert(text:find('대상별 1회 타격',1,true))end
 end
 for id in pairs(ids)do
-    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(id)
+    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(id,nil,SurvivorConfig.weapons[id].hero)
     SurvivorNativeLoadout.Init(hero,build)
     for level=1,SurvivorConfig.growthMaxLevel do
         if level>1 then SurvivorAugments.Apply(id,build,hero);SurvivorNativeLoadout.Refresh()end
@@ -1187,9 +1903,9 @@ for id in pairs(ids)do
     assert(abilityWrites==writes,'Unchanged weapon tooltips must not be rewritten every tick')
     SurvivorNativeLoadout.Cleanup()
 end
-for i=1,24 do
+for i=1,56 do
     local evolution='evolution'..i;local entry=SurvivorAugments.Get(evolution)
-    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(entry.weapon)
+    local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(entry.weapon,nil,SurvivorConfig.weapons[entry.weapon].hero)
     build.levels[entry.weapon]=SurvivorConfig.growthMaxLevel;SurvivorAugments.Recalculate(build,hero)
     SurvivorNativeLoadout.Init(hero,build);SurvivorAugments.Apply(evolution,build,hero);SurvivorNativeLoadout.Refresh()
     Check(entry.weapon,build)
@@ -1197,6 +1913,59 @@ for i=1,24 do
     assert(BlzGetAbilityTooltip(ids[entry.weapon])==entry.name..' · 진화')
     assert(SurvivorAugments.Preview(evolution,build)=='진화 선택 후 변경 불가')
     SurvivorNativeLoadout.Cleanup()
+end
+`);
+
+suite('growth cards isolate changed stats and preserve gear, talents, caps and first-acquisition summaries', mocks,
+    [config,metrics,augments], String.raw`
+local hero=CreateUnit(0,'hero',0,0,0)
+local function Plain(text)return text:gsub('|c%x%x%x%x%x%x%x%x',''):gsub('|r','')end
+local function At(id,level)
+    local build=SurvivorAugments.NewBuild(id,nil,SurvivorConfig.weapons[id].hero)
+    build.levels[id]=level;SurvivorAugments.Recalculate(build,hero)
+    return build
+end
+local build=At('firebolt',1)
+SurvivorAugments.SetEquipmentBonuses(build,{gear={all={damagePct=.2,speedPct=.1},firebolt={damagePct=.1,extraProjectiles=2}}},hero)
+SurvivorAugments.SetTalents(build,{[1]='Ht1A',[2]='Ht2A',[4]='Ht4C'},hero)
+local stats,revision=build.stats,build.revision
+local text=Plain(SurvivorAugments.Preview('firebolt',build))
+assert(not text:find('\n',1,true) and text:find('(+25%)',1,true),'Level 1 to 2 changes only damage')
+assert(not text:find('투사체 수',1,true) and not text:find('쿨다운',1,true))
+assert(build.stats==stats and build.revision==revision and build.levels.firebolt==1,'Preview must not modify the build')
+local a,b=text:match('피해 ([%d.]+) → ([%d.]+)')
+assert(math.abs(tonumber(a)-stats.missileDamage)<.051)
+SurvivorAugments.Apply('firebolt',build,hero)
+assert(math.abs(tonumber(b)-build.stats.missileDamage)<.051,'The displayed result must equal the actual upgrade with talents and gear')
+text=Plain(SurvivorAugments.Preview('firebolt',build))
+assert(text:find('투사체 수 3 → 4',1,true),'Level 2 to 3 also grants a projectile')
+SurvivorAugments.SetEquipmentBonuses(build,{gear={firebolt={extraProjectiles=20}}},hero)
+assert(not SurvivorAugments.Preview('firebolt',build):find('투사체 수',1,true),'A capped projectile count is unchanged')
+text=SurvivorAugments.Preview('flamefield',At('flamefield',1))
+assert(not text:find('범위',1,true) and not text:find('지속',1,true))
+assert(SurvivorAugments.Preview('flamefield',At('flamefield',2)):find('범위',1,true))
+assert(SurvivorAugments.Preview('flamefield',At('flamefield',3)):find('지속 시간',1,true))
+text=Plain(SurvivorAugments.Preview('plaguedart',At('plaguedart',2)))
+assert(text:find('중독 2스택/타격 → 3스택/타격',1,true) and not text:find('최대 관통',1,true))
+text=Plain(SurvivorAugments.Preview('banshee',At('banshee',6)))
+assert(text:find('소환 수 1 → 2',1,true) and not text:find('공격 간격',1,true) and not text:find('지속',1,true))
+local multi=SurvivorAugments.NewBuild('firebolt','multicast')
+text=Plain(SurvivorAugments.Preview('multicast',multi))
+assert(text:find('추가 공격 피해',1,true) and not text:find('\n',1,true),'Unchanged helper count must not be repeated')
+for id,weapon in pairs(SurvivorConfig.weapons)do
+    local fresh=At(id,0)
+    text=Plain(SurvivorAugments.Preview(id,fresh))
+    assert(text:find('피해',1,true) and text:find('쿨다운',1,true) and not text:find('→',1,true),'New weapons show current core performance: '..id)
+    for level=1,6 do
+        local owned=At(id,level)
+        text=Plain(SurvivorAugments.Preview(id,owned))
+        assert(text:find('피해',1,true) and text:find('→',1,true),'All weapon upgrades show their damage change: '..id)
+        for line in text:gmatch('[^\n]+')do
+            local before,after=line:match('([%d.]+)[^%d]* → ([%d.]+)')
+            if before and after then assert(tonumber(before)~=tonumber(after),'No equal rounded values: '..line)end
+        end
+        assert(not text:find('전이마다',1,true) and not text:find('대상별 1회',1,true),'Static rules stay in the full weapon tooltip')
+    end
 end
 `);
 
@@ -1656,6 +2425,31 @@ for index,cap in ipairs({180,203,225,225,225})do
     assert(SurvivorCombat.Counts()==cap and not SurvivorCombat.SpawnBoss(),'A single boss fills the reserved slot without exceeding the cap')
     SurvivorCombat.Cleanup()
 end
+hero,build,units=NewCombat('orbitblade')
+assert(SurvivorConfig.spawnDistance==1500)
+local nativeCreate,attempts=CreateUnit,0
+function CreateUnit(owner,id,x,y,facing)
+    attempts=attempts+1
+    local unit=nativeCreate(owner,id,x,y,facing)
+    if attempts==1 then unit.x,unit.y=hero.x+200,hero.y end
+    return unit
+end
+local countBefore=SurvivorCombat.Counts()
+local ok,unit=SurvivorCombat.Spawn(false,'melee')
+assert(ok and attempts==2 and world[#world-1].removed,'Retry a native spawn relocated too close to the hero')
+assert((unit.x-hero.x)^2+(unit.y-hero.y)^2>=1500^2 and SurvivorCombat.Counts()==countBefore+1)
+function CreateUnit(owner,id,x,y,facing)
+    attempts=attempts+1
+    local unit=nativeCreate(owner,id,hero.x+200,hero.y,facing)
+    return unit
+end
+attempts=0;local beforeRemoved=removed
+assert(not SurvivorCombat.Spawn(false,'ranged') and attempts==16,'Unsafe native placements exhaust bounded retries')
+assert(removed==beforeRemoved+16 and SurvivorCombat.Counts()==countBefore+1,'Rejected units never enter enemy state or counts')
+CreateUnit=nativeCreate
+SetLocal(SurvivorCombat.Init,'bounds',{minX=-100,maxX=100,minY=-100,maxY=100})
+assert(not SurvivorCombat.Spawn(false,'melee'),'Do not fall back to a close spawn in a cramped arena')
+SurvivorCombat.Cleanup()
 `);
 
 suite('enemies rotate across allied Neutral Hostile look-alike owners and stagger redundant move orders', mocks + String.raw`
@@ -1716,6 +2510,16 @@ issued=moveOrders
 ranged.order=0
 SurvivorCombat.UpdateEnemies(10)
 assert(moveOrders==issued+1 and ranged.target[2]==hero.y,'A unit that lost its move order is ordered at once, off its group tick')
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('orbitblade')
+ok,ranged=SurvivorCombat.Spawn(false,'ranged')
+assert(ok and units[ranged].profile.range==400)
+ranged.x,ranged.y=hero.x+401,hero.y
+SurvivorCombat.UpdateEnemies(2)
+assert(#actors==0,'Ranged enemies must close the distance before firing outside 400')
+ranged.x=hero.x+400
+SurvivorCombat.UpdateEnemies(2.1)
+assert(#actors>0,'Ranged enemies can fire exactly at distance 400')
 SurvivorCombat.Cleanup()
 `);
 
@@ -2668,10 +3472,10 @@ function GetRandomInt(a,b)randomSeed=(randomSeed or 7)*1103515245%2147483648;ret
 `, [config, metrics, augments, equipment], String.raw`
 local counts={}
 for _,entry in ipairs(SurvivorEquipment.Catalog())do counts[entry.hero or 'shared']=(counts[entry.hero or 'shared']or 0)+1 end
-assert(counts.shared==7 and counts.putress==66 and counts.anya==75,'Shared 7, Anya 75 and Putress 66 gear entries')
+assert(counts.shared==79 and counts.putress==66 and counts.anya==75,'Shared 79, Anya 75 and Putress 66 gear entries')
 for _,entry in ipairs(SurvivorEquipment.Catalog())do
     for scope in pairs(entry.bonuses)do
-        assert(scope=='all' or SurvivorConfig.weapons[scope].hero==entry.hero,'Gear bonuses target only their own hero: '..entry.id)
+        assert(scope=='all' or entry.hero==nil or SurvivorConfig.weapons[scope].hero==entry.hero,'Gear bonuses target only their own hero or an explicit shared tag: '..entry.id)
     end
 end
 local roll=Local(SurvivorEquipment.OnKill,'RollIndex')
@@ -2736,6 +3540,81 @@ local before=#actors;hit(victim,0.5,'plaguedart',false,false,1,{reaction=1})
 local residue;for i=before+1,#actors do if actors[i].identifier=='hsExtraZone' then residue=actors[i] end end
 assert(residue and residue.status.poison==1 and residue.x==500,'A reaction kill leaves a poison residue')
 SurvivorCombat.Cleanup()
+`);
+
+suite('shared attack-tag sets support both heroes, exact thresholds and relevant reward weights', gearMocks,
+    [config,metrics,augments,equipment], String.raw`
+local definitions={
+    {code='Hu',flag='commander',tag='소환',weapons={'banshee','plaguezombie'}},
+    {code='Ho',flag='bombardier',tag='낙하',weapons={'meteor','plaguejar'}},
+    {code='Hx',flag='destroyer',tag='폭발',weapons={'frostnova','catalyst'}},
+    {code='Hy',flag='tracker',tag='관통',weapons={'frostshard','plaguedart'}},
+    {code='Hj',flag='pursuer',tag='유도',weapons={'firebolt','deathcoil','thunderorb','boilingflask'}},
+    {code='Hk',flag='bulwark',tag='근접',weapons={'orbitblade','wraithguard','frontslash','corrosion'}},
+    {code='Hz',flag='mire',tag='장판',weapons={'flamefield','plaguetrail','blizzard','plaguepool'}},
+    {code='Hw',flag='conductor',tag='연쇄',weapons={'chainlightning','soulchain','thunderorb','boilingflask'}}}
+local counts,total={},0
+for _,entry in ipairs(SurvivorEquipment.Catalog())do
+    total=total+1
+    if entry.set then counts[entry.set]=(counts[entry.set]or 0)+1 end
+end
+assert(total==220)
+local setCount=0;for _ in pairs(counts)do setCount=setCount+1 end;assert(setCount==22)
+for _,definition in ipairs(definitions)do
+    assert(counts[definition.flag]==9)
+    for _,weapon in ipairs(definition.weapons)do
+        local hero,build=NewGear(weapon,12)
+        local function Value()
+            local engine=SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine]
+            local source=engine.profile and build.stats.extraWeapons[weapon] or engine.weapon==weapon and build.stats or build.stats.views[weapon]
+            if definition.flag=='pursuer'then return engine.profile and source.damage or source.missileDamage end
+            if definition.flag=='bulwark'then return source.bladeRadius or source.slashRange end
+            if definition.flag=='mire'then return source.zoneDuration or source.duration end
+            if definition.flag=='conductor'then return engine.profile and source.interval or source.chainInterval end
+            if definition.flag=='commander'then return build.stats.extraWeapons[weapon].duration end
+            if definition.flag=='bombardier'then return build.stats.extraWeapons[weapon].interval end
+            if definition.flag=='destroyer'then return build.stats.extraWeapons[weapon].radius end
+            return weapon=='frostshard'and build.stats.frostDamage or build.stats.views[weapon].frostDamage
+        end
+        local original=Value()
+        local companion=definition.flag=='conductor'and(build.hero=='anya'and'firebolt'or'deathcoil')
+            or build.hero=='anya'and'chainlightning'or'soulchain'
+        build.levels[companion]=1;build.weapons[#build.weapons+1]=companion;SurvivorAugments.Recalculate(build,hero)
+        local function Other()
+            if definition.flag=='conductor'then return build.hero=='anya'and build.stats.missileDamage or build.stats.views.deathcoil.missileDamage end
+            return build.hero=='anya'and build.stats.chainDamage or build.stats.views.soulchain.chainDamage
+        end
+        local other=Other()
+        for i=1,2 do hero.equipped[i]=CreateItem(definition.code..string.format('%02d',i),0,0)end
+        SurvivorEquipment.Reconcile()
+        local expected=definition.flag=='commander'and original+2 or definition.flag=='mire'and original+1
+            or (definition.flag=='bombardier'or definition.flag=='conductor')and original/1.15
+            or definition.flag=='destroyer'and original*1.2 or original*1.15
+        assert(math.abs(Value()-expected)<1e-8,'Two-piece bonus: '..definition.flag..'/'..weapon)
+        assert(not build.stats.sets[definition.flag],'Two pieces do not enable the four-piece effect')
+        assert(Other()==other,'Only the matching tag benefits')
+        local id=definition.code..'01';assert(SurvivorEquipment.Get(id).hero==nil and SurvivorEquipment.ForHero(id) and SurvivorEquipment.FitsBuild(id))
+        local _,summary=SurvivorEquipment.Summary(id)
+        assert(summary:find(SurvivorAugments.AttackTag(definition.tag),1,true))
+        for i=3,4 do hero.equipped[i]=CreateItem(definition.code..string.format('%02d',i),0,0)end
+        SurvivorEquipment.Reconcile();assert(build.stats.sets[definition.flag])
+        local stats,revision=build.stats,build.revision
+        SurvivorEquipment.Reconcile();assert(build.stats==stats and build.revision==revision,'Reconciliation must not stack bonuses')
+        hero.equipped[4]=nil;SurvivorEquipment.Reconcile();assert(not build.stats.sets[definition.flag])
+        for _,offer in ipairs(SurvivorEquipment.RollBossReward())do assert(SurvivorEquipment.ForHero(offer))end
+        assert(SurvivorEquipment.FitsBuild(SurvivorEquipment.RollRiskReward()[1]))
+        SurvivorEquipment.Cleanup()
+    end
+end
+local hero,build=NewGear('banshee',12)
+local roll=Local(SurvivorEquipment.OnKill,'RollIndex');local weighted=Local(roll,'WeightedChoice')
+local maxWeight,choice
+function GetRandomInt(a,b)maxWeight=b;return choice or a end
+assert(weighted({'Hu02','Ha01'})=='Hu02'and maxWeight==4,'A relevant tag item has three times the normal weight')
+hero.equipped[1]=CreateItem('Hu01',0,0);SurvivorEquipment.Reconcile()
+assert(weighted({'Hu02','Ha01'})=='Hu02'and maxWeight==7,'An unfinished matching set gets double weight')
+choice=7;assert(weighted({'Hu02','Ha01'})=='Ha01','Unrelated items remain available')
+SurvivorEquipment.Cleanup()
 `);
 
 suite('boss recommendations preserve rarity/random cards and prioritize useful missing gear', gearMocks,
@@ -3269,7 +4148,18 @@ local function CheckCardText()
     end
 end
 CheckCardText()
+local cardBuild=SurvivorAugments.NewBuild('firebolt')
+SurvivorUI.ShowChoices({'firebolt','meteor','haste'},2,cardBuild,0,3);CheckCardText()
+assert(frames.HeroSurvivorDescription1.text:find('Lv.1 → 2',1,true)
+    and frames.HeroSurvivorDescription1.text:find('[유도]',1,true)
+    and not frames.HeroSurvivorDescription1.text:find('추적 투사체',1,true),'Upgrade cards keep the level and tags without the static attack description')
+assert(not frames.HeroSurvivorPreview1.text:find('투사체 수',1,true)
+    and frames.HeroSurvivorPreview1.text:find('(+25%)',1,true))
+assert(frames.HeroSurvivorDescription2.text:find('운석 충돌',1,true)
+    and not frames.HeroSurvivorPreview2.text:find('→',1,true),'New weapon cards retain the mechanic and core values')
 SurvivorUI.ShowChoices({'evolution1','evolution2','haste'},2,build,0,3);CheckCardText()
+assert(frames.HeroSurvivorDescription1.text:find(SurvivorAugments.Get('evolution1').text,1,true)
+    and frames.HeroSurvivorPreview1.text=='진화 선택 후 변경 불가','Evolution cards retain their full effects and tradeoffs')
 SurvivorUI.ShowGearRewards({'gear1','gear2','gear3'},1,function()end);CheckCardText()
 Show()
 WorldAt(frames.HeroSurvivorChoiceRoot,.5,.95)
@@ -5405,7 +6295,7 @@ assert(RunSession.IsRunning()and not halted and not expeditionPaused and resumeC
 assert(hero.visible and selectedUnit==hero and not hero.paused and not hero.removed)
 assert(not SurvivorUI.IsNarrativeVisible()and not frames.HeroSurvivorSetupShade.visible
     and not frames.HeroSurvivorStageIntro.visible and LiveTimers(.03)==0)
-assert(SurvivorCombat.Counts()==3 and #actors>0,'The actual first-story callback creates three enemies and the selected weapon')
+assert(SurvivorCombat.Counts()==3,'The actual first-story callback creates three enemies outside the new spawn distance')
 assert(hero.inventory[1]and not hero.inventory[1].removed,'Starting trinket survives narrative selection restoration')
 local elapsed=RunSession.GetElapsed();periodic();assert(RunSession.GetElapsed()>elapsed and expeditionSteps==1)
 AdvanceVisualTime(.12);assert(RunSession.IsRunning()and #unsafeFrameCalls==0,
@@ -6318,8 +7208,124 @@ for (const failManifest of [false, true]) {
 }
 
 const {bundle, count} = collectSources();
-const original = fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x'));
+const original = fs.readFileSync(testMapPath);
 const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
+{
+    for (const version of [1, 2, 3]) for (const skin of [false, true]) {
+        const before = serializeUnits({version, kind: 'unit', tables: [[], [{oldId: 'hfoo', newId: 'keep',
+            extra: version === 3 ? [0] : [], fields: [{id: 'unam', type: 3, value: 'keep', endId: 'keep'}]}]]});
+        const installed = installBonusUnits(before, skin), data = parseUnits(installed);
+        assert.deepEqual(installBonusUnits(installed, skin), installed, 'Bonus object installation is idempotent');
+        if (skin) {
+            const legacy = parseUnits(installed), row = legacy.tables[1].find(row => row.newId === 'hsBC');
+            const field = row.fields.find(field => field.id === 'umdl');
+            delete row.raw; delete field.raw; field.value = bonusUnits[0].legacyModel;
+            assert.deepEqual(installBonusUnits(serializeUnits(legacy), skin), installed, 'Migrate only the old treasure chest model');
+            field.value = 'custom-model.mdl';
+            assert.throws(() => installBonusUnits(serializeUnits(legacy), skin), /conflicts/);
+        }
+        assert.deepEqual(data.tables[1][0].raw, parseUnits(before).tables[1][0].raw);
+        for (const unit of bonusUnits) {
+            const row = data.tables[1].find(row => row.newId === unit.id);
+            const fields = new Map(row.fields.map(field => [field.id, field.value]));
+            if (skin) assert.equal(fields.get('umdl'), unit.model);
+            else {
+                assert.equal(fields.get('uabi'), ''); assert.equal(fields.get('uaen'), 0);
+                assert.equal(fields.get('ucol'), 0); assert.equal(fields.get('uhpm'), 2);
+                for (const id of ['ugol', 'ugor', 'ubba', 'ubdi', 'ubsi']) assert.equal(fields.get(id), 0);
+            }
+        }
+        assert.equal(bonusUnits.length, 1, 'Only one bonus prop type is installed for gameplay');
+        data.tables[1].find(row => row.newId === 'hsBC').oldId = 'ugho';
+        for (const row of data.tables[1]) delete row.raw;
+        assert.throws(() => installBonusUnits(serializeUnits(data), skin), /collides/);
+    }
+    const prepared = prepareBonusUnits(map), installed = map.replace(prepared.entries);
+    verifyPreserved(original, installed, [...prepared.entries.keys()]);
+    const synced = syncBase(fs.readFileSync(baseMapPath), collectSources().bundle);
+    for (const [name] of prepared.entries) {
+        const assetPath = path.join(root, 'assets', name), skin = name.includes('Skin');
+        assert.deepEqual(openMap(installed).read(name), installEnemyCombatFields(installBonusUnits(map.read(name), skin)));
+        assert.deepEqual(prepared.assets.get(assetPath), openMap(installed).read(name));
+        for (const unit of bonusUnits) for (const archive of [openMap(installed), openMap(synced.patched)]) {
+            assert(parseUnits(archive.read(name)).tables[1].some(row => row.newId === unit.id));
+        }
+    }
+    console.log('PASS bonus units preserve existing records, reject ID collisions and synchronize both maps and assets');
+}
+{
+    for (const name of ['war3map.w3u', 'war3mapSkin.w3u']) {
+        const source = map.read(name), output = installEnemyCombatFields(source);
+        assert.deepEqual(installEnemyCombatFields(output), output);
+        const strip = bytes => {
+            const data = parseUnits(bytes);
+            for (const row of data.tables.flat()) if (/^s[mr]0[1-5]$/.test(row.newId)) {
+                delete row.raw; row.fields = row.fields.filter(field => !['ucol', 'ua1r'].includes(field.id));
+            }
+            return serializeUnits(data);
+        };
+        assert.deepEqual(strip(output), strip(source), 'Enemy collision/range updates preserve every other field and unit');
+        const rows = parseUnits(output).tables[1].filter(row => /^s[mr]0[1-5]$/.test(row.newId));
+        assert.equal(rows.length, 10);
+        for (const row of rows) {
+            assert.equal(row.fields.find(field => field.id === 'ucol').value, 8);
+            assert.equal(row.fields.find(field => field.id === 'ua1r').value, row.newId[1] === 'm' ? 80 : 400);
+        }
+        for (const archive of [openMap(syncBase(fs.readFileSync(baseMapPath), bundle).patched), map]) {
+            for (const row of parseUnits(archive.read(name)).tables[1].filter(row => /^s[mr]0[1-5]$/.test(row.newId))) {
+                assert.equal(row.fields.find(field => field.id === 'ucol').value, 8, 'Both maps carry collision size 8');
+                assert.equal(row.fields.find(field => field.id === 'ua1r').value, row.newId[1] === 'm' ? 80 : 400,
+                    'Both maps carry melee range 80 and ranged range 400');
+            }
+        }
+    }
+    console.log('PASS melee/ranged enemy collision 8 and ranges 80/400 in all stages preserve other unit fields');
+}
+{
+    for (const version of [1, 2, 3]) for (const skin of [false, true]) {
+        const before = serializeObjectData({version, kind: 'item', tables: [[], [{oldId: 'ches', newId: 'keep',
+            extra: version === 3 ? [0] : [], fields: [{id: 'unam', type: 3, value: 'keep', endId: 'keep'}]}]]});
+        const output = installBonusItems(before, skin), data = parseObjectData(output, 'item');
+        assert.deepEqual(installBonusItems(output, skin), output);
+        const legacy = parseObjectData(output, 'item'), stop = legacy.tables[1].find(row => row.newId === 'hsTS');
+        const stopCatalog = bonusItems.find(item => item.id === 'hsTS');
+        delete stop.raw;
+        for (const field of stop.fields.filter(field => ['utub', 'ides'].includes(field.id))) {
+            delete field.raw; field.value = stopCatalog.legacyDescription;
+        }
+        assert.deepEqual(installBonusItems(serializeObjectData(legacy), skin), output,
+            'Only the known one-second boss description is migrated, preserving all other item bytes');
+        stop.fields.find(field => field.id === 'utub').value = 'custom description';
+        assert.throws(() => installBonusItems(serializeObjectData(legacy), skin), /conflicts/);
+        assert.deepEqual(data.tables[1][0].raw, parseObjectData(before, 'item').tables[1][0].raw);
+        for (const item of bonusItems) {
+            const row = data.tables[1].find(row => row.newId === item.id);
+            assert.equal(row.oldId, item.base);
+            const fields = new Map(row.fields.map(field => [field.id, field.value]));
+            assert.equal(fields.get('unam'), item.name);
+            if (!skin) {
+                assert.equal(fields.get('ipow'), 1, 'Native pickup automatically uses the powerup');
+                assert.equal(fields.get('icla'), 'PowerUp');
+                assert.equal(fields.get('iabi'), '', 'No native heal/XP can duplicate the scripted reward');
+                for (const id of ['igol', 'ipaw', 'isel']) assert.equal(fields.get(id), 0);
+            }
+        }
+        const collision = data.tables[1].find(row => row.newId === 'hsHR');
+        delete collision.raw; collision.oldId = 'phea';
+        assert.throws(() => installBonusItems(serializeObjectData(data), skin), /collides/);
+    }
+    const prepared = prepareBonusItems(map), installed = map.replace(prepared.entries);
+    verifyPreserved(original, installed, [...prepared.entries.keys()]);
+    const synced = openMap(syncBase(fs.readFileSync(baseMapPath), bundle).patched);
+    for (const [name, bytes] of prepared.entries) {
+        assert.deepEqual(prepared.assets.get(path.join(root, 'assets', name)), bytes);
+        for (const archive of [openMap(installed), synced]) {
+            const rows = parseObjectData(archive.read(name), 'item').tables[1];
+            for (const item of bonusItems) assert(rows.some(row => row.newId === item.id));
+        }
+    }
+    console.log('PASS bonus pickup definitions have no native reward and preserve unrelated items across both maps and assets');
+}
 {
     for (const [tier,entries] of talentCatalog.tiers.entries()) {
         assert.deepEqual(entries.map(entry=>Object.keys(entry.bonuses)), tier%2===0
@@ -6333,7 +7339,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
         .matchAll(/^STRING (\d+)\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n([\s\S]*?)\r?\n\}/gm)].map(match=>[Number(match[1]),match[2]]));
     const mainItems = parseObjectData(prepared.entries.get('war3map.w3t'),'item');
     const skinItems = parseObjectData(prepared.entries.get('war3mapSkin.w3t'),'item');
-    for(const row of mainItems.tables.flat().filter(row=>/^H(?:sT[1-9AB]|[seitabnchv]\d{2})$/.test(row.newId))) {
+    for(const row of mainItems.tables.flat().filter(row=>/^H(?:sT[1-9AB]|[seitabnchvpgrlfmuoxyjkzw]\d{2})$/.test(row.newId))) {
         const skin=skinItems.tables.flat().find(value=>value.newId===row.newId);
         for(const id of ['utub','ides']) {
             const field=row.fields.find(field=>field.id===id),skinField=skin.fields.find(field=>field.id===id);
@@ -6366,7 +7372,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.equal(catalog.get('HsTB').name,'수호의 인장');
     assert.equal(catalog.get('HsTB').description,'방어력 +2');
     const unwanted=/단계 특성 · 셋 중 하나 선택|이번 수색 동안 유지|자동 적용|레벨업 선택으로 강화|버리기 불가|숫자는 강화 레벨|가방 정리 시 장비가 삭제됩니다|자동 공격 스킬을 새로 부여하지 않습니다|보유 중인 해당 무기에만 적용|기본 능력치는 각각 적용|세트 효과의 추가 피해는 세트 효과를 다시 일으키지 않음|확장 인벤토리에서 장착 시 적용|해당 무기 보유 시 적용|장착 시 회복 없음|단독 기준|별도의 장비입니다/;
-    for(const filename of [baseMapPath,path.join(root,'dist/AnyasLongNight-playtest.w3x')]) {
+    for(const filename of [baseMapPath,testMapPath]) {
         const candidate=openMap(fs.readFileSync(filename));
         const strings=new Map([...candidate.read('war3map.wts').toString('utf8')
             .matchAll(/^STRING (\d+)\r?\n(?:\/\/[^\r\n]*\r?\n)*\{\r?\n([\s\S]*?)\r?\n\}/gm)].map(match=>[Number(match[1]),match[2]]));
@@ -6375,6 +7381,11 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
             const rows=parseObjectData(candidate.read(name),'item').tables.flat();
             for(const [id,expected]of catalog) {
                 const row=rows.find(row=>row.newId===id);assert(row,filename+' missing '+id);
+                if (expected.base) {
+                    const rgb = expected.name.match(/^\|cff([\da-f]{2})([\da-f]{2})([\da-f]{2})/i);
+                    for (const [index,field] of ['iclr','iclg','iclb'].entries())
+                        assert.equal(row.fields.find(value=>value.id===field)?.value,parseInt(rgb[index+1],16),filename+' '+id+' rarity RGB');
+                }
                 for(const field of ['utub','ides']) {
                     const value=resolve(row.fields.find(value=>value.id===field));
                     assert.equal(value,expected.description,filename+' '+id+'/'+field+' differs from runtime');
@@ -6397,7 +7408,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
         }
     }
     const weapons=loadWeaponTooltipCatalog();
-    for(const filename of [baseMapPath,path.join(root,'dist/AnyasLongNight-playtest.w3x')]) {
+    for(const filename of [baseMapPath,testMapPath]) {
         const candidate=openMap(fs.readFileSync(filename));
         const entries=new Map(['war3map.w3a','war3mapSkin.w3a','war3map.wts'].map(name=>[name,candidate.read(name)]));
         for(const [name,bytes]of cleanWeaponTooltipEntries(entries,weapons))assert.deepEqual(bytes,entries.get(name),'Saved weapon tooltip differs from runtime: '+filename+'/'+name);
@@ -6414,7 +7425,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     };
     for(const name of ['war3map.w3a','war3mapSkin.w3a'])assert.deepEqual(strip(installed.get(name)),strip(weaponEntries.get(name)),
         'Weapon tooltip synchronization must preserve every combat field and unrelated ability');
-    console.log('PASS complete original/test audit: 15 talents, 11 trinkets, 82 equipment items and '+weaponObjectCount*7+' weapon levels match runtime');
+    console.log('PASS complete original/test audit: 15 talents, 11 trinkets, '+[...catalog.values()].filter(item=>item.base).length+' equipment items and '+weaponObjectCount*7+' weapon levels match runtime');
 }
 {
     const snapshots=new Map(),prepared=prepareNativeTalents(map,snapshots);
@@ -6888,7 +7899,7 @@ assert.throws(() => refreshBase(original, baseMap.replace(new Map([['war3map.wts
     console.log('PASS base string deletion retains only referenced gameplay text, source bytes, LF/CRLF, idempotence and collision guards');
 }
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Dry verification changed original');
-assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original, 'Dry verification published output');
+assert.deepEqual(fs.readFileSync(testMapPath), original, 'Dry verification published output');
 console.log(`PASS resized-base refresh (${baseTerrain.width - 1}x${baseTerrain.height - 1} cells), native geography, undead rules, editor source, ${refreshed.preserved} gameplay entries and palette/pathing guards`);
 
 const unitEntries = new Map();
@@ -6976,7 +7987,7 @@ delete wrongRow.raw; delete wrongField.raw; wrongField.value = 'UnexpectedReplac
 assert.throws(() => installPortraitUnits(serializeUnits(wrongAnya), true, {migrateLegacyAnya: true}), /conflicting fields/,
     'Explicit installation only permits the known BansheeRanger-to-HeroAnya migration');
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes, 'Portrait preparation changed original');
-assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original, 'Portrait preparation published a map');
+assert.deepEqual(fs.readFileSync(testMapPath), original, 'Portrait preparation published a map');
 for (const [name, bytes] of unitAssetSnapshots) assert.deepEqual(fs.readFileSync(path.join(root, 'assets', name)), bytes,
     'Portrait dry preparation must not write its asset source');
 console.log('PASS native portrait unit definitions, real speaker models, byte-preserved rows, assets, idempotence and missing-object guard');
@@ -7163,7 +8174,7 @@ if (encryptedFixtureIndex >= 0) {
     assert.throws(() => openMap(crcBytes).compact(), /CRC/,
         'Unsupported encrypted CRC layouts must not be published');
 }
-assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original);
+assert.deepEqual(fs.readFileSync(testMapPath), original);
 assert.deepEqual(fs.readFileSync(baseMapPath), baseBytes);
 console.log('PASS MPQ no-op patching, compaction, prefix/locale/attributes, unnamed live blocks and encrypted FIX_KEY safety');
 {
@@ -7213,7 +8224,7 @@ console.log('PASS MPQ replace/base sync never accumulate unused archive bytes an
         assert.equal(cached.read('missing-cache-fixture'), null); assert.equal(cached.read('MISSING-CACHE-FIXTURE'), null);
         const toc = cached.read('war3mapImported/CustomTooltip.toc');
         assert.deepEqual(cached.read('WAR3MAPIMPORTED\\CUSTOMTOOLTIP.TOC'), toc, 'Slash and case variants share one entry');
-        assert.deepEqual(fs.readFileSync(path.join(root, 'dist/AnyasLongNight-playtest.w3x')), original,
+        assert.deepEqual(fs.readFileSync(testMapPath), original,
             'Mutating a read result must not modify the archive');
         console.log('PASS MPQ decoded cache avoids repeated inflate and isolates mutable read buffers');
     } finally { zlib.inflateSync = inflate; }
@@ -7249,7 +8260,7 @@ console.log('PASS MPQ replace/base sync never accumulate unused archive bytes an
         }
     }
     const abilities=parseObjectData(fs.readFileSync(path.join(root,'assets/war3mapSkin.w3a')),'ability');
-    for(const object of putressWeaponObjects)assert.equal(abilities.tables[1].find(row=>row.newId===object.id).fields.find(field=>field.id==='aart').value,object.icon);
+    for(const object of additionalWeaponObjects)assert.equal(abilities.tables[1].find(row=>row.newId===object.id).fields.find(field=>field.id==='aart').value,object.icon);
     assert.equal(parseObjectData(fs.readFileSync(path.join(root,'assets/war3map.w3a')),'ability').tables[1].filter(row=>weaponObjectPattern.test(row.newId)).length,weaponObjectCount);
-    console.log('PASS Putress hero copies Anya overrides and 12 Putress weapon indicators carry their icons');
+    console.log('PASS Putress hero copies Anya overrides and all 28 weapon indicators carry their icons');
 }
