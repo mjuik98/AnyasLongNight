@@ -314,8 +314,8 @@ do
             rows[#rows + 1] = {"쿨다운", w.interval, 2, "초"}
             if engine == "summon" then
                 rows[#rows + 1] = {"소환 수", math.min(w.cap, w.count)}
+                rows[#rows + 1] = {"소환 상한", w.cap}
                 rows[#rows + 1] = {"공격 간격", w.pulse, 2, "초"}
-                notes = {"충돌 없음 · 지속 종료 시 사라짐 · 소환 상한 " .. w.cap}
             elseif engine == "orb" then notes = {string.format("전이: 피해 %.0f%% · 주변 적 1명 · 간격 %.1f초 · 재전이 없음", w.chainFraction * 100, w.chainInterval)}
             elseif engine == "boomerang" then notes = {"귀환 후 남은 시간 동안 재발사"} end
         end
