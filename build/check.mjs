@@ -1829,6 +1829,35 @@ SurvivorNativeLoadout.Cleanup();SurvivorCombat.Cleanup()
 print("  400 unchanged refreshes: 0 repeated description builds")
 `);
 
+suite('shadow escape stays visible but disabled while spent and re-enables on stage recharge', mocks + String.raw`
+escapeReady,escapeRemaining=true,0
+SurvivorCombat={EscapeStatus=function()return escapeReady,escapeRemaining end}
+escapeButton={writes=0}
+function BlzUnitDisableAbility(u,id,disabled,hidden)
+    if id~='HsAE'then return end
+    escapeButton.disabled,escapeButton.hidden=disabled,hidden
+    escapeButton.writes=escapeButton.writes+1
+end
+`, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
+for _,heroId in ipairs({'anya','putress'})do
+    escapeReady,escapeRemaining=true,0
+    local hero=CreateUnit(0,'hero',0,0,0)
+    SurvivorNativeLoadout.Init(hero,SurvivorAugments.NewBuild(heroId=='anya'and'firebolt'or'plaguedart',nil,heroId))
+    assert(escapeButton.disabled==false and escapeButton.hidden==false)
+    assert(abilityExtendedTooltips.HsAE=='치명적인 피해를 받을 시 30%의 생명력으로 생존합니다.|n주변 적이 적은 방향으로 최대 400 거리 순간 이동하고, 2.5초|n동안 무적 상태가 됩니다.')
+    local writes=escapeButton.writes
+    SurvivorNativeLoadout.Refresh();assert(escapeButton.writes==writes)
+    escapeReady,escapeRemaining=false,2.5;SurvivorNativeLoadout.Refresh()
+    assert(escapeButton.disabled and not escapeButton.hidden and GetUnitAbilityLevel(hero,'HsAE')==1)
+    assert(abilityTooltips.HsAE:find('보호 중',1,true))
+    escapeRemaining=0;SurvivorNativeLoadout.Refresh()
+    assert(escapeButton.disabled and abilityTooltips.HsAE:find('소진',1,true))
+    escapeReady=true;SurvivorNativeLoadout.Refresh()
+    assert(not escapeButton.disabled and not escapeButton.hidden and abilityTooltips.HsAE:find('사용 가능',1,true))
+    SurvivorNativeLoadout.Cleanup();assert(GetUnitAbilityLevel(hero,'HsAE')==0)
+end
+`);
+
 suite('trinket pickup, upgrades, recreation and restart use only concise current-level descriptions', mocks + String.raw`
 SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
 function BlzSetItemName(item,text)item.name=text end
@@ -1890,6 +1919,11 @@ local function Check(id,build)
     assert(text:find('쿨다운',1,true)and text:find('피해',1,true),'Keep current numerical combat information')
     if id=='chainlightning'then assert(text:find('전이마다 피해 -15%',1,true))end
     if id=='frontslash'then assert(text:find('대상별 1회 타격',1,true))end
+    if SurvivorConfig.weapons[id].engine=='summon'then
+        assert(text:find('|cffffcc00소환 상한:|r '..build.stats.extraWeapons[id].cap,1,true))
+        assert(not text:find('충돌 없음',1,true)and not text:find('지속 종료 시 사라짐',1,true))
+        assert(not text:find('※ 소환 상한',1,true))
+    end
 end
 for id in pairs(ids)do
     local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild(id,nil,SurvivorConfig.weapons[id].hero)
