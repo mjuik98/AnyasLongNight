@@ -9,7 +9,8 @@ do
         frostnova = "HsW8", blizzard = "HsW9", meteor = "HsWA", thunderorb = "HsWB", returnblade = "HsWC",
         plaguedart = "HsWD", plaguetrail = "HsWE", corrosion = "HsWF", plaguepool = "HsWG",
         deathcoil = "HsWH", soulchain = "HsWI", wraithguard = "HsWJ", shadowscythe = "HsWK",
-        plaguejar = "HsWL", catalyst = "HsWM", boilingflask = "HsWN", acidvials = "HsWO"}
+        plaguejar = "HsWL", catalyst = "HsWM", boilingflask = "HsWN", acidvials = "HsWO",
+        banshee = "HsWP", shadowarcher = "HsWQ", plaguezombie = "HsWR", experiment = "HsWS"}
     local trinkets = {power = "HsT1", haste = "HsT2", reach = "HsT3", velocity = "HsT4", magnitude = "HsT5", longevity = "HsT6", multicast = "HsT7",
         vitality = "HsT8", renewal = "HsT9", stride = "HsTA", armor = "HsTB"}
     local weaponPositions = {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {2, 1}, {3, 1}}

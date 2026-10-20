@@ -1390,11 +1390,11 @@ do
         for _, pip in ipairs(rerollPips) do BlzFrameSetVisible(pip, visible) end
     end
     -- Gear cards show three set lines (element/name, thresholds, linked weapons).
-    local function LayoutCardText(card, evolution, gear)
-        BlzFrameSetSize(card.description, 0.178, evolution and 0.085 or gear and 0.069 or 0.075)
+    local function LayoutCardText(card, evolution, gear, upgrade)
+        BlzFrameSetSize(card.description, 0.178, evolution and 0.085 or gear and 0.069 or upgrade and 0.03 or 0.047)
         BlzFrameClearAllPoints(card.preview)
-        BlzFrameSetSize(card.preview, 0.18, evolution and 0.022 or gear and 0.044 or 0.032)
-        BlzFrameSetPoint(card.preview, FRAMEPOINT_TOP, card.button, FRAMEPOINT_TOP, 0, evolution and -0.219 or gear and -0.203 or -0.209)
+        BlzFrameSetSize(card.preview, 0.18, evolution and 0.022 or gear and 0.044 or upgrade and 0.077 or 0.06)
+        BlzFrameSetPoint(card.preview, FRAMEPOINT_TOP, card.button, FRAMEPOINT_TOP, 0, evolution and -0.219 or gear and -0.203 or upgrade and -0.168 or -0.184)
     end
     function SurvivorUI.ShowGearRewards(offers, stage, callback, title)
         SurvivorUI.HidePanel()
@@ -1489,14 +1489,16 @@ do
                 BlzFrameClearAllPoints(card.frame)
                 BlzFrameSetPoint(card.frame, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, (i - (#offers + 1) / 2) * 0.23, cardTop)
                 local weapon = augment.kind == "weapon" or augment.kind == "evolution"
-                LayoutCardText(card, augment.kind == "evolution")
+                local upgrade = augment.kind == "weapon" and SurvivorAugments.Level(build, id) > 0
+                LayoutCardText(card, augment.kind == "evolution", false, upgrade)
                 BlzFrameSetTexture(card.icon, augment.icon, 0, true)
                 local kind = weapon and (augment.kind == "evolution" and "[무기 진화]" or "[무기]")
                     or augment.kind == "trinket" and "[장신구]" or "[회복]"
                 local color = weapon and "|cffffd77d" or "|cff8adbe8"
                 BlzFrameSetText(card.title, color .. kind .. "|r\n"
                     .. (augment.element and (SurvivorAugments.ElementTag(augment.element) .. " ") or "") .. color .. augment.name .. "|r")
-                BlzFrameSetText(card.description, SurvivorAugments.ChoiceLabel(id, build) .. "\n" .. augment.text)
+                BlzFrameSetText(card.description, SurvivorAugments.ChoiceLabel(id, build) .. "\n"
+                    .. (upgrade and SurvivorAugments.WeaponTags(id) or SurvivorAugments.Description(id)))
                 BlzFrameSetText(card.preview, augment.kind == "evolution" and "진화 선택 후 변경 불가" or SurvivorAugments.Preview(id, build))
                 BlzFrameSetText(card.hint, "클릭하여 선택")
             end

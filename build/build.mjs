@@ -43,8 +43,8 @@ export function talentLua(data) {
     return 'HERO_SURVIVOR_TALENTS = ' + literal(data);
 }
 // Owned item rawcodes: trinkets HsT*, weapon gear Hs##, and set pieces by set code letter
-// (Anya e,i,t,b,a,n,c,v; Putress p,g,r,l,f,m).
-export const ownedItemPattern = /^H(?:sT[1-9AB]|[seitabnchvpgrlfm]\d{2})$/;
+// (Anya e,i,t,b,a,n,c,v; Putress p,g,r,l,f,m; shared tag sets u,o,x,y,j,k,z,w).
+export const ownedItemPattern = /^H(?:sT[1-9AB]|[seitabnchvpgrlfmuoxyjkzw]\d{2})$/;
 // Evaluate only pure catalog/description code. No Warcraft gameplay natives run.
 // Runtime descriptions, native object tooltips and editor strings share one source.
 export function loadItemTooltipCatalog(snapshots = new Map()) {
@@ -60,7 +60,7 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
     try {
         lua.lua_pushjsfunction(state, current => {
             const values = [1,2,3].map(index => to_jsstring(lua.lua_tostring(current,index)));
-            assert((weapons ? /^HsW[1-9A-O]:[1-7]$/ : ownedItemPattern).test(values[0]) && !catalog.has(values[0]));
+            assert((weapons ? /^HsW[1-9A-S]:[1-7]$/ : ownedItemPattern).test(values[0]) && !catalog.has(values[0]));
             const optional = index => lua.lua_isstring(current,index) ? to_jsstring(lua.lua_tostring(current,index)) : undefined;
             catalog.set(values[0], {name:values[1],description:values[2].replaceAll('\n','|n'),icon:optional(4),base:optional(5)});
             return 0;
@@ -77,7 +77,7 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
         }
         chunks.push(['descriptions',weapons ? String.raw`
 local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC',
-    plaguedart='HsWD',plaguetrail='HsWE',corrosion='HsWF',plaguepool='HsWG',deathcoil='HsWH',soulchain='HsWI',wraithguard='HsWJ',shadowscythe='HsWK',plaguejar='HsWL',catalyst='HsWM',boilingflask='HsWN',acidvials='HsWO'}
+    plaguedart='HsWD',plaguetrail='HsWE',corrosion='HsWF',plaguepool='HsWG',deathcoil='HsWH',soulchain='HsWI',wraithguard='HsWJ',shadowscythe='HsWK',plaguejar='HsWL',catalyst='HsWM',boilingflask='HsWN',acidvials='HsWO',banshee='HsWP',shadowarcher='HsWQ',plaguezombie='HsWR',experiment='HsWS'}
 for id,raw in pairs(ids)do
     local build=SurvivorAugments.NewBuild(id,nil,SurvivorConfig.weapons[id].hero)
     for level=1,SurvivorConfig.growthMaxLevel do
@@ -291,6 +291,156 @@ export function serializeObjectData(data) {
 }
 export const parseUnits = bytes => parseObjectData(bytes, 'unit');
 export const serializeUnits = data => serializeObjectData({...data, kind: 'unit'});
+export const bonusUnits = [
+    // Old hsBR/hsBX definitions in existing maps stay intact; only hsBC is spawned.
+    {id: 'hsBC', name: '낡은 보급 상자', model: 'Doodads\\LordaeronSummer\\Terrain\\Crates\\Crates0.mdl',
+        legacyModel: 'Objects\\InventoryItems\\TreasureChest\\treasurechest.mdl',
+        icon: 'ReplaceableTextures\\CommandButtons\\BTNChestOfGold.blp'},
+];
+export const bonusItems = [
+    {id: 'hsHR', base: 'rhe1', name: '회복의 룬', icon: 'ReplaceableTextures\\CommandButtons\\BTNRune.blp',
+        description: '접근하거나 습득하면 최대 생명력의 20%를 회복합니다.'},
+    {id: 'hsEX', base: 'texp', name: '경험치의 서', icon: 'ReplaceableTextures\\CommandButtons\\BTNTomeBrown.blp',
+        description: '접근하거나 습득하면 경험치 250을 얻습니다. 스테이지에 따라 증가합니다.'},
+    {id: 'hsPU', base: 'rdis', name: '소멸의 룬', icon: 'ReplaceableTextures\\CommandButtons\\BTNDeathAndDecay.blp',
+        description: '영웅 주변 700 범위의 일반·정예 적을 처치합니다. 보스는 최대 생명력의 10%만큼 감소하며 이 효과로 처치되지 않습니다.'},
+    {id: 'hsTS', base: 'rspd', name: '정지의 룬', icon: 'ReplaceableTextures\\CommandButtons\\BTNStasisTrap.blp',
+        legacyDescription: '8초 동안 적과 적 투사체·장판을 멈춥니다. 영웅은 계속 이동·공격할 수 있습니다. 보스의 동작은 1초 동안 멈춥니다.',
+        description: '8초 동안 보스를 포함한 모든 적과 적 투사체·장판을 멈춥니다. 정지된 적은 어둡게 표시됩니다. 영웅은 계속 이동·공격할 수 있습니다.'},
+];
+export function installBonusItems(bytes, skin = false) {
+    const data = parseObjectData(bytes, 'item');
+    const migrated = new Set();
+    assert.deepEqual(serializeObjectData(data), bytes, 'Item reader must round-trip losslessly');
+    for (const item of bonusItems) {
+        const text = [['unam', 3, item.name], ['utip', 3, item.name], ['utub', 3, item.description],
+            ['ides', 3, item.description], ['iico', 3, item.icon]];
+        // Native abilities are empty: all healing/XP comes from the collection callback.
+        // Powerups auto-use on acquisition, so manual collection needs no free bag slot.
+        const values = skin ? text : [...text, ['iabi', 3, ''], ['icla', 3, 'PowerUp'], ['ipow', 0, 1],
+            ['iper', 0, 1], ['iuse', 0, 1], ['iusa', 0, 0], ['iprn', 0, 0], ...goldObjectSpecs.item.map(id => [id, 0, 0])];
+        const rows = data.tables.flat().filter(row => (row.newId === '\0\0\0\0' ? row.oldId : row.newId) === item.id);
+        assert(rows.length <= 1, 'Duplicate bonus item ID: ' + item.id);
+        if (rows.length) {
+            const row = rows[0];
+            assert(row.oldId === item.base && row.newId === item.id, 'Bonus item ID collides with another item: ' + item.id);
+            for (const [id, type, value] of values) {
+                const fields = row.fields.filter(field => field.id === id);
+                if (item.legacyDescription && ['utub', 'ides'].includes(id) && fields.length === 1
+                    && fields[0].type === type && fields[0].value === item.legacyDescription) {
+                    delete row.raw; delete fields[0].raw; fields[0].value = value;
+                    migrated.add(item.id);
+                }
+                assert(fields.length === 1 && fields[0].type === type && fields[0].value === value,
+                    'Bonus item field conflicts: ' + item.id + ' ' + id);
+            }
+        } else data.tables[1].push({oldId: item.base, newId: item.id, extra: data.version === 3 ? [0] : [],
+            fields: values.map(([id, type, value]) => ({id, type, value, endId: item.id}))});
+    }
+    const output = serializeObjectData(data), verified = parseObjectData(output, 'item');
+    for (const [i, rows] of parseObjectData(bytes, 'item').tables.entries()) for (const row of rows) {
+        const after = verified.tables[i].find(next => next.oldId === row.oldId && next.newId === row.newId);
+        if (!migrated.has(row.newId)) assert.deepEqual(after.raw, row.raw, 'Bonus installation changed an existing item');
+        else {
+            assert.equal(after.fields.length, row.fields.length, 'Bonus description migration changed field count');
+            for (const [index, field] of row.fields.entries()) {
+                const next = after.fields[index];
+                if (['utub', 'ides'].includes(field.id) && field.value === bonusItems.find(item => item.id === row.newId).legacyDescription) {
+                    assert.equal(next.id, field.id); assert.equal(next.type, field.type); assert.equal(next.endId, field.endId);
+                    assert.equal(next.value, bonusItems.find(item => item.id === row.newId).description);
+                } else assert.deepEqual(next.raw, field.raw, 'Bonus description migration changed an unrelated field');
+            }
+        }
+    }
+    return output;
+}
+export function prepareBonusItems(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const entries = new Map(), assets = new Map();
+    for (const [name, skin] of [['war3map.w3t', false], ['war3mapSkin.w3t', true]]) {
+        const asset = path.join(root, 'assets', name), source = fs.readFileSync(asset);
+        const output = installBonusItems(map.read(name), skin);
+        assert.deepEqual(installBonusItems(preparedAssets.get(asset) ?? source, skin), output,
+            'Asset and test map bonus items diverge: ' + name);
+        if (snapshots.has(asset)) assert.deepEqual(snapshots.get(asset), source, 'Asset changed during preparation');
+        else snapshots.set(asset, source);
+        entries.set(name, output); assets.set(asset, output);
+    }
+    return {entries, assets};
+}
+export function installBonusUnits(bytes, skin = false) {
+    const data = parseUnits(bytes);
+    const migrated = new Set();
+    assert.deepEqual(serializeUnits(data), bytes, 'Unit reader must round-trip losslessly');
+    for (const unit of bonusUnits) {
+        const values = skin
+            ? [['umdl', 3, unit.model], ['unam', 3, unit.name], ['uico', 3, unit.icon], ['usnd', 3, ''], ['ushu', 3, '']]
+            : [['uabi', 3, ''], ['uaen', 0, 0], ['umvs', 0, 0], ['umvt', 3, ''], ['ucol', 2, 0],
+                ['ufoo', 0, 0], ['uhom', 0, 1], ['uhpm', 0, 2], ['uhpr', 1, 0], ['uhrt', 3, 'none'],
+                ['udef', 0, 0], ['upgr', 3, ''], ...goldObjectSpecs.unit.map(id => [id, 0, 0])];
+        const rows = data.tables.flat().filter(row => (row.newId === '\0\0\0\0' ? row.oldId : row.newId) === unit.id);
+        assert(rows.length <= 1, 'Duplicate bonus prop ID: ' + unit.id);
+        if (rows.length) {
+            const row = rows[0];
+            assert(row.oldId === 'hfoo' && row.newId === unit.id, 'Bonus prop ID collides with another unit: ' + unit.id);
+            for (const [id, type, value] of values) {
+                const fields = row.fields.filter(field => field.id === id);
+                if (id === 'umdl' && fields.length === 1 && fields[0].type === type && fields[0].value === unit.legacyModel) {
+                    delete row.raw; delete fields[0].raw; fields[0].value = value; migrated.add(unit.id);
+                }
+                assert(fields.length === 1 && fields[0].type === type && fields[0].value === value,
+                    'Bonus prop field conflicts: ' + unit.id + ' ' + id);
+            }
+        } else data.tables[1].push({oldId: 'hfoo', newId: unit.id, extra: data.version === 3 ? [0] : [],
+            fields: values.map(([id, type, value]) => ({id, type, value, endId: unit.id}))});
+    }
+    const output = serializeUnits(data), verified = parseUnits(output);
+    for (const [i, rows] of parseUnits(bytes).tables.entries()) for (const row of rows) {
+        const after = verified.tables[i].find(next => next.oldId === row.oldId && next.newId === row.newId);
+        if (!migrated.has(row.newId)) assert.deepEqual(after.raw, row.raw, 'Bonus installation changed an existing unit');
+        else {
+            assert.equal(after.fields.length, row.fields.length);
+            for (const [index, field] of row.fields.entries()) {
+                const next = after.fields[index];
+                if (field.id === 'umdl') {
+                    assert.equal(next.id, field.id); assert.equal(next.type, field.type); assert.equal(next.endId, field.endId);
+                    assert.equal(next.value, bonusUnits.find(unit => unit.id === row.newId).model);
+                } else assert.deepEqual(next.raw, field.raw, 'Bonus model migration changed an unrelated field');
+            }
+        }
+    }
+    return output;
+}
+// Combat fields are shared by all five stages, including elite variants of these types.
+export function installEnemyCombatFields(bytes) {
+    const data = parseUnits(bytes);
+    for (const kind of ['m', 'r']) for (let stage = 1; stage <= 5; stage++) {
+        const id = `s${kind}0${stage}`, rows = data.tables[1].filter(row => row.newId === id);
+        assert.equal(rows.length, 1, 'Missing or duplicate enemy: ' + id);
+        const row = rows[0]; assert.equal(row.oldId, kind === 'm' ? 'ugho' : 'ucry');
+        // Ranged fire uses Lua; mirror its range in native data as well.
+        for (const [fieldId, type, value] of [['ucol', 2, 8], ['ua1r', 0, kind === 'm' ? 80 : 400]]) {
+            const fields = row.fields.filter(field => field.id === fieldId);
+            assert(fields.length <= 1 && (!fields.length || fields[0].type === type), 'Invalid enemy field: ' + id + '/' + fieldId);
+            if (!fields.length) {
+                delete row.raw; row.fields.push({id: fieldId, type, value, endId: id});
+            } else if (fields[0].value !== value) { delete row.raw; delete fields[0].raw; fields[0].value = value; }
+        }
+    }
+    return serializeUnits(data);
+}
+export function prepareBonusUnits(map, snapshots = new Map(), preparedAssets = new Map()) {
+    const entries = new Map(), assets = new Map();
+    for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
+        const asset = path.join(root, 'assets', name), source = fs.readFileSync(asset);
+        const output = installEnemyCombatFields(installBonusUnits(map.read(name), skin));
+        assert.deepEqual(installEnemyCombatFields(installBonusUnits(preparedAssets.get(asset) ?? source, skin)), output,
+            'Asset and test map bonus props diverge: ' + name);
+        if (snapshots.has(asset)) assert.deepEqual(snapshots.get(asset), source, 'Asset changed during preparation');
+        else snapshots.set(asset, source);
+        entries.set(name, output); assets.set(asset, output);
+    }
+    return {entries, assets};
+}
 export function installInterfaceTooltip(bytes,catalog) {
     const data=parseObjectData(bytes,'ability');
     assert.deepEqual(serializeObjectData(data),bytes,'Ability reader must round-trip losslessly');
@@ -469,14 +619,15 @@ export function prepareNativeTalents(map, snapshots = new Map(), preparedAssets 
 }
 // Weapon/trinket growth ends at level 7 (SurvivorConfig.growthMaxLevel).
 export const growthLevels = 7;
-// Passive weapon indicators: HsW1..HsWC are Anya's, HsWD..HsWO are Putress' (SurvivorNativeLoadout).
-export const weaponObjectCount = 24;
-// 11 trinkets + 30 single gear + 14 sets of nine pieces, minus Anya set pieces reusing single gear.
-export const itemObjectCount = 159;
-export const weaponObjectPattern = /^HsW[1-9A-O]$/;
-export const putressWeaponObjects = [
+// Passive weapon indicators: original HsW1..HsWO plus summons HsWP..HsWS (SurvivorNativeLoadout).
+export const weaponObjectCount = 28;
+// 11 trinkets + 30 single gear + 22 sets of nine pieces, minus Anya set pieces reusing single gear.
+export const itemObjectCount = 231;
+export const weaponObjectPattern = /^HsW[1-9A-S]$/;
+export const additionalWeaponObjects = [
     ['HsWD', 'BTNEnvenomedSpear'], ['HsWE', 'BTNPlagueCloud'], ['HsWF', 'BTNCorrosiveBreath'], ['HsWG', 'BTNOrbOfVenom'],
     ['HsWH', 'BTNDeathCoil'], ['HsWI', 'BTNCurse'], ['HsWJ', 'BTNUnholyFrenzy'], ['HsWK', 'BTNShadowStrike'],
+    ['HsWP', 'BTNBanshee'], ['HsWQ', 'BTNSkeletonArcher'], ['HsWR', 'BTNGhoul'], ['HsWS', 'BTNAbomination'],
     ['HsWL', 'BTNUnstableConcoction'], ['HsWM', 'BTNRejuvenationPotion'], ['HsWN', 'BTNChemicalRage'], ['HsWO', 'BTNHealingSalve'],
 ].map(([id, icon]) => ({id, icon: 'ReplaceableTextures\\CommandButtons\\' + icon + '.blp'}));
 export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인장',
@@ -510,7 +661,7 @@ export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatal
     // Putress indicators are created from HsW1's level metadata; tooltips are filled later.
     const template = abilities.tables[1].find(row => row.newId === 'HsW1');
     assert(template && template.oldId === 'Aamk', 'Missing weapon template HsW1');
-    for (const object of putressWeaponObjects) {
+    for (const object of additionalWeaponObjects) {
         assert(!abilities.tables[0].some(row => row.oldId === object.id), 'Weapon ID collides with a stock ability: ' + object.id);
         const rows = abilities.tables[1].filter(row => row.newId === object.id);
         assert(rows.length <= 1, 'Duplicate weapon object: ' + object.id);
@@ -539,7 +690,7 @@ export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatal
     assert.deepEqual(serializeObjectData(skins), entries.get('war3mapSkin.w3a'), 'Ability skin reader must round-trip losslessly');
     const skinTemplate = skins.tables[1].find(row => row.newId === 'HsW1');
     assert(skinTemplate && skinTemplate.oldId === 'Aamk', 'Missing weapon skin template HsW1');
-    for (const object of putressWeaponObjects) {
+    for (const object of additionalWeaponObjects) {
         const rows = skins.tables[1].filter(row => row.newId === object.id);
         assert(rows.length <= 1, 'Duplicate weapon skin: ' + object.id);
         if (rows.length) {
@@ -852,17 +1003,18 @@ export function validatePortraitObjects(map, bundle) {
             'Story portrait units are missing from ' + name + '; run build with --portrait-objects before publishing');
     }
 }
-function preparePortraitObjects(map, snapshots) {
+function preparePortraitObjects(map, snapshots, preparedAssets = new Map()) {
     const entries = new Map(), assets = new Map();
     for (const [name, skin] of [['war3map.w3u', false], ['war3mapSkin.w3u', true]]) {
         const bytes = map.read(name), assetPath = path.join(root, 'assets', name), source = fs.readFileSync(assetPath);
+        const preparedSource = preparedAssets.get(assetPath) ?? source;
         // Both sources must agree on every pre-existing record before synchronization.
         const withoutOwned = value => { const data = parseUnits(value);
             data.tables = data.tables.map(table => table.filter(row => !portraitUnits.some(unit => row.newId === unit.id)));
             return serializeUnits(data); };
-        assert.deepEqual(withoutOwned(source), withoutOwned(bytes), 'Asset and test map unit data diverge: ' + name);
+        assert.deepEqual(withoutOwned(preparedSource), withoutOwned(bytes), 'Asset and test map unit data diverge: ' + name);
         const output = installPortraitUnits(bytes, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true});
-        assert.deepEqual(installPortraitUnits(source, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true}), output, 'Portrait asset output must match the map');
+        assert.deepEqual(installPortraitUnits(preparedSource, skin, {migrateLegacyAnya: true, migrateLegacyArmor: true, migrateLegacyUpgrades: true}), output, 'Portrait asset output must match the map');
         snapshots.set(assetPath, source); entries.set(name, output); assets.set(assetPath, output);
     }
     return {entries, assets};
@@ -917,8 +1069,8 @@ function cleanTrinketTooltipText(text) {
     return cleanItemTooltipText(text).split(/(?<=\|n)|(?<=\n)/)
         .filter(segment => !/^\|cffaaaaaa/i.test(segment.trim())).join('').replace(/(?:\|n|\r?\n)+$/, '');
 }
-// Clean only our item descriptions, including referenced editor strings. Other
-// object fields, mechanics and unrelated authored strings retain their original bytes.
+// Synchronize owned descriptions/editor strings and equipment model RGB.
+// Other object fields, mechanics and unrelated authored strings retain their original bytes.
 export function cleanItemTooltipEntries(entries, catalog = null) {
     const output = new Map(entries), targets = new Set(), trinketTargets = new Set(), regularTargets = new Set(), otherReferences = new Set();
     const canonicalStrings = new Map();
@@ -929,6 +1081,18 @@ export function cleanItemTooltipEntries(entries, catalog = null) {
         for (const row of data.tables.flat().filter(row => ownedItemPattern.test(row.newId))) {
             const skin = skinItems.tables.flat().find(value => value.newId === row.newId && value.oldId === row.oldId);
             assert(skin, 'Missing owned item skin: ' + row.newId);
+            const item = catalog?.get(row.newId);
+            if (item?.base) {
+                // The runtime rarity name is the single source for name and ground-model colors.
+                const rgb = item.name.match(/^\|cff([\da-f]{2})([\da-f]{2})([\da-f]{2})/i);
+                assert(rgb, 'Equipment lacks a rarity color: ' + row.newId);
+                for (const [index, id] of ['iclr', 'iclg', 'iclb'].entries()) {
+                    const value = parseInt(rgb[index + 1], 16), fields = row.fields.filter(field => field.id === id);
+                    assert(fields.length <= 1 && (!fields.length || fields[0].type === 0), 'Invalid item RGB: ' + row.newId);
+                    if (!fields.length) { delete row.raw; row.fields.push({id, type: 0, value, endId: row.newId}); }
+                    else if (fields[0].value !== value) { delete row.raw; delete fields[0].raw; fields[0].value = value; }
+                }
+            }
             for (const id of ['utub','ides']) {
                 const sources = skin.fields.filter(field => field.id === id), fields = row.fields.filter(field => field.id === id);
                 assert(sources.length === 1 && sources[0].type === 3 && fields.length <= 1, 'Invalid item description: ' + row.newId + '/' + id);
@@ -1485,7 +1649,13 @@ function main() {
     let patched = refreshed?.patched ?? map.replace(new Map([
         ['war3map.lua', Buffer.from(script)], ['war3map.wct', editorBundle(map.read('war3map.wct'), bundle)],
     ]));
-    const portraitObjects = portraits ? preparePortraitObjects(openMap(patched), snapshots) : null;
+    // Normalize new pickup rows before migrations compare assets with the input.
+    // A locked primary can still lack the rows published with an alternate map.
+    const bonusPickups = prepareBonusItems(openMap(patched), snapshots);
+    patched = openMap(patched).replace(bonusPickups.entries);
+    const bonusProps = prepareBonusUnits(openMap(patched), snapshots);
+    patched = openMap(patched).replace(bonusProps.entries);
+    const portraitObjects = portraits ? preparePortraitObjects(openMap(patched), snapshots, bonusProps.assets) : null;
     if (portraitObjects) patched = openMap(patched).replace(portraitObjects.entries);
     const experienceAsset = path.join(root, 'assets/war3mapMisc.txt');
     const experienceSource = fs.readFileSync(experienceAsset);
@@ -1495,9 +1665,10 @@ function main() {
     if (experience) patched = openMap(patched).replace(new Map([['war3mapMisc.txt', experienceConstants]]));
     else assert.deepEqual(constants, experienceConstants,
         'Map experience curve differs from assets; run build with --experience-curve');
-    const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots, portraitObjects?.assets) : null;
+    const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots,
+        new Map([...bonusPickups.assets, ...bonusProps.assets, ...(portraitObjects?.assets ?? [])])) : null;
     if (goldRemoval) patched = openMap(patched).replace(goldRemoval.entries);
-    const growth = prepareGrowthObjects(openMap(patched), snapshots, goldRemoval?.assets);
+    const growth = prepareGrowthObjects(openMap(patched), snapshots, new Map([...bonusPickups.assets, ...(goldRemoval?.assets ?? [])]));
     patched = openMap(patched).replace(growth.entries);
     const grownAssets = new Map([...(goldRemoval?.assets ?? []), ...growth.assets]);
     const itemTooltips = prepareItemTooltipCleanup(openMap(patched), snapshots, grownAssets);
@@ -1508,13 +1679,14 @@ function main() {
     patched = openMap(patched).replace(interfaceTooltip.entries);
     const statDetails = prepareStatDetails(openMap(patched), snapshots, interfaceTooltip.assets);
     patched = openMap(patched).replace(statDetails.entries);
-    const regeneration = prepareHeroRegeneration(openMap(patched), snapshots, goldRemoval?.assets ?? portraitObjects?.assets);
+    const regeneration = prepareHeroRegeneration(openMap(patched), snapshots,
+        new Map([...bonusProps.assets, ...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? [])]));
     patched = openMap(patched).replace(regeneration.entries);
     const talents = prepareNativeTalents(openMap(patched), snapshots, statDetails.assets);
     patched = openMap(patched).replace(talents.entries);
     const weaponTooltips = prepareWeaponTooltips(openMap(patched),snapshots,new Map([...itemTooltips.assets,...talents.assets]));
     patched = openMap(patched).replace(weaponTooltips.entries);
-    const companionAssets = new Map([...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []), ...growth.assets,
+    const companionAssets = new Map([...bonusPickups.assets, ...bonusProps.assets, ...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []), ...growth.assets,
         ...itemTooltips.assets, ...interfaceTooltip.assets, ...statDetails.assets, ...regeneration.assets, ...talents.assets, ...weaponTooltips.assets]);
     // replace() already compacts its own output; this also drops orphaned data an unchanged input carried in.
     const compactStats = {beforeBytes: patched.length};
@@ -1526,7 +1698,7 @@ function main() {
     validateGoldRemoval(preparedMap);
     const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
         ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []), ...growth.entries.keys(),
-        ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(),
+        ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...bonusProps.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(), ...bonusPickups.entries.keys(),
         ...(map.read('(listfile)').equals(preparedMap.read('(listfile)')) ? [] : ['(listfile)']),
         ...(experience ? ['war3mapMisc.txt'] : [])])];
     const preserved = verifyPreserved(original, patched, changedEntries);

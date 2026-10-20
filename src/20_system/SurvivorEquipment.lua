@@ -44,7 +44,7 @@ do
             bonuses = {blizzard = {damagePct = 0.15, duration = 1}}},
         {id = "Hs11", base = "gcel", slot = "Gloves", name = "낙성을 부르는 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
-            description = "잿불 낙성과 잔불 피해 +25%",
+            description = "잿불 낙성 충돌 피해 +25%",
             bonuses = {meteor = {damagePct = 0.25}}},
         {id = "Hs12", base = "cnob", slot = "Head", name = "폭풍 구슬의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
@@ -96,7 +96,7 @@ do
             description = "그림자 낫 피해 +20% / 타격 크기 +15%", bonuses = {shadowscythe = {damagePct = 0.20, areaPct = 0.15}}},
         {id = "Hs27", base = "gcel", slot = "Gloves", name = "단지 투척용 장갑", hero = "putress",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
-            description = "역병 단지 충돌·잔여물 피해 +25%", bonuses = {plaguejar = {damagePct = 0.25}}},
+            description = "역병 단지 착탄 피해 +25%", bonuses = {plaguejar = {damagePct = 0.25}}},
         {id = "Hs28", base = "cnob", slot = "Head", name = "보호용 고글", hero = "putress", rarity = "rare",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
             description = "휘발성 촉매 범위 +20% / 반응 피해 +15%", bonuses = {catalyst = {areaPct = 0.20, reactionPct = 0.15}}},
@@ -113,7 +113,8 @@ do
         epic = {name = "영웅", color = "|cffc080ff"},
     }
     local setOrder = {"ember", "storm", "frost", "blade", "ashguide", "duskstorm", "silentcrypt", "nightwatch",
-        "apothecary", "gravewarden", "apprentice", "plaguelab", "forsworn", "grandalchemy"}
+        "apothecary", "gravewarden", "apprentice", "plaguelab", "forsworn", "grandalchemy",
+        "commander", "bombardier", "destroyer", "tracker", "pursuer", "bulwark", "mire", "conductor"}
     local sets = {
         ember = {name = "스트라솔름 수비대의 유품", prefix = "스트라솔름 수비대의", flavor = "정화의 불길 속에서도 피난처를 지키던 수비대의 유품.", code = "He", weapons = {"firebolt", "flamefield", "meteor"},
             existing = {Head = "Hs04", Chest = "Hs03", Gloves = "Hs05"},
@@ -190,6 +191,48 @@ do
                 {count = 5, text = "역병 단지 범위 +30%p · 휘발성 촉매 피해 +35%p|n끓어오르는 플라스크 지속 +2초 · 산성 약병 +1개",
                     bonuses = {plaguejar = {areaPct = 0.30}, catalyst = {damagePct = 0.35}, boilingflask = {duration = 2}, acidvials = {extraStrikes = 1}}}}},
     }
+    sets.commander = {name = "망자 지휘관의 장구", prefix = "망자 지휘관의", code = "Hu", tag = "소환", shared = true,
+        flavor = "긴 밤의 행군에서도 흩어진 망자들을 다시 불러 모은다.", existing = {}, firstBonus = {duration = 2},
+        tiers = {{count = 2, text = "소환 무기 지속 시간 +2초", bonuses = {}},
+            {count = 4, text = "소환 무기별 6회 공격마다 강화 공격: 피해 100% 추가 (재사용 2초·추가 공격 제외)", bonuses = {set = {commander = 1}}}}}
+    sets.bombardier = {name = "포격수의 유산", prefix = "포격수의", code = "Ho", tag = "낙하", shared = true,
+        flavor = "무너진 성벽 너머로 마지막 포격의 메아리가 남아 있다.", existing = {}, firstBonus = {speedPct = 0.15},
+        tiers = {{count = 2, text = "낙하 무기 쿨다운 13.0% 감소", bonuses = {}},
+            {count = 4, text = "낙하 무기별 4회 발동마다 작은 추가 낙하: 피해 40%·범위 70% (재사용 4초·추가 공격 제외)", bonuses = {set = {bombardier = 1}}}}}
+    sets.destroyer = {name = "파괴자의 실험 도구", prefix = "파괴자의", code = "Hx", tag = "폭발", shared = true,
+        flavor = "작은 균열 하나가 굳게 닫힌 길을 무너뜨린다.", existing = {}, firstBonus = {areaPct = 0.20},
+        tiers = {{count = 2, text = "폭발 무기 범위 +20%p", bonuses = {}},
+            {count = 4, text = "폭발 무기 3회 적중마다 주변 범위에 추가 폭발: 해당 타격 피해 40% (재사용 2초)", bonuses = {set = {destroyer = 1}}}}}
+    sets.tracker = {name = "꿰뚫는 추적자의 장구", prefix = "꿰뚫는 추적자의", code = "Hy", tag = "관통", shared = true,
+        flavor = "한 번 놓친 흔적도 되돌아오는 칼날 끝에서는 벗어나지 못한다.", existing = {}, firstBonus = {damagePct = 0.15},
+        tiers = {{count = 2, text = "관통 무기 피해 +15%p", bonuses = {}},
+            {count = 4, text = "같은 투사체가 서로 다른 적을 맞힐 때마다 후속 타격 피해 +20% (최대 +60%·추가 공격 제외)", bonuses = {set = {tracker = 1}}}}}
+    sets.pursuer = {name = "집요한 사냥꾼의 장구", prefix = "집요한 사냥꾼의", code = "Hj", tag = "유도", shared = true,
+        flavor = "한 번 발견한 흔적은 긴 밤이 끝날 때까지 놓치지 않는다.", existing = {}, firstBonus = {damagePct = 0.15},
+        tiers = {{count = 2, text = "유도 무기 피해 +15%p", bonuses = {}},
+            {count = 4, text = "0.5초 이상 추적한 유도 투사체 피해 +40% (추가 공격 제외)", bonuses = {set = {pursuer = 1}}}}}
+    sets.bulwark = {name = "문지기의 결의", prefix = "문지기의", code = "Hk", tag = "근접", shared = true,
+        flavor = "밀려드는 발걸음 앞에서도 마지막 문턱을 지킨다.", existing = {}, firstBonus = {areaPct = 0.15},
+        tiers = {{count = 2, text = "근접 무기 범위 +15%p", bonuses = {}},
+            {count = 4, text = "근접 무기 적중 시 3초 동안 받는 피해 15% 감소 (중첩 없음·재적중 시 갱신)", bonuses = {set = {bulwark = 1}}}}}
+    sets.mire = {name = "황폐한 대지의 흔적", prefix = "황폐한 대지의", code = "Hz", tag = "장판", shared = true,
+        flavor = "짓밟힌 땅에 남은 원한이 발을 붙잡고 놓아주지 않는다.", existing = {}, firstBonus = {duration = 1},
+        tiers = {{count = 2, text = "장판 무기 지속 시간 +1초", bonuses = {}},
+            {count = 4, text = "같은 장판의 동일 적 반복 타격 피해 +10%씩 (최대 +50%·추가 공격 제외)", bonuses = {set = {mire = 1}}}}}
+    sets.conductor = {name = "메아리 전도자의 유산", prefix = "메아리 전도자의", code = "Hw", tag = "연쇄", shared = true,
+        flavor = "끊어진 줄 알았던 메아리가 마지막 이름을 한 번 더 부른다.", existing = {}, firstBonus = {speedPct = 0.15},
+        tiers = {{count = 2, text = "연쇄 무기 쿨다운 13.0% 감소", bonuses = {}},
+            {count = 4, text = "연쇄 종료 시 마지막 생존 대상에게 해당 타격 피해 60% 추가 (무기별 재사용 2초·추가 공격 제외)", bonuses = {set = {conductor = 1}}}}}
+    for _, set in pairs(sets) do
+        if set.tag then
+            set.weapons = {}
+            for _, weapon in ipairs(SurvivorConfig.weaponOrder) do
+                for _, tag in ipairs(SurvivorConfig.weapons[weapon].tags) do
+                    if tag == set.tag then set.weapons[#set.weapons + 1] = weapon end
+                end
+            end
+        end
+    end
     -- Nine simultaneous slots: each set has two distinct rings and seven other pieces.
     local parts = {
         {key = "Head", slot = "Head", base = "cnob", name = "두건", icon = "BTNHelmutPurple.blp", rarity = "rare", stat = "maxLife", value = 100, text = "최대 생명력 +100"},
@@ -229,11 +272,11 @@ do
                 else bonuses.all = {[part.stat] = part.value} end
                 entry = {id = set.code .. string.format("%02d", i), base = part.base, slot = part.slot,
                     name = set.prefix .. " " .. part.name, icon = "ReplaceableTextures\\CommandButtons\\" .. part.icon,
-                    description = part.text, bonuses = bonuses}
+                    description = set.tag and part.text:gsub("소속 세트 계열", "소속 세트 태그") or part.text, bonuses = bonuses}
                 catalog[#catalog + 1] = entry
             end
             entry.name, entry.flavor = set.prefix .. " " .. part.name, set.flavor
-            entry.set, entry.rarity, entry.hero = id, part.rarity, set.hero or "anya"
+            entry.set, entry.rarity, entry.hero = id, part.rarity, set.hero or (not set.shared and "anya" or nil)
             set.pieces[#set.pieces + 1] = entry.id
         end
     end
@@ -254,7 +297,7 @@ do
     -- Set cards tag the school of the set's first weapon (SurvivorConfig.elements).
     local function ElementTag(weapon) return SurvivorAugments.ElementTag(SurvivorConfig.weapons[weapon].element, true) end
     local slotNames = {Head = "머리", Chest = "가슴", Gloves = "장갑", Boots = "신발",
-        Trinket = "장신구 (장비용)", Ring = "반지", Primary = "무기", Offhand = "보조 무기"}
+        Trinket = "장신구", Ring = "반지", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
     for _, entry in ipairs(catalog) do byType[FourCC(entry.id)], byId[entry.id] = entry, entry end
     local hero, build, eventTrigger
@@ -292,12 +335,14 @@ do
             for _, tier in ipairs(set.tiers) do thresholds[#thresholds + 1] = tier.count .. "개" end
             -- Name the set's element and weapons so a new player can see what it supports.
             for _, weapon in ipairs(set.weapons) do
-                local name = SurvivorAugments.Get(weapon).name
-                linked[#linked + 1] = build and SurvivorAugments.Level(build, weapon) > 0 and "|cff80ff80" .. name .. "|r" or name
+                if not build or SurvivorConfig.weapons[weapon].hero == build.hero then
+                    local name = SurvivorAugments.Get(weapon).name
+                    linked[#linked + 1] = build and SurvivorAugments.Level(build, weapon) > 0 and "|cff80ff80" .. name .. "|r" or name
+                end
             end
         end
         return rarity.color .. rarity.name .. "|r · " .. slotNames[entry.slot],
-            set and (ElementTag(set.weapons[1]) .. " " .. set.name .. "\n" .. table.concat(thresholds, "·") .. " 세트 효과\n"
+            set and ((set.tag and SurvivorAugments.AttackTag(set.tag) or ElementTag(set.weapons[1])) .. " " .. set.name .. "\n" .. table.concat(thresholds, "·") .. " 세트 효과\n"
                 .. "연계: " .. table.concat(linked, "·")) or "단품 장비 · 세트 없음"
     end
     local function RollRarity(elite, bossReward)
@@ -324,6 +369,25 @@ do
         end
         return false
     end
+    local function WeightedChoice(pool)
+        local total, weights = 0, {}
+        for i, value in ipairs(pool) do
+            local entry = type(value) == "number" and catalog[value] or byId[value]
+            local weight = SurvivorEquipment.FitsBuild(entry.id) and 3 or 1
+            if entry.set and not equippedIds[entry.id] then
+                local count = 0
+                for _, piece in ipairs(sets[entry.set].pieces) do if equippedIds[piece] then count = count + 1 end end
+                local tiers = sets[entry.set].tiers
+                if count > 0 and count < tiers[#tiers].count then weight = weight * 2 end
+            end
+            total, weights[i] = total + weight, weight
+        end
+        local roll = GetRandomInt(1, total)
+        for i, weight in ipairs(weights) do
+            roll = roll - weight
+            if roll <= 0 then return pool[i] end
+        end
+    end
     local function RollIndex(elite, bossReward, excluded, relevant)
         local rarity, candidates = RollRarity(elite, bossReward), {}
         for i, entry in ipairs(catalog) do
@@ -338,7 +402,7 @@ do
             end
         end
         assert(#candidates > 0, "Empty equipment rarity pool")
-        return candidates[GetRandomInt(1, #candidates)]
+        return WeightedChoice(candidates)
     end
     function SurvivorEquipment.RollBossReward()
         local offers, excluded = {}, {}
@@ -363,7 +427,7 @@ do
                 end
             end
             assert(#pool > 0, "Missing risk reward candidates")
-            local id = pool[GetRandomInt(1, #pool)]
+            local id = WeightedChoice(pool)
             offers[slot], used[id] = id, true
         end
         return offers
@@ -557,7 +621,8 @@ do
             local native = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine].weapon
             local fields = native and rewardFields[native]
             local source = native == weapon and stats or native and stats.views[weapon] or stats.extraWeapons[weapon]
-            for _, field in ipairs(fields or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"}) do
+            for _, field in ipairs(fields or ((weapon == "meteor" or weapon == "plaguejar") and {"damage", "radius", "range", "-interval"}
+                or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"})) do
                 local lower = field:sub(1, 1) == "-"
                 local value = source[lower and field:sub(2) or field] or 0
                 values[#values + 1] = lower and -value or value

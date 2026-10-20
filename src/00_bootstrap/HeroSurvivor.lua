@@ -113,6 +113,29 @@ do
         -- Also reconcile multi-level jumps; the event may fire once or repeatedly.
         QueueLevelRewards()
     end
+    local function BonusReward(kind)
+        local ok, message = pcall(function()
+            if not RunSession.IsRunning() or hero == nil or not UnitAlive(hero) then return end
+            local config = SurvivorConfig.bonusProps
+            if kind == "recovery" then
+                local maximum, before = BlzGetUnitMaxHP(hero), GetWidgetLife(hero)
+                local after = math.min(maximum, before + maximum * config.healFraction)
+                SetWidgetLife(hero, after)
+                SurvivorUI.Notify("|cff88ff99회복의 룬 · 생명력 +" .. math.floor(after - before) .. "|r")
+            elseif kind == "experienceProp" then
+                local amount = math.floor(config.experience * SurvivorConfig.stageXP[stage])
+                AwardXP(amount)
+                SurvivorUI.Notify("|cffbbaaff경험치의 서 · 경험치 +" .. amount .. "|r")
+            elseif kind == "purge" then
+                local count = SurvivorCombat.PurgeNearby()
+                SurvivorUI.Notify("|cffffcc88소멸의 룬 · 주변 적 " .. count .. " 처치|r")
+            elseif kind == "timeStop" then
+                SurvivorCombat.StopTime()
+                SurvivorUI.Notify("|cff88ddff정지의 룬 · 적과 적 투사체 8초 정지|r")
+            end
+        end)
+        if not ok then RunSession.Fail(message) end
+    end
     local function Finish(reason)
         stageTransition = false
         gearOffers, eventOffers = nil, nil
@@ -419,7 +442,7 @@ do
                 SurvivorEquipment.OnKill(dead, elite)
             end)
             if not ok then RunSession.Fail(message) end
-        end, function() RunSession.Finish("defeated") end, selectedDifficulty)
+        end, function() RunSession.Finish("defeated") end, selectedDifficulty, BonusReward)
         BlzSetHeroProperName(hero, SurvivorConfig.heroes[selectedHero].name)
         SuspendHeroXP(hero, true)
         observedLevel = GetHeroLevel(hero)

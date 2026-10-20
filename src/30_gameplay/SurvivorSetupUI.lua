@@ -247,7 +247,7 @@ do
             return entry.name, entry.text .. "\n\n" .. SurvivorAugments.Preview(id, SurvivorAugments.NewBuild(weapon, nil, hero))
                 .. "\n\nLv.1로 보유하고 시작합니다."
         end
-        return entry.name, entry.text .. "\n\nLv.1로 보유하고 시작합니다."
+        return entry.name, SurvivorAugments.Description(id) .. "\n\nLv.1로 보유하고 시작합니다."
     end
     local function RenderDescription()
         local kind = hovered and hovered.kind or category
