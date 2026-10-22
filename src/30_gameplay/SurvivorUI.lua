@@ -38,6 +38,64 @@ do
     local damageCells, damageValues, damageRowCount, damageBuild, damageTitle = {}, {}, nil, nil, nil
     local damageBoardVisible, damageBoardExpanded = nil, false
     local noticeHeightText, noticeHeightUrgent, noticeHeight
+    local timeStopFilterTimer, timeStopFilterGeneration = nil, 0
+    local timeStopFilterActive, timeStopFilterOwned, timeStopFilterAlpha = false, false, 0
+    local function CancelTimeStopFilterFade()
+        timeStopFilterGeneration = timeStopFilterGeneration + 1
+        local timer = timeStopFilterTimer
+        timeStopFilterTimer = nil
+        if timer then
+            local paused, pauseError = pcall(PauseTimer, timer)
+            local destroyed, destroyError = pcall(DestroyTimer, timer)
+            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
+        end
+    end
+    -- Cine filters tint the world render, without recoloring UI frames or consuming input.
+    function SurvivorUI.SetTimeStopFilter(active, immediate)
+        if not immediate and active == timeStopFilterActive then return end
+        CancelTimeStopFilterFade()
+        timeStopFilterActive = active
+        if not active and not timeStopFilterOwned then return end
+        local config = SurvivorConfig.bonusProps.timeStopFilter
+        local target = active and config.alpha or 0
+        if active then timeStopFilterOwned = true end
+        local function Paint(alpha)
+            timeStopFilterAlpha = alpha
+            if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+                local color, opacity = config.color, math.floor(alpha + 0.5)
+                SetCineFilterDuration(0)
+                SetCineFilterStartColor(color[1], color[2], color[3], opacity)
+                SetCineFilterEndColor(color[1], color[2], color[3], opacity)
+                DisplayCineFilter(opacity > 0)
+            end
+        end
+        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+            SetCineFilterTexture(config.texture)
+            SetCineFilterBlendMode(BLEND_MODE_BLEND)
+            SetCineFilterTexMapFlags(TEXMAP_FLAG_NONE)
+            SetCineFilterStartUV(0, 0, 1, 1)
+            SetCineFilterEndUV(0, 0, 1, 1)
+        end
+        if immediate or timeStopFilterAlpha == target then
+            Paint(target)
+            timeStopFilterOwned = active
+            return
+        end
+        local start, elapsed = timeStopFilterAlpha, 0
+        local duration = active and config.fadeIn or config.fadeOut
+        local timer, generation = CreateTimer(), timeStopFilterGeneration
+        timeStopFilterTimer = timer
+        TimerStart(timer, 0.02, true, function()
+            if generation ~= timeStopFilterGeneration or timeStopFilterTimer ~= timer then return end
+            elapsed = elapsed + 0.02
+            local fraction = math.min(1, (elapsed + 0.000001) / duration)
+            Paint(start + (target - start) * fraction)
+            if fraction == 1 then
+                timeStopFilterOwned = active
+                CancelTimeStopFilterFade()
+            end
+        end)
+    end
     local function FrameState(frame)
         local state = frameCache[frame]
         if not state then state = {}; frameCache[frame] = state end
@@ -226,6 +284,7 @@ do
     end
     -- The setup screen hides the whole console like an intro; it only lifts its own mode.
     function SurvivorUI.SetSetupCinematic(active)
+        if active then SurvivorUI.SetTimeStopFilter(false, true) end
         if active then ApplyCinematicFrames("setup")
         elseif cinematicMode == "setup" then RestoreCinematicFrames() end
     end
@@ -869,6 +928,7 @@ do
         end
     end
     function SurvivorUI.BeginRun()
+        SurvivorUI.SetTimeStopFilter(false, true)
         if not initialized then return end
         -- Reuse the one map-lifetime handle after a failed run; never duplicate it.
         if speechTimer == nil then speechTimer = CreateTimer(); speechTimerPaused = true end
@@ -1248,6 +1308,7 @@ do
         SurvivorUI.BeginRun()
     end
     local function PrepareNarrative(title, text, onReady, footer, buttonLabel)
+        SurvivorUI.SetTimeStopFilter(false, true)
         SurvivorUI.HidePanel()
         SurvivorUI.ClearSpeech()
         DisplayDamageBoard(false)
@@ -1341,6 +1402,7 @@ do
             "우클릭 이동 · 무기는 자동 공격 · F10 메뉴\n" .. SurvivorStory.notice, "장면 보기")
     end
     function SurvivorUI.ShowCombatPreparation(index, onReady, canStart)
+        SurvivorUI.SetTimeStopFilter(false, true)
         assert(type(onReady) == "function", "Combat preparation needs a start callback")
         SurvivorUI.HidePanel()
         SurvivorUI.ClearSpeech()
@@ -1513,6 +1575,7 @@ do
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
     function SurvivorUI.ShowResult(reason, elapsed, kills, stage, bossTime, report, details)
+        SurvivorUI.SetTimeStopFilter(false, true)
         ResetActionFeedback()
         StopIntro()
         SurvivorUI.ClearSpeech()

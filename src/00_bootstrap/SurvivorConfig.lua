@@ -82,6 +82,8 @@ SurvivorConfig = {
         unitId = FourCC("hsBC"), name = "낡은 보급 상자 · 파괴 시 무작위 보상", color = {220, 200, 150},
         purgeRadius = 700, purgeBossFraction = 0.10, timeStopDuration = 8, timeStopBossDuration = 8,
         timeStopBrightness = 0.45,
+        timeStopFilter = {color = {145, 185, 225}, alpha = 13, fadeIn = 0.2, fadeOut = 0.3,
+            texture = [[ReplaceableTextures\CameraMasks\White_mask.blp]]},
         drops = {{kind = "recovery", weight = 30}, {kind = "experienceProp", weight = 60},
             {kind = "purge", weight = 5}, {kind = "timeStop", weight = 5}},
         recovery = {itemId = FourCC("hsHR")}, experienceProp = {itemId = FourCC("hsEX")},

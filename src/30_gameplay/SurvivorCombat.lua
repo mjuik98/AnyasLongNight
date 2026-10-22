@@ -221,6 +221,12 @@ do
         record.timeStopUntil, record.timeStopStarted, record.timeStopWasPaused = nil, nil, nil
         timeStopUnits[u] = nil
     end
+    local function RefreshTimeStopFilter(immediate)
+        if SurvivorUI.SetTimeStopFilter then
+            SurvivorUI.SetTimeStopFilter(not immediate and not frozen and RunSession.IsRunning()
+                and RunSession.GetElapsed() < timeStopUntil, immediate)
+        end
+    end
     local function UpdateTimeStop(now, force)
         if timeStopUntil == 0 and next(timeStopUnits) == nil and not force then return end
         for u in pairs(timeStopUnits) do
@@ -233,6 +239,7 @@ do
             if object.timeStopVisualFrozen ~= stopped then ObjectTimeScale(object, stopped) end
         end
         if now >= timeStopUntil and next(timeStopUnits) == nil then timeStopUntil, timeStopBossUntil = 0, 0 end
+        RefreshTimeStopFilter()
     end
     local function ResetTimeStop()
         local now = RunSession.GetElapsed()
@@ -240,6 +247,7 @@ do
             if units[u] then ReleaseUnitTime(u, units[u], now) end
         end
         timeStopUntil, timeStopBossUntil = 0, 0
+        RefreshTimeStopFilter(true)
         UpdateTimeStop(now, true)
     end
     function SurvivorCombat.StopTime()
@@ -2479,6 +2487,7 @@ do
             BlzUnitDisableAbility(hero, FourCC("Amov"), true, true)
         end
         frozen, inventoryFrozen = enable, interactiveHero
+        RefreshTimeStopFilter(enable)
         for object in pairs(objects) do
             ObjectTimeScale(object, enable or HostileStopped(object))
         end
@@ -2645,6 +2654,7 @@ do
         local pendingItems = bonusItems
         bonusItems = {}
         timeStopUntil, timeStopBossUntil, purging = 0, 0, false
+        CleanupCall(errors, "time stop filter", function() RefreshTimeStopFilter(true) end)
         timeStopUnits, hostileObjects = {}, {}
         for item in pairs(pendingItems) do
             if GetItemTypeId(item) ~= 0 then CleanupCall(errors, "bonus item", function() RemoveItem(item) end) end

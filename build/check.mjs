@@ -4061,6 +4061,68 @@ SurvivorCombat={DamageRows=function()return {}end,BossStatus=function()return ni
     WardStatus=function()return shieldAmount or 0,shieldRemaining or 0 end}
 AnyasLongNight={CanRetrySame=function()return true end,RetrySame=function()retryCalls=(retryCalls or 0)+1;return true end}
 `;
+const timeStopFilterMocks = String.raw`
+BLEND_MODE_BLEND,TEXMAP_FLAG_NONE='blend','none'
+filter={visible=false,writes=0}
+function SetCineFilterTexture(value)filter.texture=value end
+function SetCineFilterBlendMode(value)filter.blend=value end
+function SetCineFilterTexMapFlags(value)filter.flags=value end
+function SetCineFilterStartUV(...)filter.startUV={...}end
+function SetCineFilterEndUV(...)filter.endUV={...}end
+function SetCineFilterDuration(value)filter.duration=value end
+function SetCineFilterStartColor(r,g,b,a)filter.color={r,g,b,a};filter.writes=filter.writes+1 end
+function SetCineFilterEndColor(r,g,b,a)filter.endColor={r,g,b,a}end
+function DisplayCineFilter(value)filter.visible=value end
+`;
+suite('time-stop world filter fades subtly, reverses without flashes and cancels stale timers without changing UI',
+    presentationMocks + timeStopFilterMocks, [config,'src/30_gameplay/SurvivorUI.lua'], String.raw`
+local set=SurvivorUI.SetTimeStopFilter
+set(true);local first=Local(set,'timeStopFilterTimer')
+assert(first and filter.texture==[[ReplaceableTextures\CameraMasks\White_mask.blp]])
+assert(filter.blend=='blend'and filter.flags=='none')
+AdvanceVisualTime(.1);assert(filter.visible and filter.color[4]>=6 and filter.color[4]<=7)
+local writes=filter.writes;set(true);assert(Local(set,'timeStopFilterTimer')==first and filter.writes==writes)
+AdvanceVisualTime(.1)
+assert(first.destroyed and filter.color[1]==145 and filter.color[2]==185 and filter.color[3]==225 and filter.color[4]==13)
+assert(Local(set,'timeStopFilterTimer')==nil)
+AdvanceVisualTime(1);assert(filter.writes>writes);writes=filter.writes
+AdvanceVisualTime(1);set(true);assert(filter.writes==writes,'Holding and refreshing the stop must not repaint or restart the fade')
+set(false);AdvanceVisualTime(.1);assert(filter.visible and filter.color[4]>0 and filter.color[4]<13)
+local priorAlpha=filter.color[4];local stale=Local(set,'timeStopFilterTimer')
+set(true);assert(stale.destroyed and filter.color[4]==priorAlpha,'Reacquisition reverses from the current alpha')
+stale.callback();assert(filter.color[4]==priorAlpha,'Cancelled fade-out callbacks cannot hide a refreshed filter')
+AdvanceVisualTime(.2);assert(filter.visible and filter.color[4]==13)
+set(false);AdvanceVisualTime(.3);assert(not filter.visible and filter.color[4]==0)
+assert(Local(set,'timeStopFilterTimer')==nil)
+set(true);AdvanceVisualTime(.04);stale=Local(set,'timeStopFilterTimer')
+SurvivorUI.BeginRun();assert(stale.destroyed and not filter.visible and filter.color[4]==0)
+writes=filter.writes;stale.callback();assert(filter.writes==writes)
+assert(next(frames)==nil,'World tint must not create, recolor, hide or intercept HUD/card/tooltip frames')
+GetLocalPlayer=function()return Player(1)end
+set(true);AdvanceVisualTime(.2);set(false,true)
+assert(filter.writes==writes and not filter.visible,'Only the playing client renders the filter')
+`);
+
+suite('combat time stop owns the screen filter across pause, expiry, stage cleanup and restart',
+    presentationMocks + timeStopFilterMocks, [config,metrics,augments,combat,'src/30_gameplay/SurvivorUI.lua'], String.raw`
+local hero,build,units=NewCombat('firebolt')
+SurvivorCombat.StopTime();AdvanceVisualTime(.2);assert(filter.visible and filter.color[4]==13)
+state='INVENTORY';SurvivorCombat.SetPaused(true,'INVENTORY');assert(not filter.visible)
+AdvanceVisualTime(1);assert(not filter.visible and now==0,'Menus must not consume the remaining eight seconds')
+state='RUNNING';SurvivorCombat.SetPaused(false);AdvanceVisualTime(.2);assert(filter.visible)
+now=7.9;SurvivorCombat.UpdateWeapons(.02);assert(filter.visible)
+SurvivorCombat.StopTime();now=8;SurvivorCombat.UpdateWeapons(.02);AdvanceVisualTime(.3);assert(filter.visible)
+now=15.9;SurvivorCombat.UpdateWeapons(.02);AdvanceVisualTime(.3);assert(not filter.visible)
+SurvivorCombat.StopTime();AdvanceVisualTime(.04)
+local stale=Local(SurvivorUI.SetTimeStopFilter,'timeStopFilterTimer')
+SurvivorCombat.ClearBattlefield();assert(not filter.visible and stale.destroyed)
+stale.callback();assert(not filter.visible)
+SurvivorCombat.StopTime();AdvanceVisualTime(.2);assert(filter.visible)
+SurvivorCombat.Cleanup();assert(not filter.visible)
+hero,build,units=NewCombat('firebolt');AdvanceVisualTime(1);assert(not filter.visible)
+SurvivorCombat.Cleanup()
+`);
+
 suite('custom UI containers leave pointer input to buttons across setup, HUD, story, inventory, choices and results', presentationMocks + String.raw`
 -- Conservative custom-frame hit test: alpha never makes a surface click-through.
 -- Treat generic FRAME rectangles as potential blockers even when disabled; only
