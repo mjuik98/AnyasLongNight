@@ -188,29 +188,53 @@ export function prepareUIResources(map, snapshots = new Map()) {
     assert.equal(bytes[16], 32); assert.equal(bytes[17] & 15, 8);
     for (let i = 21; i < bytes.length; i += 4) assert.equal(bytes[i], 0, 'UI container texture must be fully transparent');
     snapshots.set(asset, bytes);
+    const planeName = 'AnyasLongNightUI\\WarningPlane.mdx';
+    const planeAsset = path.join(root, 'assets/war3mapImported/AnyasLongNightUI/WarningPlane.mdx');
+    const plane = fs.readFileSync(planeAsset), chunks = new Map();
+    assert.equal(plane.toString('ascii', 0, 4), 'MDLX', 'Invalid warning plane model');
+    for (let at = 4; at < plane.length;) {
+        assert(at + 8 <= plane.length, 'Truncated warning plane chunk');
+        const tag = plane.toString('ascii', at, at + 4), end = at + 8 + plane.readUInt32LE(at + 4);
+        assert(end <= plane.length && !chunks.has(tag), 'Invalid warning plane chunk');
+        chunks.set(tag, plane.subarray(at + 8, end)); at = end;
+    }
+    assert.equal(chunks.get('VERS')?.readUInt32LE(0), 800, 'Warning plane must support classic and HD graphics');
+    const geometry = chunks.get('GEOS');
+    assert(geometry?.length === 316 && geometry.toString('ascii', 4, 8) === 'VRTX' && geometry.readUInt32LE(8) === 4);
+    for (let vertex = 0; vertex < 4; vertex++) {
+        const at = 12 + vertex * 12;
+        assert(Math.abs(geometry.readFloatLE(at)) === 50 && Math.abs(geometry.readFloatLE(at + 4)) === 50
+            && geometry.readFloatLE(at + 8) === 0, 'Warning plane must span exactly 100 by 100 units');
+    }
+    assert.equal(chunks.get('TEXS')?.toString('ascii', 4, 264).split('\0')[0], 'ReplaceableTextures\\CameraMasks\\White_mask.blp');
+    snapshots.set(planeAsset, plane);
+    const resources = new Map([[name, bytes], [planeName, plane]]);
     const imports = map.read('war3map.imp');
     assert(imports && imports.length >= 8 && imports.readUInt32LE(0) === 1, 'Invalid map import table');
     const count = imports.readUInt32LE(4);
-    let p = 8, present = false;
+    let p = 8;
+    const present = new Set();
     for (let i = 0; i < count; i++) {
         assert(p < imports.length, 'Truncated map import table');
         const flag = imports[p++], end = imports.indexOf(0, p);
         assert([5, 8, 10, 13].includes(flag) && end >= p, 'Invalid map import entry');
         const entry = imports.toString('utf8', p, end);
         const actual = flag === 10 || flag === 13 ? entry : 'war3mapImported\\' + entry;
-        if (actual.replaceAll('/', '\\').toLowerCase() === name.toLowerCase()) present = true;
+        present.add(actual.replaceAll('/', '\\').toLowerCase());
         p = end + 1;
     }
     assert.equal(p, imports.length, 'Trailing map import data');
     let updated = imports;
-    if (!present) {
-        const header = Buffer.from(imports.subarray(0, 8)); header.writeUInt32LE(count + 1, 4);
-        updated = Buffer.concat([header, imports.subarray(8), Buffer.from([13]), Buffer.from(name + '\0')]);
+    const missing = [...resources.keys()].filter(entry => !present.has(entry.toLowerCase()));
+    if (missing.length) {
+        const header = Buffer.from(imports.subarray(0, 8)); header.writeUInt32LE(count + missing.length, 4);
+        updated = Buffer.concat([header, imports.subarray(8),
+            ...missing.flatMap(entry => [Buffer.from([13]), Buffer.from(entry + '\0')])]);
     }
     const skinAsset = path.join(root, 'assets/war3mapSkin.txt'), definition = fs.readFileSync(skinAsset);
     snapshots.set(skinAsset, definition);
     const skin = installGameInterfaceLabel(map.read('war3mapSkin.txt'), definition);
-    return new Map([[name, bytes], ['war3map.imp', updated], ['war3mapSkin.txt', skin]]);
+    return new Map([...resources, ['war3map.imp', updated], ['war3mapSkin.txt', skin]]);
 }
 export function replaceBundle(script, bundle) {
     const first = script.indexOf(firstMarker), last = script.indexOf(lastMarker);

@@ -59,10 +59,13 @@ SurvivorConfig = {
     warningRingModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]], warningRingRadius = 100,
     specialMarkerModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]],
     specialSafeMarkerModel = [[abilities\spells\other\spellmarker\spellmarkergreen.mdl]],
-    -- Elite dashes show only their direction: one arrow placed ahead of the elite.
-    -- Arrows repeat every dashArrowSpacing from the first offset to the dash end.
+    -- Static 100x100 white plane, stretched to the exact lane or safe-boundary dimensions.
+    warningPlaneModel = [[AnyasLongNightUI\WarningPlane.mdx]],
+    warningColors = {danger = {255, 75, 65}, safe = {105, 255, 145}},
+    bossWarningAlpha = 90, bossWarningFinalAlpha = 245, bossWarningBrightTime = 0.65,
+    -- Elite arrows use a fixed offset/spacing; larger boss arrows evenly cover the path to its endpoint.
     dashArrowModel = [[abilities\spells\other\spellmarker\spellarrowred.mdl]], dashArrowScale = 1.2, dashArrowOffset = 150,
-    dashArrowSpacing = 150,
+    dashArrowSpacing = 150, bossDashArrowScale = 1.6,
     -- One effect per role: weapon procs and set effects never share a model.
     fireBurstModel = [[abilities\spells\other\renault\firenova.mdl]],
     emberBurstModel = [[Abilities\Spells\Orc\WarStomp\WarStompCaster.mdl]],

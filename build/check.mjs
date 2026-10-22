@@ -84,6 +84,7 @@ function GetUnitName(u) return u.id end
 function SetUnitMoveSpeed(u,v) u.speed=v end
 function GetUnitMoveSpeed(u) return u.speed end
 function SetUnitVertexColor(u,r,g,b,a) u.color={r,g,b,a};u.colorWrites=(u.colorWrites or 0)+1 end
+function BlzSetSpecialEffectMatrixScale(e,x,y,z)e.matrixScale={x,y,z}end
 function PauseUnit(u,v) u.paused=v end
 function IsUnitPaused(u) return u.paused == true end
 function GetUnitState(u,k) return u[k] or 0 end
@@ -1796,7 +1797,8 @@ assert(warning.markers[1].scale==240/c.warningRingRadius,'The ring matches the b
 SurvivorCombat.Cleanup()
 `);
 
-suite('elite dashes show one direction arrow while boss dashes keep their lane', mocks + String.raw`
+suite('elite and boss dash arrows follow their real route and preserve lingering fire and search advantages', mocks + String.raw`
+SurvivorExpedition.UseAdvantage=function()return false end
 function AddLightningEx()return {}end
 function BlzSetSpecialEffectScale(e,v)e.scale=v end
 function BlzSetSpecialEffectYaw(e,v)e.yaw=v end
@@ -1815,6 +1817,153 @@ for i,arrow in ipairs(special.markers)do
     assert(arrow.model==c.dashArrowModel and math.abs(arrow.yaw)<1e-9 and arrow.scale==c.dashArrowScale)
     assert(math.abs(arrow.x-(-300+c.dashArrowOffset+(i-1)*c.dashArrowSpacing))<1e-9 and arrow.x<=-300+special.distance+1e-9,'Arrows are evenly spaced up to the dash end')
 end
+local start=Local(SurvivorCombat.UpdateEnemies,'StartSpecial')
+-- Boss warnings include the endpoint at evenly spaced intervals no greater than 150.
+for _,stage in ipairs({2,5})do
+    SetLocal(SurvivorCombat.UpdateEnemies,'stage',stage)
+    local source=EnemyAt(units,-500,0,false);units[source].boss=true
+    start('dash',units[source],source)
+    local dash=units[source].special;local markers=dash.markers
+    local count=math.ceil(dash.distance/c.dashArrowSpacing)
+    assert(#markers==count and count<18 and dash.width==100 and dash.delay==c.bossBlastDelay)
+    for i,arrow in ipairs(markers)do
+        assert(arrow.model==c.dashArrowModel and arrow.scale==c.bossDashArrowScale and arrow.scale>c.dashArrowScale)
+        assert(math.abs(arrow.yaw)<1e-9 and math.abs(arrow.x-(-500+dash.distance*i/count))<1e-9)
+    end
+    assert(math.abs(markers[count].x-dash.bx)<1e-9 and math.abs(markers[count].y-dash.by)<1e-9)
+    -- The warning is fixed at cast time; moving the hero cannot redirect the dash.
+    hero.y=500;local firstX,firstY=markers[1].x,markers[1].y
+    state='CHOOSING';dash:selfInteractions();assert(dash.elapsed==0 and markers[1].x==firstX and markers[1].y==firstY)
+    state='RUNNING';SurvivorCombat.StopTime();dash:selfInteractions();assert(dash.elapsed==0)
+    now=now+8;SurvivorCombat.UpdateWeapons(.02)
+    for i=1,110 do dash:selfInteractions()end
+    assert(dash.trail and #dash.markers==8,'Boss dash still leaves the original two-second burning trail')
+    for _,arrow in ipairs(markers)do assert(arrow.destroyed,'All arrows are removed when the dash ends')end
+    local trail=dash.markers;for i=1,101 do dash:selfInteractions()end
+    assert(dash.cleaned);for _,effect in ipairs(trail)do assert(effect.destroyed)end
+    hero.y=0
+end
+-- Clipping near an arena corner must not skew or extend the indicated route.
+local source=EnemyAt(units,4900,4800,false);units[source].boss=true
+hero.x,hero.y=5200,5500
+start('dash',units[source],source)
+local dash=units[source].special;local dx,dy=dash.bx-dash.ax,dash.by-dash.ay
+for _,arrow in ipairs(dash.markers)do
+    assert(math.abs((arrow.x-dash.ax)*dy-(arrow.y-dash.ay)*dx)<1e-6)
+    assert(arrow.x<=dash.bx+1e-9 and arrow.y<=dash.by+1e-9)
+    assert(math.abs(arrow.yaw-math.atan(dy,dx))<1e-9)
+end
+SetLocal(SurvivorCombat.UpdateEnemies,'stage',2)
+SurvivorExpedition.UseAdvantage=function()return true end
+source=EnemyAt(units,-300,0,false);units[source].boss=true;hero.x,hero.y=0,0
+start('dash',units[source],source);dash=units[source].special;local arrows=dash.markers
+assert(dash.noTrail)
+for i=1,100 do dash:selfInteractions()end
+assert(dash.cleaned and not dash.trail,'The stage-two search advantage still removes the fire trail')
+for _,arrow in ipairs(arrows)do assert(arrow.destroyed)end
+SurvivorCombat.Cleanup()
+`);
+
+const bossTelegraphMocks = mocks + String.raw`
+SurvivorExpedition.UseAdvantage=function()return advantage==true end
+function SetUnitFacing()end
+function BlzSetSpecialEffectScale(e,s)e.scale=s end
+function BlzSetSpecialEffectYaw(e,a)e.yaw=a end
+function BlzSetSpecialEffectPosition(e,x,y,z)e.x,e.y,e.z=x,y,z end
+function BlzSetSpecialEffectColor(e,r,g,b)e.color={r,g,b}end
+function BlzSetSpecialEffectAlpha(e,a)e.alpha=a;e.alphaWrites=(e.alphaWrites or 0)+1 end
+`;
+suite('wave safety rays match normal and widened safe sectors and freeze with the actual attack', bossTelegraphMocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,0,0,false);units[source].boss=true;hero.x=400
+local start=Local(SurvivorCombat.UpdateEnemies,'StartSpecial')
+SetLocal(SurvivorCombat.UpdateEnemies,'stage',3)
+for _,informed in ipairs({false,true})do
+    advantage=informed;start('wave',units[source],source)
+    local wave=units[source].special;local markers=wave.markers
+    assert(#markers==20 and wave.gapWidth==(informed and math.pi or math.pi/2))
+    for i,side in ipairs({-1,1})do
+        local ray=markers[18+i];local angle=wave.gap+side*wave.gapWidth/2
+        local reach=wave.waveMaxRadius+wave.width
+        assert(ray.model==SurvivorConfig.warningPlaneModel and ray.color[2]==255)
+        assert(math.abs(ray.x-math.cos(angle)*reach/2)<1e-7 and math.abs(ray.y-math.sin(angle)*reach/2)<1e-7)
+        assert(ray.matrixScale[1]==reach/100 and ray.matrixScale[2]==.08 and ray.alpha==185)
+    end
+    state='CHOOSING';wave:selfInteractions();assert(wave.elapsed==0)
+    state='RUNNING';SurvivorCombat.StopTime();wave:selfInteractions();assert(wave.elapsed==0)
+    now=now+8;SurvivorCombat.UpdateWeapons(.02)
+    local safe=wave.gap;hero.x,hero.y=120*math.cos(safe),120*math.sin(safe)
+    wave.elapsed=wave.delay-.02;local hp=hero.life;wave:selfInteractions();assert(hero.life==hp and not wave.hit)
+    local unsafe=wave.gap+wave.gapWidth/2+.05
+    hero.x,hero.y=125*math.cos(unsafe),125*math.sin(unsafe)
+    wave:selfInteractions();assert(wave.hit and hero.life<hp,'The warned arc still hits outside the safe wedge')
+    wave.elapsed=wave.delay+(wave.waveMaxRadius-120)/340;wave:selfInteractions()
+    assert(wave.cleaned);for _,effect in ipairs(markers)do assert(effect.destroyed)end
+    hero.x,hero.y=400,0
+end
+SurvivorCombat.Cleanup()
+`);
+
+suite('chain ribbons exactly bound the three damaging lanes and preserve the removed middle lane advantage', bossTelegraphMocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,-600,0,false);units[source].boss=true
+SetLocal(SurvivorCombat.UpdateEnemies,'stage',5)
+local start=Local(SurvivorCombat.UpdateEnemies,'StartSpecial')
+for _,informed in ipairs({false,true})do
+    advantage=informed;hero.x,hero.y=0,0;start('chains',units[source],source)
+    local chain=units[source].special;local markers=chain.markers
+    assert(#chain.lanes==(informed and 2 or 3)and #markers==#chain.lanes*3)
+    for index,lane in ipairs(chain.lanes)do
+        local fill=markers[(index-1)*3+1]
+        assert(fill.model==SurvivorConfig.warningPlaneModel and fill.color[1]==255 and fill.alpha==80)
+        assert(fill.matrixScale[1]==9 and fill.matrixScale[2]==chain.width*2/100)
+        assert(fill.x==(lane.ax+lane.bx)/2 and fill.y==(lane.ay+lane.by)/2)
+        for side=2,3 do
+            local edge=markers[(index-1)*3+side]
+            assert(edge.matrixScale[2]==.05 and edge.alpha==220)
+            assert(math.abs(math.abs(edge.y-fill.y)+2.5-chain.width)<1e-9,'Outer edge equals the damage boundary')
+        end
+    end
+    if not informed then hero.y=chain.width+1 end
+    chain.elapsed=chain.delay-.02;local hp=hero.life;chain:selfInteractions()
+    assert(chain.cleaned and hero.life==hp,'The corridor gaps and removed middle lane remain safe')
+    for _,effect in ipairs(markers)do assert(effect.destroyed)end
+end
+advantage=false;hero.x,hero.y=0,0;start('chains',units[source],source)
+local chain=units[source].special;local hp=hero.life
+chain.elapsed=chain.delay-.02;chain:selfInteractions();assert(hero.life<hp,'The red strip interior still deals damage')
+hero.life=hp;start('chains',units[source],source);chain=units[source].special
+hero.x=chain.lanes[2].bx+1;chain.elapsed=chain.delay-.02;chain:selfInteractions()
+assert(hero.life==hp,'The warning and damage both end at the lane endpoint')
+SurvivorCombat.Cleanup()
+`);
+
+suite('blast rings retain their radius and brighten by remaining time so the cross center warns before its arms', bossTelegraphMocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,-600,0,false);units[source].boss=true
+SetLocal(SurvivorCombat.BossStatus,'boss',source);SetLocal(SurvivorCombat.UpdateEnemies,'stage',4)
+Local(SurvivorCombat.UpdateEnemies,'BossPattern')(units[source])
+local warnings={};for _,actor in ipairs(actors)do if actor.identifier=='hsBossWarning'then warnings[#warnings+1]=actor end end
+assert(#warnings==5)
+local center,outer=warnings[1],warnings[2];local scale=center.markers[1].scale
+assert(center.markers[1].alpha==90 and outer.markers[1].alpha==90)
+for i=1,10 do for _,warning in ipairs(warnings)do warning:selfInteractions()end end
+assert(center.markers[1].alphaWrites==1,'Steady early warnings do not repeatedly write alpha')
+for i=1,23 do for _,warning in ipairs(warnings)do warning:selfInteractions()end end
+assert(center.markers[1].alpha>outer.markers[1].alpha and center.markers[1].scale==scale)
+local remaining,alpha=center.life,center.markers[1].alpha
+state='CHOOSING';center:selfInteractions();assert(center.life==remaining and center.markers[1].alpha==alpha)
+state='RUNNING';SurvivorCombat.StopTime();center:selfInteractions()
+assert(center.life==remaining and center.markers[1].alpha==alpha)
+now=8;SurvivorCombat.UpdateWeapons(.02)
+local hp=hero.life;local ring=center.markers[1]
+for i=1,30 do center:selfInteractions();for n=2,5 do warnings[n]:selfInteractions()end end
+assert(center.cleaned and ring.destroyed and not outer.cleaned and hero.life==hp-center.damage)
+for i=1,21 do for n=2,5 do warnings[n]:selfInteractions()end end
+for _,warning in ipairs(warnings)do assert(warning.cleaned)end
 SurvivorCombat.Cleanup()
 `);
 
@@ -7723,7 +7872,22 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
 {
     const snapshots = new Map(), entries = prepareUIResources(map, snapshots);
     const texture = entries.get('AnyasLongNightUI\\Transparent.tga');
-    assert(texture && snapshots.size === 2, 'Texture and game interface labels are guarded build inputs');
+    const planeName = 'AnyasLongNightUI\\WarningPlane.mdx';
+    const plane = entries.get(planeName);
+    assert(texture && snapshots.size === 3, 'Texture, warning plane and game interface labels are guarded build inputs');
+    assert.deepEqual(plane, fs.readFileSync(path.join(root,'assets/war3mapImported/AnyasLongNightUI/WarningPlane.mdx')));
+    const planeChunks = new Map();
+    for (let at=4;at<plane.length;) {
+        const size=plane.readUInt32LE(at+4);planeChunks.set(plane.toString('ascii',at,at+4),plane.subarray(at+8,at+8+size));at+=8+size;
+    }
+    assert.deepEqual([...planeChunks.keys()],['VERS','MODL','SEQS','MTLS','TEXS','GEOS','BONE','PIVT']);
+    assert.equal(planeChunks.get('SEQS').length,132);
+    assert.equal(planeChunks.get('SEQS').toString('ascii',0,80).split('\0')[0],'Stand');
+    const geoset=planeChunks.get('GEOS');const corners=new Set();
+    for(let i=0;i<4;i++)corners.add([0,1,2].map(axis=>geoset.readFloatLE(12+i*12+axis*4)).join(','));
+    assert.equal(corners.size,4,'Four distinct corners form the rectangular warning');
+    assert.equal(planeChunks.get('MTLS').length,48,'The warning has no animated alpha tracks');
+    assert.equal(planeChunks.get('MTLS').readFloatLE(44),1);
     const definition=fs.readFileSync(path.join(root,'assets/war3mapSkin.txt'));
     const lines=bytes=>bytes.toString('utf8').split(/\r?\n/);
     const sectionOf=(text,key)=>{let section=null;for(const line of lines(text)){const header=line.match(/^\[([^\]]+)\]/);
@@ -7759,6 +7923,9 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     for (let i = 21; i < texture.length; i += 4) assert.equal(texture[i], 0);
     const installed = map.replace(entries), readback = openMap(installed);
     assert.deepEqual(readback.read('AnyasLongNightUI\\Transparent.tga'), texture);
+    assert.deepEqual(readback.read(planeName),plane);
+    assert(readback.read('war3map.imp').includes(Buffer.from(planeName+'\0')));
+    assert.deepEqual(openMap(fs.readFileSync(baseMapPath)).read(planeName),plane,'Editor and playtest maps share the exact warning plane');
     assert(readback.read('(listfile)').toString('utf8').includes('AnyasLongNightUI\\Transparent.tga'));
     assert.deepEqual(readback.replace(entries), installed, 'Resource installation is idempotent');
     assert.deepEqual(readback.replace(prepareUIResources(readback)), installed, 'Editor import registration is idempotent');
@@ -7766,7 +7933,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.deepEqual(imports.subarray(8, oldImports.length), oldImports.subarray(8), 'Existing import paths and flags are preserved');
     assert(imports.includes(Buffer.from('AnyasLongNightUI\\Transparent.tga\0')), 'The editor must retain the imported texture on save');
     assert.deepEqual(readback.read('war3mapSkin.txt'),entries.get('war3mapSkin.txt'));
-    verifyPreserved(original, installed, ['AnyasLongNightUI\\Transparent.tga', 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
+    verifyPreserved(original, installed, ['AnyasLongNightUI\\Transparent.tga', 'AnyasLongNightUI\\WarningPlane.mdx', 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
     console.log('PASS fully transparent container texture is imported, listed, byte-verified and preserves unrelated map data');
 }
 {

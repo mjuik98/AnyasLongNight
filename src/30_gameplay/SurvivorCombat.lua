@@ -302,6 +302,17 @@ do
         MoveLocation(heightLocation, x, y)
         return GetLocationZ(heightLocation)
     end
+    local function WarningStrip(owner, ax, ay, bx, by, width, color, alpha, elevation)
+        local x, y, dx, dy = (ax + bx) / 2, (ay + by) / 2, bx - ax, by - ay
+        local effect = AddSpecialEffect(SurvivorConfig.warningPlaneModel, x, y)
+        owner.markers[#owner.markers + 1] = effect
+        BlzSetSpecialEffectYaw(effect, Atan2(dy, dx))
+        BlzSetSpecialEffectMatrixScale(effect, math.sqrt(dx * dx + dy * dy) / 100, width / 100, 1)
+        BlzSetSpecialEffectZ(effect, Height(x, y) + (elevation or 5))
+        BlzSetSpecialEffectColor(effect, color[1], color[2], color[3])
+        BlzSetSpecialEffectAlpha(effect, alpha)
+        return effect
+    end
     local function ImpactPoint(target)
         local x, y = GetUnitX(target), GetUnitY(target)
         local offset = SurvivorConfig.missileImpactHeightByType[GetUnitTypeId(target)]
@@ -1834,7 +1845,16 @@ do
         if (not blast.environment and not Enemy(blast.source)) or not Alive(hero) then ALICE_Kill(blast); return dt end
         if HostileStopped(blast) then return dt end
         blast.life = blast.life - dt
-        if blast.life > 0 then return dt end
+        if blast.life > 0 then
+            local c = SurvivorConfig
+            local fraction = 1 - math.min(1, blast.life / c.bossWarningBrightTime)
+            local alpha = math.floor(c.bossWarningAlpha + (c.bossWarningFinalAlpha - c.bossWarningAlpha) * fraction)
+            if blast.warningAlpha ~= alpha then
+                BlzSetSpecialEffectAlpha(blast.markers[1], alpha)
+                blast.warningAlpha = alpha
+            end
+            return dt
+        end
         local source, x, y, z, radius, damage = blast.source, blast.x, blast.y, blast.z, blast.radius, blast.damage
         ALICE_Kill(blast)
         CreateObject({identifier = "hsBossImpact", x = x, y = y, z = z, life = 0.6,
@@ -1858,6 +1878,10 @@ do
         blast.markers[1] = marker
         BlzSetSpecialEffectZ(marker, blast.z + 5)
         BlzSetSpecialEffectScale(marker, blast.radius / SurvivorConfig.warningRingRadius)
+        local color = SurvivorConfig.warningColors.danger
+        BlzSetSpecialEffectColor(marker, color[1], color[2], color[3])
+        blast.warningAlpha = SurvivorConfig.bossWarningAlpha
+        BlzSetSpecialEffectAlpha(marker, blast.warningAlpha)
         TrackHostile(blast)
         ALICE_Create(blast)
     end
@@ -1939,7 +1963,7 @@ do
             end
         elseif self.kind == "wave" then
             local radius = 120 + (self.elapsed - self.delay) * 340
-            if radius > 900 then ALICE_Kill(self); return dt end
+            if radius > self.waveMaxRadius then ALICE_Kill(self); return dt end
             for i, angle in ipairs(self.angles) do
                 local x, y = self.ax + math.cos(angle) * radius, self.ay + math.sin(angle) * radius
                 BlzSetSpecialEffectPosition(self.markers[i], x, y, Height(x, y) + 55)
@@ -1947,7 +1971,7 @@ do
             local dx, dy = hx - self.ax, hy - self.ay
             local angle = Atan2(dy, dx) - self.gap
             local outsideGap = math.abs(Atan2(math.sin(angle), math.cos(angle))) > self.gapWidth / 2
-            if not self.hit and outsideGap and math.abs(math.sqrt(dx * dx + dy * dy) - radius) <= 65 then
+            if not self.hit and outsideGap and math.abs(math.sqrt(dx * dx + dy * dy) - radius) <= self.width then
                 self.hit = true; DamageSpecial(self, 1)
             end
         else -- Three warned chain lanes; the spaces between the lanes stay safe.
@@ -1996,31 +2020,35 @@ do
             self.bx = math.max(bounds.minX + 32, math.min(bounds.maxX - 32, x + math.cos(angle) * self.distance))
             self.by = math.max(bounds.minY + 32, math.min(bounds.maxY - 32, y + math.sin(angle) * self.distance))
             self.distance = math.max(1, math.sqrt((self.bx - x)^2 + (self.by - y)^2))
-            if record.elite then
-                -- Arrows along the path show the direction and how far the dash reaches.
-                local c, distance = SurvivorConfig, SurvivorConfig.dashArrowOffset
-                repeat
-                    local px, py = x + math.cos(angle) * distance, y + math.sin(angle) * distance
-                    local arrow = AddSpecialEffect(c.dashArrowModel, px, py)
-                    self.markers[#self.markers + 1] = arrow
-                    BlzSetSpecialEffectScale(arrow, c.dashArrowScale)
-                    BlzSetSpecialEffectYaw(arrow, angle)
-                    BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
-                    distance = distance + c.dashArrowSpacing
-                until distance > self.distance
-            else
-                for i = 0, 8 do
-                    local px, py = x + (self.bx - x) * i / 8, y + (self.by - y) * i / 8
-                    for side = -1, 1, 2 do SpecialMarker(self, px - math.sin(angle) * self.width * side, py + math.cos(angle) * self.width * side) end
-                end
+            -- Use the final, arena-clamped route so warnings never point beyond the real dash.
+            local c, dx, dy = SurvivorConfig, self.bx - x, self.by - y
+            local direction = Atan2(dy, dx)
+            local count = record.elite and math.max(1, math.floor((self.distance - c.dashArrowOffset) / c.dashArrowSpacing) + 1)
+                or math.max(1, math.ceil(self.distance / c.dashArrowSpacing))
+            for i = 1, count do
+                local distance = record.elite and math.min(self.distance, c.dashArrowOffset + (i - 1) * c.dashArrowSpacing)
+                    or self.distance * i / count
+                local px, py = x + dx * distance / self.distance, y + dy * distance / self.distance
+                local arrow = AddSpecialEffect(c.dashArrowModel, px, py)
+                self.markers[#self.markers + 1] = arrow
+                BlzSetSpecialEffectScale(arrow, record.elite and c.dashArrowScale or c.bossDashArrowScale)
+                BlzSetSpecialEffectYaw(arrow, direction)
+                BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
             end
         elseif kind == "wave" then
             self.gap, self.gapWidth, self.angles = angle + math.pi / 2, math.pi / 2, {}
+            self.waveMaxRadius = 900
             if informed and stage == 3 then self.gapWidth = math.pi end
             for i = 0, 17 do
                 local a = self.gap + self.gapWidth / 2 + (2 * math.pi - self.gapWidth) * i / 17
                 self.angles[#self.angles + 1] = a
                 SpecialMarker(self, x + math.cos(a) * 120, y + math.sin(a) * 120, i == 0 or i == 17)
+            end
+            -- The two rays mark the full safe wedge, including the outer edge of the final wave.
+            for _, side in ipairs({-1, 1}) do
+                local a, reach = self.gap + side * self.gapWidth / 2, self.waveMaxRadius + self.width
+                WarningStrip(self, x, y, x + math.cos(a) * reach, y + math.sin(a) * reach,
+                    8, SurvivorConfig.warningColors.safe, 185, 8)
             end
         else
             self.lanes = {}
@@ -2030,9 +2058,12 @@ do
                     local lane = {ax = cx - math.cos(angle) * 450, ay = cy - math.sin(angle) * 450,
                         bx = cx + math.cos(angle) * 450, by = cy + math.sin(angle) * 450}
                     self.lanes[#self.lanes + 1] = lane
-                    for i = 0, 5 do
-                        local px, py = lane.ax + (lane.bx - lane.ax) * i / 5, lane.ay + (lane.by - lane.ay) * i / 5
-                        for side = -1, 1, 2 do SpecialMarker(self, px - math.sin(angle) * self.width * side, py + math.cos(angle) * self.width * side) end
+                    local danger = SurvivorConfig.warningColors.danger
+                    WarningStrip(self, lane.ax, lane.ay, lane.bx, lane.by, self.width * 2, danger, 80)
+                    for _, side in ipairs({-1, 1}) do
+                        local offset = (self.width - 2.5) * side
+                        local dx, dy = -math.sin(angle) * offset, math.cos(angle) * offset
+                        WarningStrip(self, lane.ax + dx, lane.ay + dy, lane.bx + dx, lane.by + dy, 5, danger, 220, 6)
                     end
                 end
             end

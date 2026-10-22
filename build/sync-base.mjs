@@ -9,9 +9,9 @@ import {fileURLToPath} from 'node:url';
 import {openMap} from './mpq.mjs';
 import {root, baseMapPath, collectSources, replaceBundle, editorBundle, verifyPreserved, publishTransaction,
     installBonusUnits, installEnemyCombatFields, installBonusItems, cleanItemTooltipEntries, loadItemTooltipCatalog,
-    cleanWeaponTooltipEntries, loadWeaponTooltipCatalog, installGrowthObjects} from './build.mjs';
+    cleanWeaponTooltipEntries, loadWeaponTooltipCatalog, installGrowthObjects, prepareUIResources} from './build.mjs';
 
-export function syncBase(base, bundle) {
+export function syncBase(base, bundle, snapshots = new Map()) {
     const map = openMap(base);
     const oldScript = map.read('war3map.lua');
     assert(oldScript, 'Base map has no Lua map script');
@@ -23,6 +23,7 @@ export function syncBase(base, bundle) {
         ['war3map.w3t', installBonusItems(map.read('war3map.w3t'))],
         ['war3mapSkin.w3t', installBonusItems(map.read('war3mapSkin.w3t'), true)],
     ]);
+    for (const [name, bytes] of prepareUIResources(map, snapshots)) changes.set(name, bytes);
     const itemNames = ['war3map.w3t', 'war3mapSkin.w3t', 'war3map.wts'];
     const items = cleanItemTooltipEntries(new Map(itemNames.map(name => [name, changes.get(name) ?? map.read(name)])), loadItemTooltipCatalog());
     for (const [name, bytes] of items) changes.set(name, bytes);
@@ -34,11 +35,12 @@ export function syncBase(base, bundle) {
     for (const [name, bytes] of weapons) changes.set(name, bytes);
     // replace() leaves an already-current archive untouched, so compact explicitly as well.
     const patched = openMap(map.replace(changes)).compact();
-    const preserved = verifyPreserved(base, patched, [...changes.keys()]);
+    const preserved = verifyPreserved(base, patched, [...changes.keys(),
+        ...(map.read('(listfile)').equals(openMap(patched).read('(listfile)')) ? [] : ['(listfile)'])]);
     const result = openMap(patched);
     for (const [name, bytes] of changes) assert.deepEqual(result.read(name), bytes, 'Base sync readback mismatch: ' + name);
     assert.equal(result.unusedBytes(), 0, 'Synchronized base map still carries unused archive bytes');
-    const changed = [...changes].filter(([name, bytes]) => !map.read(name).equals(bytes)).map(([name]) => name);
+    const changed = [...changes].filter(([name, bytes]) => !map.read(name)?.equals(bytes)).map(([name]) => name);
     return {patched, preserved, changed, unusedBefore: map.unusedBytes()};
 }
 
@@ -48,7 +50,7 @@ function main() {
     const check = args.includes('--check');
     const {bundle, snapshots, count} = collectSources({profile: 'playtest'});
     const base = fs.readFileSync(baseMapPath);
-    const {patched, preserved, changed, unusedBefore} = syncBase(base, bundle);
+    const {patched, preserved, changed, unusedBefore} = syncBase(base, bundle, snapshots);
     console.log(`Validated ${count} Lua sources; preserved ${preserved} unrelated base map entries.`);
     if (unusedBefore) console.log('Unused base archive bytes:', unusedBefore);
     if (check) {

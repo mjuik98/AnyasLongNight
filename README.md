@@ -188,6 +188,8 @@ npm run check:base
 | `assets` | 오브젝트·스킨·문자열·상수·UI 및 지형 스냅샷 |
 | `assets/AnyasLongNightTalents.json` | 특성 목록과 공통 특성 버튼 설명 |
 | `assets/war3mapImported` | FDF·TOC·UI 텍스처 |
+
+보스 예고용 `AnyasLongNightUI/WarningPlane.mdx`는 100×100 크기의 정적 흰색 평면입니다. 냉기 파동 안전 경계와 사슬 통로를 실제 길이·폭으로 늘려 표시하며, 원본·테스트·배포 맵에 동일하게 가져옵니다.
 | `vendor` | 라이브러리 출처·API 참고 자료 |
 
 프로젝트 식별자와 리소스 경로는 `AnyasLongNight`를 사용합니다. 상수는 `ANYAS_LONG_NIGHT`, 패키지명은 `anyas-long-night` 표기를 사용합니다. 작업 디렉터리를 확인하고 형제 프로젝트인 LoTKT는 수정하지 않습니다.
