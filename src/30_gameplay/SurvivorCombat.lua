@@ -147,12 +147,32 @@ do
         if object.identifier == "hsBossSpecial" and not object.trail then return UnitTimeStopped(object.source) end
         return RunSession.GetElapsed() < timeStopUntil
     end
-    local function EnemyColor(u, record, stopped)
+    local function EnemyColor(u, record, stopped, restore)
         local color = record.baseColor or {255, 255, 255, 255}
+        local now, tint = RunSession.GetElapsed(), nil
+        local palette = SurvivorConfig.statusColors
+        if not restore and record.alive then
+            local slowed = now < (record.freezeUntil or 0)
+            if record.slows then
+                for _, slow in pairs(record.slows) do
+                    if slow.amount > 0 and slow.expires > now then slowed = true; break end
+                end
+            end
+            if slowed then tint = palette.slow
+            elseif (record.poison or 0) > 0 and now < (record.poisonUntil or 0) then tint = palette.poison
+            elseif (record.curse or 0) > 0 and now < (record.curseUntil or 0) then tint = palette.curse end
+        end
         if stopped == nil then stopped = UnitTimeStopped(u) end
         local brightness = stopped and SurvivorConfig.bonusProps.timeStopBrightness or 1
-        SetUnitVertexColor(u, math.floor(color[1] * brightness), math.floor(color[2] * brightness),
-            math.floor(color[3] * brightness), color[4])
+        local strength = tint and palette.strength or 0
+        local r = math.floor((color[1] * (1 - strength) + (tint and tint[1] or 0) * strength) * brightness)
+        local g = math.floor((color[2] * (1 - strength) + (tint and tint[2] or 0) * strength) * brightness)
+        local b = math.floor((color[3] * (1 - strength) + (tint and tint[3] or 0) * strength) * brightness)
+        local cached = record.displayColor
+        if not cached or cached[1] ~= r or cached[2] ~= g or cached[3] ~= b or cached[4] ~= color[4] then
+            SetUnitVertexColor(u, r, g, b, color[4])
+            record.displayColor = {r, g, b, color[4]}
+        end
     end
     local function ObjectTimeScale(object, stopped)
         local scale = stopped and 0 or 1
@@ -760,7 +780,10 @@ do
                     if source and damageTotals[source] then damageTotals[source].slowSeconds = damageTotals[source].slowSeconds + dt end
                     if next(record.slows) == nil then record.slows = nil end
                 end
-                if not record.freezeUntil and not record.slows then
+                EnemyColor(u, record)
+                local poisoned = (record.poison or 0) > 0 and now < (record.poisonUntil or 0)
+                local cursed = (record.curse or 0) > 0 and now < (record.curseUntil or 0)
+                if not record.freezeUntil and not record.slows and not poisoned and not cursed then
                     statusUnits[u] = nil
                 end
             end
@@ -933,6 +956,7 @@ do
         for _, slow in pairs(record.slows) do if slow.expires > now then strongest = math.max(strongest, slow.amount) end end
         record.slowAmount = strongest
         SetUnitMoveSpeed(target, record.baseSpeed * (1 - strongest))
+        EnemyColor(target, record)
     end
     Freeze = function(target, duration)
         if not Enemy(target) then return false end
@@ -948,6 +972,7 @@ do
         record.freezeUntil = now + duration
         statusUnits[target] = true
         PauseUnit(target, true)
+        EnemyColor(target, record)
         return true
     end
     local function ProcVisual(x, y, z, model, scale, weapon)
@@ -1000,6 +1025,10 @@ do
         if curse > 0 then
             record.curse = math.min(config.curseMax, CurseStacks(record) + curse)
             record.curseUntil = now + config.curseDuration * life
+        end
+        if poison > 0 or curse > 0 or statusUnits[target] then
+            statusUnits[target] = true
+            EnemyColor(target, record)
         end
     end
     -- Quadratic Bezier throw: P0 = launch, P2 = locked landing point, P1 = midpoint raised by height.
@@ -2489,6 +2518,7 @@ do
     local function RemoveEnemy(u)
         local record = units[u]
         if not record or not record.enemy then return end
+        if GetUnitTypeId(u) ~= 0 then EnemyColor(u, record, false, true) end
         statusUnits[u] = nil
         frostStackUnits[u] = nil
         poisonUnits[u] = nil
@@ -2738,7 +2768,8 @@ do
             if not record or not record.alive then return end
             record.alive = false
             timeStopUnits[dead] = nil
-            if record.timeStopUntil then SetUnitTimeScale(dead, 1); EnemyColor(dead, record, false) end
+            if record.timeStopUntil then SetUnitTimeScale(dead, 1) end
+            if record.enemy then EnemyColor(dead, record, false) end
             statusUnits[dead] = nil
             frostStackUnits[dead] = nil
             poisonUnits[dead] = nil

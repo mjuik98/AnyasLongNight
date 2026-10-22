@@ -17,5 +17,5 @@
   "src/30_gameplay/SurvivorNativeLoadout.lua",
   "src/30_gameplay/SurvivorInventoryPause.lua",
   "src/30_gameplay/SurvivorSetupUI.lua",
-  "src/00_bootstrap/HeroSurvivor.lua"
+  "src/00_bootstrap/AnyasLongNight.lua"
 ]

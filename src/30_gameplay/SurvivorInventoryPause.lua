@@ -110,7 +110,7 @@ do
     function SurvivorInventoryPause.DebugStatus()
         if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
         local open, found = ReadLocalPanels()
-        print(string.format("[HeroSurvivor inventory] native panels=%d / visible=%s / state=%s",
+        print(string.format("[AnyasLongNight inventory] native panels=%d / visible=%s / state=%s",
             found, tostring(open), RunSession.GetState()))
     end
     function SurvivorInventoryPause.Cleanup()

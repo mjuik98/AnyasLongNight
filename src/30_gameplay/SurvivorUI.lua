@@ -693,7 +693,7 @@ do
     local function FramedPanel(parent, name, context, width, height)
         -- A fully transparent BACKDROP groups the panel without a mouse surface.
         local frame = BlzCreateFrameByType("BACKDROP", name, parent, "", 0)
-        BlzFrameSetTexture(frame, "HeroSurvivorUI\\Transparent.tga", 0, true)
+        BlzFrameSetTexture(frame, "AnyasLongNightUI\\Transparent.tga", 0, true)
         BlzFrameSetSize(frame, width, height)
         BlzFrameSetEnable(frame, false)
         local skin = Backdrop(frame, "CustomTooltipBackgroundTemplate", context, width, height)
@@ -746,14 +746,14 @@ do
         local ok, message = pcall(AnimateActionFeedback)
         if not ok then
             pcall(ResetActionFeedback)
-            print("[HeroSurvivor] Button feedback: " .. tostring(message))
+            print("[AnyasLongNight] Button feedback: " .. tostring(message))
         end
     end
     local function BindActionFeedback(card, key, button, background, label, name, color, tooltip)
         -- A transparent FRAME still has a mouse surface over its parent button.
         -- BACKDROP keeps the border's shared geometry/alpha without an input surface.
         local glow = BlzCreateFrameByType("BACKDROP", name, button, "", 0)
-        BlzFrameSetTexture(glow, "HeroSurvivorUI\\Transparent.tga", 0, true)
+        BlzFrameSetTexture(glow, "AnyasLongNightUI\\Transparent.tga", 0, true)
         BlzFrameSetAllPoints(glow, button)
         BlzFrameSetLevel(glow, 1)
         BlzFrameSetEnable(glow, false)
@@ -771,7 +771,7 @@ do
             local strip = BlzCreateFrameByType("BACKDROP", name .. edge[1], glow, "", 0)
             BlzFrameSetPoint(strip, edge[2], glow, edge[2], edge[3], edge[4])
             BlzFrameSetSize(strip, edge[5], edge[6])
-            BlzFrameSetTexture(strip, "HeroSurvivorUI\\Ready.tga", 0, true)
+            BlzFrameSetTexture(strip, "AnyasLongNightUI\\Ready.tga", 0, true)
             BlzFrameSetVertexColor(strip, BlzConvertColor(255, 255,
                 key == "excludeAvailable" and 190 or 255, key == "excludeAvailable" and 120 or 255))
             BlzFrameSetEnable(strip, false)
@@ -940,7 +940,7 @@ do
         expeditionRoot = FramedPanel(parent, "HSExpedition", 715, 0.29, 0.069)
         BlzFrameSetAbsPoint(expeditionRoot, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
         BlzFrameSetLevel(expeditionRoot, 15)
-        expeditionText = Text(expeditionRoot, "HeroSurvivorExpedition", 0.254, 0.041, 0, -0.014)
+        expeditionText = Text(expeditionRoot, "AnyasLongNightExpedition", 0.254, 0.041, 0, -0.014)
         BlzFrameSetLevel(expeditionText, 3)
         BlzFrameSetTextAlignment(expeditionText, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
         BlzFrameSetEnable(expeditionText, false)
@@ -998,15 +998,15 @@ do
         end)
         SetVisible(riskAccept, false)
         SurvivorUI.ClearSpeech()
-        shade = BlzCreateFrameByType("BACKDROP", "HeroSurvivorShade", parent, "", 0)
+        shade = BlzCreateFrameByType("BACKDROP", "AnyasLongNightShade", parent, "", 0)
         BlzFrameSetAbsPoint(shade, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(shade, 1.6, 0.6)
         BlzFrameSetTexture(shade, "UI\\Widgets\\ToolTips\\Human\\human-tooltip-background.blp", 0, true)
         BlzFrameSetEnable(shade, false)
         BlzFrameSetLevel(shade, 9)
         -- Transparent layout root: each choice has its own separate card background.
-        panel = BlzCreateFrameByType("BACKDROP", "HeroSurvivorChoiceRoot", parent, "", 0)
-        BlzFrameSetTexture(panel, "HeroSurvivorUI\\Transparent.tga", 0, true)
+        panel = BlzCreateFrameByType("BACKDROP", "AnyasLongNightChoiceRoot", parent, "", 0)
+        BlzFrameSetTexture(panel, "AnyasLongNightUI\\Transparent.tga", 0, true)
         BlzFrameSetAbsPoint(panel, FRAMEPOINT_CENTER, 0.4, 0.35)
         BlzFrameSetSize(panel, 0.74, 0.50)
         BlzFrameSetLevel(panel, 10)
@@ -1014,8 +1014,8 @@ do
         BlzFrameSetPoint(resultBackdrop, FRAMEPOINT_CENTER, panel, FRAMEPOINT_CENTER, 0, 0)
         BlzFrameSetLevel(resultBackdrop, 1)
         SetVisible(resultBackdrop, false)
-        resultHeading = Text(resultBackdrop, "HeroSurvivorResultHeading", 0.55, 0.028, 0, -0.020)
-        resultNote = Text(resultBackdrop, "HeroSurvivorResultNote", 0.55, 0.165, 0, -0.082)
+        resultHeading = Text(resultBackdrop, "AnyasLongNightResultHeading", 0.55, 0.028, 0, -0.020)
+        resultNote = Text(resultBackdrop, "AnyasLongNightResultNote", 0.55, 0.165, 0, -0.082)
         BlzFrameSetLevel(resultHeading, 3)
         BlzFrameSetLevel(resultNote, 3)
         resultSummaryInfo = Text(resultBackdrop, "HSResultSummaryInfo", 0.255, 0.145, -0.145, -0.092)
@@ -1060,12 +1060,12 @@ do
         chapterNext = JournalButton(724, 0.226, "다음 장", 0, 1)
         journalPosition = Text(resultBackdrop, "HSJournalPosition", 0.18, 0.022, 0, -0.253)
         BlzFrameSetLevel(journalPosition, 3)
-        heading = Text(panel, "HeroSurvivorHeading", 0.68, 0.04, 0, -0.005)
-        note = Text(panel, "HeroSurvivorNote", 0.70, 0.016, 0, -0.405)
-        rerollCounter = Text(panel, "HeroSurvivorRerollCount", 0.26, 0.021, -0.065, -0.378)
+        heading = Text(panel, "AnyasLongNightHeading", 0.68, 0.04, 0, -0.005)
+        note = Text(panel, "AnyasLongNightNote", 0.70, 0.016, 0, -0.405)
+        rerollCounter = Text(panel, "AnyasLongNightRerollCount", 0.26, 0.021, -0.065, -0.378)
         BlzFrameSetLevel(rerollCounter, 5)
         for i = 1, SurvivorConfig.rerollCapacity do
-            local pip = BlzCreateFrameByType("BACKDROP", "HeroSurvivorRerollPip" .. i, panel, "", 0)
+            local pip = BlzCreateFrameByType("BACKDROP", "AnyasLongNightRerollPip" .. i, panel, "", 0)
             BlzFrameSetSize(pip, 0.011, 0.011)
             BlzFrameSetPoint(pip, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, 0.08 + (i - 1) * 0.016, -0.382)
             BlzFrameSetTexture(pip, "ReplaceableTextures\\CommandButtons\\BTNReplay-Loop.blp", 0, true)
@@ -1084,33 +1084,33 @@ do
             local slot = i
             local frame = Backdrop(panel, "EscMenuBackdrop", 100 + i, 0.212, cardHeight)
             BlzFrameSetPoint(frame, FRAMEPOINT_TOP, panel, FRAMEPOINT_TOP, (i - 2) * 0.23, cardTop)
-            local button = ChoiceButton(frame, "HeroSurvivorCard" .. i)
+            local button = ChoiceButton(frame, "AnyasLongNightCard" .. i)
             BlzFrameSetSize(button, 0.212, cardHeight)
             BlzFrameSetPoint(button, FRAMEPOINT_CENTER, frame, FRAMEPOINT_CENTER, 0, 0)
             -- A shared local feedback control supplies the card's mouse-over border.
-            local icon = BlzCreateFrameByType("BACKDROP", "HeroSurvivorIcon" .. i, button, "", 0)
+            local icon = BlzCreateFrameByType("BACKDROP", "AnyasLongNightIcon" .. i, button, "", 0)
             BlzFrameSetSize(icon, 0.06, 0.06)
             BlzFrameSetPoint(icon, FRAMEPOINT_TOP, button, FRAMEPOINT_TOP, 0, -0.018)
             BlzFrameSetEnable(icon, false)
             -- Sibling buttons stay outside the card's selection hit area.
             local rerollFrame = Backdrop(panel, "QuestButtonBaseTemplate", 200 + i, 0.108, 0.03)
             BlzFrameSetPoint(rerollFrame, FRAMEPOINT_TOP, frame, FRAMEPOINT_BOTTOM, -0.052, -0.01)
-            local reroll = ChoiceButton(rerollFrame, "HeroSurvivorReroll" .. i)
+            local reroll = ChoiceButton(rerollFrame, "AnyasLongNightReroll" .. i)
             BlzFrameSetSize(reroll, 0.108, 0.03)
             BlzFrameSetPoint(reroll, FRAMEPOINT_CENTER, rerollFrame, FRAMEPOINT_CENTER, 0, 0)
             local excludeFrame = Backdrop(panel, "QuestButtonBaseTemplate", 400 + i, 0.09, 0.03)
             BlzFrameSetPoint(excludeFrame, FRAMEPOINT_TOP, frame, FRAMEPOINT_BOTTOM, 0.059, -0.01)
-            local exclude = ChoiceButton(excludeFrame, "HeroSurvivorExclude" .. i)
+            local exclude = ChoiceButton(excludeFrame, "AnyasLongNightExclude" .. i)
             BlzFrameSetAllPoints(exclude, excludeFrame)
             cards[i] = {frame = frame, button = button, icon = icon, rerollFrame = rerollFrame,
                 excludeFrame = excludeFrame, exclude = exclude,
-                excludeText = Text(exclude, "HeroSurvivorExcludeText" .. i, 0.082, 0.03, 0, 0),
-                title = Text(button, "HeroSurvivorTitle" .. i, 0.185, 0.041, 0, -0.083),
-                description = Text(button, "HeroSurvivorDescription" .. i, 0.178, 0.075, 0, -0.132),
-                preview = Text(button, "HeroSurvivorPreview" .. i, 0.18, 0.032, 0, -0.209),
-                hint = Text(button, "HeroSurvivorHint" .. i, 0.18, 0.015, 0, -0.249),
+                excludeText = Text(exclude, "AnyasLongNightExcludeText" .. i, 0.082, 0.03, 0, 0),
+                title = Text(button, "AnyasLongNightTitle" .. i, 0.185, 0.041, 0, -0.083),
+                description = Text(button, "AnyasLongNightDescription" .. i, 0.178, 0.075, 0, -0.132),
+                preview = Text(button, "AnyasLongNightPreview" .. i, 0.18, 0.032, 0, -0.209),
+                hint = Text(button, "AnyasLongNightHint" .. i, 0.18, 0.015, 0, -0.249),
                 reroll = reroll,
-                rerollText = Text(reroll, "HeroSurvivorRerollText" .. i, 0.10, 0.03, 0, 0)}
+                rerollText = Text(reroll, "AnyasLongNightRerollText" .. i, 0.10, 0.03, 0, 0)}
             BindActionFeedback(cards[i], "available", button, nil, nil,
                 "HSCardHover" .. i, {255, 220, 105}, nil)
             BindActionFeedback(cards[i], "rerollAvailable", reroll, rerollFrame, cards[i].rerollText,
@@ -1164,36 +1164,36 @@ do
         BlzFrameSetText(retrySame, "같은 설정으로 재도전")
         Bind(retrySame, FRAMEEVENT_CONTROL_CLICK, function()
             ReleaseFocus(retrySame)
-            if RunSession.GetState() == "FINISHED" then HeroSurvivor.RetrySame() end
+            if RunSession.GetState() == "FINISHED" then AnyasLongNight.RetrySame() end
         end)
         BlzFrameSetVisible(retrySame, false)
         BlzFrameSetVisible(panel, false)
         BlzFrameSetVisible(shade, false)
-        introRoot = BlzCreateFrameByType("BACKDROP", "HeroSurvivorStageIntro", parent, "", 0)
+        introRoot = BlzCreateFrameByType("BACKDROP", "AnyasLongNightStageIntro", parent, "", 0)
         BlzFrameSetAbsPoint(introRoot, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(introRoot, 2.4, 0.6)
-        BlzFrameSetTexture(introRoot, "HeroSurvivorUI\\Black.tga", 0, true)
+        BlzFrameSetTexture(introRoot, "AnyasLongNightUI\\Black.tga", 0, true)
         BlzFrameSetLevel(introRoot, 20)
         BlzFrameSetEnable(introRoot, false)
         returnShade = BlzCreateFrameByType("BACKDROP", "HSStoryReturnShade", parent, "", 0)
         BlzFrameSetAbsPoint(returnShade, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(returnShade, 2.4, 0.6)
-        BlzFrameSetTexture(returnShade, "HeroSurvivorUI\\Black.tga", 0, true)
+        BlzFrameSetTexture(returnShade, "AnyasLongNightUI\\Black.tga", 0, true)
         BlzFrameSetLevel(returnShade, 30)
         BlzFrameSetEnable(returnShade, false)
         BlzFrameSetVisible(returnShade, false)
         -- Text/buttons are siblings: fading the backdrop must not fade the dialogue.
-        introContent = BlzCreateFrameByType("BACKDROP", "HeroSurvivorStoryContent", parent, "", 0)
-        BlzFrameSetTexture(introContent, "HeroSurvivorUI\\Transparent.tga", 0, true)
+        introContent = BlzCreateFrameByType("BACKDROP", "AnyasLongNightStoryContent", parent, "", 0)
+        BlzFrameSetTexture(introContent, "AnyasLongNightUI\\Transparent.tga", 0, true)
         BlzFrameSetAbsPoint(introContent, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(introContent, 0.8, 0.6)
         BlzFrameSetLevel(introContent, 22)
-        caption = FramedPanel(parent, "HeroSurvivorCaption", 712, 0.54, 0.166)
+        caption = FramedPanel(parent, "AnyasLongNightCaption", 712, 0.54, 0.166)
         BlzFrameSetAbsPoint(caption, FRAMEPOINT_CENTER, 0.4, 0.30)
         BlzFrameSetLevel(caption, 21)
         BlzFrameSetEnable(caption, false)
-        introTitle = Text(introContent, "HeroSurvivorStageTitle", 0.7, 0.05, 0, -0.11)
-        introText = Text(introContent, "HeroSurvivorStageText", 0.7, 0.13, 0, -0.18)
+        introTitle = Text(introContent, "AnyasLongNightStageTitle", 0.7, 0.05, 0, -0.11)
+        introText = Text(introContent, "AnyasLongNightStageText", 0.7, 0.13, 0, -0.18)
         introFooter = Text(introContent, "HSStoryFooter", 0.70, 0.040, 0, -0.49)
         storyPosition = Text(introContent, "HSStoryPosition", 0.230, 0.019, 0, -0.11)
         introSkip = BlzCreateFrame("ScriptDialogButton", parent, 0, 700)
@@ -1578,7 +1578,7 @@ do
         BlzFrameClearAllPoints(restartButton)
         BlzFrameSetPoint(restartButton, FRAMEPOINT_TOP, resultBackdrop, FRAMEPOINT_TOP, reason == "stage_clear" and 0 or 0.14, -0.290)
         BlzFrameSetText(restartButton, reason == "stage_clear" and "다음 스테이지" or "설정 변경")
-        BlzFrameSetVisible(retrySame, reason ~= "stage_clear" and HeroSurvivor.CanRetrySame())
+        BlzFrameSetVisible(retrySame, reason ~= "stage_clear" and AnyasLongNight.CanRetrySame())
         for i = 1, 3 do
             cards[i].available, cards[i].rerollAvailable = false, false
             BlzFrameSetVisible(cards[i].frame, false)
@@ -1595,7 +1595,7 @@ do
     end
     function SurvivorUI.DebugStatus()
         if not initialized or GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
-        print(string.format("[HeroSurvivor UI difficulty-v7] parent=%s visible=%s choosing=%s",
+        print(string.format("[AnyasLongNight UI difficulty-v7] parent=%s visible=%s choosing=%s",
             parentName, tostring(BlzFrameIsVisible(panel)), tostring(choosing)))
         for i, card in ipairs(cards) do
             print(string.format("[card %d] visible=%s size=%.3fx%.3f alpha=%d",

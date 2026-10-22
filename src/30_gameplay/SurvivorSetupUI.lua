@@ -228,7 +228,7 @@ do
         if kind == "HERO" then
             entry = entry or SurvivorConfig.heroes[SurvivorConfig.defaultHero]
             if entry.locked then return entry.name .. " · 준비 중", entry.story end
-            return entry.name, entry.story .. "\n\n영웅을 바꾸면 시작 무기를 다시 선택합니다. 장신구와 난이도는 그대로 유지됩니다."
+            return entry.name, entry.story
         end
         if kind == "DIFFICULTY" then
             if not entry then return "난이도 선택", "처치한 적만큼 경험치를 획득합니다.\n왼쪽 목록에서 난이도를 고르세요." end
@@ -290,7 +290,7 @@ do
         end
         RenderList()
         RenderDescription()
-        BlzFrameSetText(summaryToggle.text, HeroSurvivor.IsStorySummary() and "이미 본 대화: 요약 보기" or "이미 본 대화: 전체 보기")
+        BlzFrameSetText(summaryToggle.text, AnyasLongNight.IsStorySummary() and "이미 본 대화: 요약 보기" or "이미 본 대화: 전체 보기")
         startButton.ready = selected.DIFFICULTY ~= nil and selected.WEAPON ~= nil and selected.TRINKET ~= nil
         BlzFrameSetEnable(startButton.button, startButton.ready)
         BlzFrameSetText(startButton.text, startButton.ready and "|cffffcc00게임 시작|r" or "|cff888888게임 시작|r")
@@ -302,12 +302,12 @@ do
         local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
         if parent == nil or parent == 0 or GetHandleId(parent) == 0 then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
         -- Layout groups carry no mouse surface; only their actual buttons take input.
-        root = BlzCreateFrameByType("BACKDROP", "HeroSurvivorSetupRoot", parent, "", 0)
-        BlzFrameSetTexture(root, "HeroSurvivorUI\\Transparent.tga", 0, true)
+        root = BlzCreateFrameByType("BACKDROP", "AnyasLongNightSetupRoot", parent, "", 0)
+        BlzFrameSetTexture(root, "AnyasLongNightUI\\Transparent.tga", 0, true)
         BlzFrameSetAbsPoint(root, FRAMEPOINT_TOP, 0.4, rootTop)
         BlzFrameSetSize(root, rootWidth, rootHeight)
         BlzFrameSetLevel(root, 11)
-        title = Text(root, "HeroSurvivorSetupTitle", rootWidth, 0.024, 0, -0.002)
+        title = Text(root, "AnyasLongNightSetupTitle", rootWidth, 0.024, 0, -0.002)
         BlzFrameSetText(title, "|cffffcc00" .. SurvivorStory.title .. "|r   |cffaaaaaa"
             .. SurvivorStory.notice .. " · DE 그래픽 권장|r")
         local left = Panel("EscMenuBackdrop", 800, 0, panelTop, listWidth, rootHeight + panelTop)
@@ -315,13 +315,13 @@ do
         -- The preview window is clear so the world shows through. Retexturing a menu backdrop
         -- also drops its border and custom FDF paths rendered missing-texture green, so a thin
         -- gold outline from tinted strips frames it, like the choice cards' hover border.
-        local preview = Image(root, "HeroSurvivorSetupPreview", previewWidth, previewHeight, "HeroSurvivorUI\\Transparent.tga")
+        local preview = Image(root, "AnyasLongNightSetupPreview", previewWidth, previewHeight, "AnyasLongNightUI\\Transparent.tga")
         BlzFrameSetPoint(preview, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, previewX, panelTop)
         BlzFrameSetLevel(preview, 1)
         local line = 0.002
         for _, edge in ipairs({{"Top", FRAMEPOINT_TOPLEFT, previewWidth, line}, {"Bottom", FRAMEPOINT_BOTTOMLEFT, previewWidth, line},
             {"Left", FRAMEPOINT_TOPLEFT, line, previewHeight}, {"Right", FRAMEPOINT_TOPRIGHT, line, previewHeight}}) do
-            local strip = Image(preview, "HeroSurvivorSetupPreview" .. edge[1], edge[3], edge[4], "HeroSurvivorUI\\Ready.tga")
+            local strip = Image(preview, "AnyasLongNightSetupPreview" .. edge[1], edge[3], edge[4], "AnyasLongNightUI\\Ready.tga")
             BlzFrameSetPoint(strip, edge[2], preview, edge[2], 0, 0)
             BlzFrameSetVertexColor(strip, BlzConvertColor(255, 255, 204, 0))
         end
@@ -329,26 +329,26 @@ do
 
         -- The shade covers the world at ultrawide ratios, except for the preview window.
         -- Four disabled, opaque pieces surround that hole; Hide owns the container.
-        shade = Image(parent, "HeroSurvivorSetupShade", 2.4, 0.6, "HeroSurvivorUI\\Transparent.tga")
+        shade = Image(parent, "AnyasLongNightSetupShade", 2.4, 0.6, "AnyasLongNightUI\\Transparent.tga")
         BlzFrameSetAbsPoint(shade, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetLevel(shade, 10)
         local holeHeight = previewHeight
-        local hole = Image(shade, "HeroSurvivorSetupHole", previewWidth, holeHeight, "HeroSurvivorUI\\Transparent.tga")
+        local hole = Image(shade, "AnyasLongNightSetupHole", previewWidth, holeHeight, "AnyasLongNightUI\\Transparent.tga")
         BlzFrameSetPoint(hole, FRAMEPOINT_TOPLEFT, preview, FRAMEPOINT_TOPLEFT, 0, 0)
         for _, piece in ipairs({
             {"Top", 2.4, 0.6, FRAMEPOINT_BOTTOM, FRAMEPOINT_TOP},
             {"Bottom", 2.4, 0.6, FRAMEPOINT_TOP, FRAMEPOINT_BOTTOM},
             {"Left", 1.2, holeHeight, FRAMEPOINT_TOPRIGHT, FRAMEPOINT_TOPLEFT},
             {"Right", 1.2, holeHeight, FRAMEPOINT_TOPLEFT, FRAMEPOINT_TOPRIGHT}}) do
-            local cover = Image(shade, "HeroSurvivorSetupShade" .. piece[1], piece[2], piece[3], "HeroSurvivorUI\\Black.tga")
+            local cover = Image(shade, "AnyasLongNightSetupShade" .. piece[1], piece[2], piece[3], "AnyasLongNightUI\\Black.tga")
             BlzFrameSetPoint(cover, piece[4], hole, piece[5], 0, 0)
         end
 
-        listTitle = Text(left, "HeroSurvivorSetupListTitle", listWidth - 0.04, 0.022, 0, -0.016)
+        listTitle = Text(left, "AnyasLongNightSetupListTitle", listWidth - 0.04, 0.022, 0, -0.016)
         local cardWidth = (listWidth - margin * 2 - 0.004) / 2
         for i = 1, listSize do
             local slot = i
-            local card = Button(left, "HeroSurvivorSetupOption" .. i, cardWidth, 0.05,
+            local card = Button(left, "AnyasLongNightSetupOption" .. i, cardWidth, 0.05,
                 (i % 2 == 1 and -1 or 1) * (cardWidth + 0.004) / 2, -0.042 - math.floor((i - 1) / 2) * 0.057, function()
                     local id = cards[slot].id
                     if not visible or not id or cards[slot].locked then return end
@@ -356,13 +356,13 @@ do
                     selectCallback(category, id)
                 end)
             BlzFrameSetVisible(card.text, false)
-            card.active = Image(card.button, "HeroSurvivorSetupChosen" .. i, 0.03 + rim, 0.03 + rim, highlight)
+            card.active = Image(card.button, "AnyasLongNightSetupChosen" .. i, 0.03 + rim, 0.03 + rim, highlight)
             BlzFrameSetPoint(card.active, FRAMEPOINT_TOPLEFT, card.button, FRAMEPOINT_TOPLEFT, 0.009 - rim / 2, -0.01 + rim / 2)
             BlzFrameSetLevel(card.active, 1)
-            card.icon = Image(card.button, "HeroSurvivorSetupIcon" .. i, 0.03, 0.03, highlight)
+            card.icon = Image(card.button, "AnyasLongNightSetupIcon" .. i, 0.03, 0.03, highlight)
             BlzFrameSetPoint(card.icon, FRAMEPOINT_TOPLEFT, card.button, FRAMEPOINT_TOPLEFT, 0.009, -0.01)
             BlzFrameSetLevel(card.icon, 2)
-            card.name = LeftText(card.button, "HeroSurvivorSetupName" .. i, cardWidth - 0.048, 0.034, 0.042, -0.008)
+            card.name = LeftText(card.button, "AnyasLongNightSetupName" .. i, cardWidth - 0.048, 0.034, 0.042, -0.008)
             Listen(card.button, FRAMEEVENT_MOUSE_ENTER, function()
                 if visible and cards[slot].id then hovered = {kind = category, id = cards[slot].id}; RenderDescription() end
             end)
@@ -372,34 +372,34 @@ do
             cards[i] = card
         end
 
-        heroButton = IconButton(center, "HeroSurvivorSetupHERO", 0.064, 0.048, 0, -0.016, function()
+        heroButton = IconButton(center, "AnyasLongNightSetupHERO", 0.064, 0.048, 0, -0.016, function()
             if visible then openCallback("HERO") end
         end)
-        heroName = Text(center, "HeroSurvivorSetupHeroName", summaryWidth - 0.04, 0.018, 0, -0.082)
+        heroName = Text(center, "AnyasLongNightSetupHeroName", summaryWidth - 0.04, 0.018, 0, -0.082)
         local spacing = 0.08
         for i, kind in ipairs(kinds) do
             local choice = kind
-            local tile = IconButton(center, "HeroSurvivorSetup" .. kind, 0.05, 0.036, (i - 2) * spacing, -0.106, function()
+            local tile = IconButton(center, "AnyasLongNightSetup" .. kind, 0.05, 0.036, (i - 2) * spacing, -0.106, function()
                 if visible then openCallback(choice) end
             end)
-            tile.caption = Text(center, "HeroSurvivorSetup" .. kind .. "Caption", spacing, 0.04, (i - 2) * spacing, -0.158)
+            tile.caption = Text(center, "AnyasLongNightSetup" .. kind .. "Caption", spacing, 0.04, (i - 2) * spacing, -0.158)
             categoryButtons[kind] = tile
         end
-        descriptionTitle = LeftText(center, "HeroSurvivorSetupDescriptionTitle", summaryWidth - margin * 2, 0.02, margin, -0.204)
-        description = LeftText(center, "HeroSurvivorSetupDescription", summaryWidth - margin * 2, 0.15, margin, -0.226)
+        descriptionTitle = LeftText(center, "AnyasLongNightSetupDescriptionTitle", summaryWidth - margin * 2, 0.02, margin, -0.204)
+        description = LeftText(center, "AnyasLongNightSetupDescription", summaryWidth - margin * 2, 0.15, margin, -0.226)
         BlzFrameSetTextAlignment(description, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
 
         local actionWidth = previewWidth - margin * 2
         local buttonWidth = (actionWidth - 0.006) / 2
-        status = Text(actions, "HeroSurvivorSetupStatus", actionWidth, 0.03, 0, -margin)
+        status = Text(actions, "AnyasLongNightSetupStatus", actionWidth, 0.03, 0, -margin)
         summaryToggle = Button(actions, "HSSummaryToggle", actionWidth, 0.032, 0, -0.064, function()
-            if visible then HeroSurvivor.ToggleStorySummary() end
+            if visible then AnyasLongNight.ToggleStorySummary() end
         end)
-        resetButton = Button(actions, "HeroSurvivorSetupReset", buttonWidth, 0.046, -(buttonWidth + 0.006) / 2, -0.1, function()
+        resetButton = Button(actions, "AnyasLongNightSetupReset", buttonWidth, 0.046, -(buttonWidth + 0.006) / 2, -0.1, function()
             if visible then hovered = nil; resetCallback() end
         end)
         BlzFrameSetText(resetButton.text, "초기화")
-        startButton = Button(actions, "HeroSurvivorSetupStart", buttonWidth, 0.046, (buttonWidth + 0.006) / 2, -0.1, function()
+        startButton = Button(actions, "AnyasLongNightSetupStart", buttonWidth, 0.046, (buttonWidth + 0.006) / 2, -0.1, function()
             if not visible or not startButton.ready then return end
             SurvivorSetupUI.Hide()
             startCallback()

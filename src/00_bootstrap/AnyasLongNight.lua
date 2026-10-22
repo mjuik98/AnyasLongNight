@@ -1,6 +1,6 @@
 -- Import at map script scope, before main() runs. TotalInitialization starts us.
 -- Prototype: one human player, movement by right-click, autonomous Lua attacks.
-HeroSurvivor = {}
+AnyasLongNight = {}
 do
     local initialized, hero = false, nil
     local build, stats, offers = nil, nil, nil
@@ -370,7 +370,7 @@ do
                 end, CanStart)
         end, expectedHero)
     end
-    function HeroSurvivor.NextStage()
+    function AnyasLongNight.NextStage()
         if RunSession.GetState() ~= "STAGE_CLEAR" or stageTransition or gearOffers or stage >= SurvivorConfig.stages then return false end
         stageTransition, nextHazard = true, 35
         stage, stageStarted, bossEngagedAt = stage + 1, RunSession.GetElapsed(), nil
@@ -503,31 +503,31 @@ do
         setupPhase = "MENU"
         SurvivorSetupUI.ShowMenu(selectedDifficulty, selectedWeapon, selectedTrinket, selectedHero)
     end
-    function HeroSurvivor.Start()
-        assert(initialized, "Start after HeroSurvivor.Init")
+    function AnyasLongNight.Start()
+        assert(initialized, "Start after AnyasLongNight.Init")
         setupPhase = nil
         RunSession.Finish("restarted")
         ShowSetup()
     end
-    function HeroSurvivor.IsStorySummary() return storySummary end
-    function HeroSurvivor.ToggleStorySummary()
+    function AnyasLongNight.IsStorySummary() return storySummary end
+    function AnyasLongNight.ToggleStorySummary()
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         storySummary = not storySummary
         SurvivorStory.SetSummaryMode(storySummary)
         ShowSetup()
         return true
     end
-    function HeroSurvivor.CanRetrySame()
+    function AnyasLongNight.CanRetrySame()
         return RunSession.GetState() == "FINISHED" and selectedDifficulty ~= nil
             and selectedWeapon ~= nil and selectedTrinket ~= nil
     end
-    function HeroSurvivor.RetrySame()
-        if not HeroSurvivor.CanRetrySame() then return false end
+    function AnyasLongNight.RetrySame()
+        if not AnyasLongNight.CanRetrySame() then return false end
         setupPhase = "MENU"
-        return HeroSurvivor.BeginRun()
+        return AnyasLongNight.BeginRun()
     end
     -- The setup screen shows every panel at once; opening a kind only switches its option list.
-    function HeroSurvivor.OpenSetup(kind)
+    function AnyasLongNight.OpenSetup(kind)
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         if kind ~= "HERO" and kind ~= "DIFFICULTY" and kind ~= "WEAPON" and kind ~= "TRINKET" then return false end
         local selections = {HERO = selectedHero, DIFFICULTY = selectedDifficulty, WEAPON = selectedWeapon, TRINKET = selectedTrinket}
@@ -535,13 +535,13 @@ do
         SurvivorSetupUI.ShowOptions(kind, selected, selectedHero)
         return true
     end
-    function HeroSurvivor.ResetSetup()
+    function AnyasLongNight.ResetSetup()
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         selectedDifficulty, selectedWeapon, selectedTrinket = nil, nil, nil
         ShowSetup()
         return true
     end
-    function HeroSurvivor.SelectSetup(kind, id)
+    function AnyasLongNight.SelectSetup(kind, id)
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         local profile = SurvivorConfig.heroes[id]
         if kind == "HERO" and profile and not profile.locked then
@@ -555,8 +555,8 @@ do
         ShowSetup()
         return true
     end
-    function HeroSurvivor.BeginRun()
-        assert(initialized, "Start after HeroSurvivor.Init")
+    function AnyasLongNight.BeginRun()
+        assert(initialized, "Start after AnyasLongNight.Init")
         if not CanSetup() or setupPhase ~= "MENU" then return false end
         if not selectedDifficulty or not selectedWeapon or not selectedTrinket then return false end
         setupPhase = nil -- Consume setup once before native creation or callbacks.
@@ -568,25 +568,25 @@ do
             Attempt(errors, "expedition", SurvivorExpedition.EndStage)
             CleanupRun(errors)
             Attempt(errors, "result UI", function() SurvivorUI.ShowResult("error", RunSession.GetElapsed(), kills) end)
-            for _, failure in ipairs(errors) do print("[HeroSurvivor cleanup] " .. failure) end
+            for _, failure in ipairs(errors) do print("[AnyasLongNight cleanup] " .. failure) end
         end
         return ok
     end
-    function HeroSurvivor.Init()
+    function AnyasLongNight.Init()
         if initialized then return end
         assert(ALICE_Initialized, "Initialize after ALICE")
         -- The solo arena remains fully visible during combat, pauses and stage changes.
         FogMaskEnable(false)
         FogEnable(false)
-        SurvivorUI.Init(Choose, HeroSurvivor.Start, Reroll, HeroSurvivor.NextStage, Exclude)
-        SurvivorSetupUI.Init(HeroSurvivor.OpenSetup, HeroSurvivor.SelectSetup, HeroSurvivor.ResetSetup, HeroSurvivor.BeginRun)
+        SurvivorUI.Init(Choose, AnyasLongNight.Start, Reroll, AnyasLongNight.NextStage, Exclude)
+        SurvivorSetupUI.Init(AnyasLongNight.OpenSetup, AnyasLongNight.SelectSetup, AnyasLongNight.ResetSetup, AnyasLongNight.BeginRun)
         if SurvivorConfig.debugCommands then
             debugTrigger = CreateTrigger() -- Map lifetime; registered once across restarts.
             TriggerRegisterPlayerChatEvent(debugTrigger, Player(SurvivorConfig.playerId), "-hs", false)
             TriggerAddAction(debugTrigger, function()
                 local ok, message = pcall(function()
                     local text = GetEventPlayerChatString()
-                    if text == "-hs restart" then HeroSurvivor.Start()
+                    if text == "-hs restart" then AnyasLongNight.Start()
                     elseif text == "-hs perf on" then SurvivorMetrics.Enable(true); print("[HS performance] 측정 시작 / -hs perf 로 확인")
                     elseif text == "-hs perf off" then SurvivorMetrics.Enable(false); SurvivorMetrics.Report()
                     elseif text == "-hs perf" then SurvivorMetrics.Report()
@@ -616,13 +616,13 @@ do
                         local before = GetHeroLevel(hero)
                         SetHeroLevel(hero, before + 1, true)
                         QueueLevelRewards()
-                        if GetHeroLevel(hero) == before then print("[HeroSurvivor] 맵의 최대 영웅 레벨에 도달했습니다.") end
+                        if GetHeroLevel(hero) == before then print("[AnyasLongNight] 맵의 최대 영웅 레벨에 도달했습니다.") end
                     elseif text == "-hs stats" then
                         local enemies, effects = SurvivorCombat.Counts()
-                        print(string.format("[HeroSurvivor] %s / %.2fs / enemies=%d / effects=%d / pending=%d",
+                        print(string.format("[AnyasLongNight] %s / %.2fs / enemies=%d / effects=%d / pending=%d",
                             RunSession.GetState(), RunSession.GetElapsed(), enemies, effects, #queuedLevels - queueHead + 1))
                         if hero ~= nil then
-                            print(string.format("[HeroSurvivor] stage=%d/%d / stage time=%.1f / hero level=%d / XP=%d", stage, SurvivorConfig.stages, RunSession.GetElapsed() - stageStarted, GetHeroLevel(hero), GetHeroXP(hero)))
+                            print(string.format("[AnyasLongNight] stage=%d/%d / stage time=%.1f / hero level=%d / XP=%d", stage, SurvivorConfig.stages, RunSession.GetElapsed() - stageStarted, GetHeroLevel(hero), GetHeroXP(hero)))
                             print(SurvivorCombat.DamageReport())
                         end
                     else
@@ -640,10 +640,10 @@ do
             end)
         end
         initialized = true
-        if SurvivorConfig.autoStart then HeroSurvivor.Start() end
+        if SurvivorConfig.autoStart then AnyasLongNight.Start() end
     end
-    OnInit.final("HeroSurvivor", function(Require)
+    OnInit.final("AnyasLongNight", function(Require)
         Require "ALICE"
-        HeroSurvivor.Init()
+        AnyasLongNight.Init()
     end)
 end

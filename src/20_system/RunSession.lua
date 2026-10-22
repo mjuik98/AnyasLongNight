@@ -28,13 +28,13 @@ do
         if oldHooks and oldHooks.finish then Attempt("finish", function() oldHooks.finish(reason or "stopped") end) end
         -- Clean up while frozen, including when ending during a choice.
         if wasHalted then Attempt("resume ALICE", ALICE_Resume) end
-        for _, message in ipairs(errors) do print("[HeroSurvivor cleanup] " .. message) end
+        for _, message in ipairs(errors) do print("[AnyasLongNight cleanup] " .. message) end
         return true
     end
     function RunSession.Fail(message)
         RunSession.Finish("error")
         if state == "READY" then state = "FINISHED" end
-        print("[HeroSurvivor] " .. tostring(message))
+        print("[AnyasLongNight] " .. tostring(message))
     end
     function RunSession.Start(stepCallback, lifecycle)
         if state ~= "READY" and state ~= "FINISHED" then return false end
