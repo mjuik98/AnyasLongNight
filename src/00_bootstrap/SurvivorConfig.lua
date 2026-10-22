@@ -1,7 +1,7 @@
 -- Prototype values, not final game balance. Uses stock Blizzard object IDs.
 SurvivorConfig = {
-    autoStart = true, debugCommands = HERO_SURVIVOR_PROFILE ~= "release", playerId = 0,
-    talents = assert(HERO_SURVIVOR_TALENTS, "Missing native talent catalog"),
+    autoStart = true, debugCommands = ANYAS_LONG_NIGHT_PROFILE ~= "release", playerId = 0,
+    talents = assert(ANYAS_LONG_NIGHT_TALENTS, "Missing native talent catalog"),
     stages = 5, heroLife = 300, moveSpeed = 300, heroRegeneration = 0,
     stageTimings = {
         {bossStart = 120, duration = 180},
@@ -59,10 +59,13 @@ SurvivorConfig = {
     warningRingModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]], warningRingRadius = 100,
     specialMarkerModel = [[abilities\spells\other\spellmarker\spellmarkerred.mdl]],
     specialSafeMarkerModel = [[abilities\spells\other\spellmarker\spellmarkergreen.mdl]],
-    -- Elite dashes show only their direction: one arrow placed ahead of the elite.
-    -- Arrows repeat every dashArrowSpacing from the first offset to the dash end.
+    -- Static 100x100 white plane, stretched to the exact lane or safe-boundary dimensions.
+    warningPlaneModel = [[AnyasLongNightUI\WarningPlane.mdx]],
+    warningColors = {danger = {255, 75, 65}, safe = {105, 255, 145}},
+    bossWarningAlpha = 90, bossWarningFinalAlpha = 245, bossWarningBrightTime = 0.65,
+    -- Elite arrows use a fixed offset/spacing; larger boss arrows evenly cover the path to its endpoint.
     dashArrowModel = [[abilities\spells\other\spellmarker\spellarrowred.mdl]], dashArrowScale = 1.2, dashArrowOffset = 150,
-    dashArrowSpacing = 150,
+    dashArrowSpacing = 150, bossDashArrowScale = 1.6,
     -- One effect per role: weapon procs and set effects never share a model.
     fireBurstModel = [[abilities\spells\other\renault\firenova.mdl]],
     emberBurstModel = [[Abilities\Spells\Orc\WarStomp\WarStompCaster.mdl]],
@@ -82,6 +85,8 @@ SurvivorConfig = {
         unitId = FourCC("hsBC"), name = "낡은 보급 상자 · 파괴 시 무작위 보상", color = {220, 200, 150},
         purgeRadius = 700, purgeBossFraction = 0.10, timeStopDuration = 8, timeStopBossDuration = 8,
         timeStopBrightness = 0.45,
+        timeStopFilter = {color = {145, 185, 225}, alpha = 13, fadeIn = 0.2, fadeOut = 0.3,
+            texture = [[ReplaceableTextures\CameraMasks\White_mask.blp]]},
         drops = {{kind = "recovery", weight = 30}, {kind = "experienceProp", weight = 60},
             {kind = "purge", weight = 5}, {kind = "timeStop", weight = 5}},
         recovery = {itemId = FourCC("hsHR")}, experienceProp = {itemId = FourCC("hsEX")},
@@ -101,14 +106,12 @@ SurvivorConfig = {
             previewSkin = FourCC("hsPA"), previewAnimation = "cinematic stand 1",
             text = "화염·번개·칼날·얼음 무기로 몰려오는 적을 즉시 정리합니다.",
             story = "스트라솔름 폐허에서 스컬지 무리를 벗어난 언데드가 목격됐다.\n"
-                .. "안야는 퓨트리스와 함께 그 흔적을 쫓아 불타는 시가지와 납골당, 로데론 수도의 하수구까지 긴 밤의 수색에 나선다.\n\n"
-                .. "화염·번개·칼날·얼음 무기로 몰려오는 적을 정리하며 길을 연다."},
+                .. "안야는 퓨트리스와 함께 그 흔적을 쫓아 불타는 시가지와 납골당, 로데론 수도의 하수구까지 긴 밤의 수색에 나선다."},
         putress = {name = "퓨트리스", unitId = FourCC("HsPu"), icon = [[ReplaceableTextures\CommandButtons\BTNPutress.blp]],
             previewSkin = FourCC("hsPP"), previewAnimation = "stand",
             text = "독·어둠·연금술 무기로 중독과 저주를 쌓아 반응으로 터뜨립니다.",
             story = "스트라솔름 폐허에서 스컬지 무리를 벗어난 언데드가 목격됐다.\n"
-                .. "퓨트리스는 안야와 함께 그 흔적을 쫓아 불타는 시가지와 납골당, 로데론 수도의 하수구까지 긴 밤의 수색에 나선다.\n\n"
-                .. "독·어둠·연금술 무기로 중독과 저주를 쌓고, 반응으로 한꺼번에 터뜨린다.",
+                .. "퓨트리스는 안야와 함께 그 흔적을 쫓아 불타는 시가지와 납골당, 로데론 수도의 하수구까지 긴 밤의 수색에 나선다.",
             startingWeapons = {"plaguedart", "plaguetrail", "deathcoil", "plaguejar"}},
     },
     -- Setup preview shot: the hero floats lift above the ground at x/y (map center when nil)
@@ -194,6 +197,8 @@ SurvivorConfig = {
     -- Status effects applied by Putress weapons (draft values).
     status = {poisonDamage = 6, poisonTick = 0.5, poisonMax = 12, poisonDuration = 4,
         curseAmp = 0.08, curseMax = 3, curseDuration = 4, reactionDamage = 18, reactionCooldown = 0.5},
+    -- Blend with each enemy's original RGB; slow/freeze takes priority over poison, then curse.
+    statusColors = {strength = 0.6, slow = {100, 175, 255}, poison = {130, 230, 120}, curse = {190, 140, 240}},
     -- Bezier throws: control point height = distance * arc (clamped); flight time grows with distance.
     throw = {arc = 0.35, minHeight = 120, maxHeight = 320, minFlight = 0.55, maxFlight = 0.8, flightRange = 800,
         model = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},

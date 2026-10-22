@@ -11,10 +11,10 @@ import {openMap} from './mpq.mjs';
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const baseMapPath = path.join(root, 'AnyasLongNight.w3x');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-const firstMarker = '-- HeroSurvivor Lua prototype. Import at map script scope before main().';
-const lastMarker = '-- ===== END src/00_bootstrap/HeroSurvivor.lua =====';
+const firstMarker = '-- AnyasLongNight Lua prototype. Import at map script scope before main().';
+const lastMarker = '-- ===== END src/00_bootstrap/AnyasLongNight.lua =====';
 export function loadTalentCatalog(snapshots = new Map()) {
-    const name = path.join(root, 'assets/HeroSurvivorTalents.json'), bytes = fs.readFileSync(name);
+    const name = path.join(root, 'assets/AnyasLongNightTalents.json'), bytes = fs.readFileSync(name);
     if (snapshots.has(name)) assert.deepEqual(snapshots.get(name), bytes, 'Talent catalog changed during preparation');
     else snapshots.set(name, bytes);
     const data = JSON.parse(bytes);
@@ -40,7 +40,7 @@ export function talentLua(data) {
         : typeof value === 'number' ? String(value)
         : Array.isArray(value) ? '{' + value.map(literal).join(',') + '}'
         : '{' + Object.entries(value).map(([key,item]) => '[' + JSON.stringify(key) + ']=' + literal(item)).join(',') + '}';
-    return 'HERO_SURVIVOR_TALENTS = ' + literal(data);
+    return 'ANYAS_LONG_NIGHT_TALENTS = ' + literal(data);
 }
 // Owned item rawcodes: trinkets HsT*, weapon gear Hs##, and set pieces by set code letter
 // (Anya e,i,t,b,a,n,c,v; Putress p,g,r,l,f,m; shared tag sets u,o,x,y,j,k,z,w).
@@ -110,9 +110,9 @@ export function collectSources({profile = 'playtest'} = {}) {
     const orderBytes = fs.readFileSync(orderPath);
     const order = JSON.parse(orderBytes);
     assert.equal(new Set(order).size, order.length, 'Duplicate source');
-    assert.equal(order.at(-1), 'src/00_bootstrap/HeroSurvivor.lua');
+    assert.equal(order.at(-1), 'src/00_bootstrap/AnyasLongNight.lua');
     const snapshots = new Map([[orderPath, orderBytes]]);
-    const chunks = [firstMarker, `HERO_SURVIVOR_PROFILE = "${profile}"`,
+    const chunks = [firstMarker, `ANYAS_LONG_NIGHT_PROFILE = "${profile}"`,
         '-- Native objects/constants: assets/war3map.w3a, assets/war3map.w3t, assets/war3map.w3u, assets/war3mapMisc.txt.',
         talentLua(loadTalentCatalog(snapshots))];
     for (const name of order) {
@@ -179,8 +179,8 @@ export function installGameInterfaceLabel(bytes, definition) {
     return Buffer.from(output.join(''));
 }
 export function prepareUIResources(map, snapshots = new Map()) {
-    const name = 'HeroSurvivorUI\\Transparent.tga';
-    const asset = path.join(root, 'assets/war3mapImported/HeroSurvivorUI/Transparent.tga');
+    const name = 'AnyasLongNightUI\\Transparent.tga';
+    const asset = path.join(root, 'assets/war3mapImported/AnyasLongNightUI/Transparent.tga');
     const bytes = fs.readFileSync(asset);
     assert.equal(bytes.length, 18 + 8 * 8 * 4, 'Unexpected transparent UI texture size');
     assert.equal(bytes[0], 0); assert.equal(bytes[1], 0); assert.equal(bytes[2], 2);
@@ -188,33 +188,57 @@ export function prepareUIResources(map, snapshots = new Map()) {
     assert.equal(bytes[16], 32); assert.equal(bytes[17] & 15, 8);
     for (let i = 21; i < bytes.length; i += 4) assert.equal(bytes[i], 0, 'UI container texture must be fully transparent');
     snapshots.set(asset, bytes);
+    const planeName = 'AnyasLongNightUI\\WarningPlane.mdx';
+    const planeAsset = path.join(root, 'assets/war3mapImported/AnyasLongNightUI/WarningPlane.mdx');
+    const plane = fs.readFileSync(planeAsset), chunks = new Map();
+    assert.equal(plane.toString('ascii', 0, 4), 'MDLX', 'Invalid warning plane model');
+    for (let at = 4; at < plane.length;) {
+        assert(at + 8 <= plane.length, 'Truncated warning plane chunk');
+        const tag = plane.toString('ascii', at, at + 4), end = at + 8 + plane.readUInt32LE(at + 4);
+        assert(end <= plane.length && !chunks.has(tag), 'Invalid warning plane chunk');
+        chunks.set(tag, plane.subarray(at + 8, end)); at = end;
+    }
+    assert.equal(chunks.get('VERS')?.readUInt32LE(0), 800, 'Warning plane must support classic and HD graphics');
+    const geometry = chunks.get('GEOS');
+    assert(geometry?.length === 316 && geometry.toString('ascii', 4, 8) === 'VRTX' && geometry.readUInt32LE(8) === 4);
+    for (let vertex = 0; vertex < 4; vertex++) {
+        const at = 12 + vertex * 12;
+        assert(Math.abs(geometry.readFloatLE(at)) === 50 && Math.abs(geometry.readFloatLE(at + 4)) === 50
+            && geometry.readFloatLE(at + 8) === 0, 'Warning plane must span exactly 100 by 100 units');
+    }
+    assert.equal(chunks.get('TEXS')?.toString('ascii', 4, 264).split('\0')[0], 'ReplaceableTextures\\CameraMasks\\White_mask.blp');
+    snapshots.set(planeAsset, plane);
+    const resources = new Map([[name, bytes], [planeName, plane]]);
     const imports = map.read('war3map.imp');
     assert(imports && imports.length >= 8 && imports.readUInt32LE(0) === 1, 'Invalid map import table');
     const count = imports.readUInt32LE(4);
-    let p = 8, present = false;
+    let p = 8;
+    const present = new Set();
     for (let i = 0; i < count; i++) {
         assert(p < imports.length, 'Truncated map import table');
         const flag = imports[p++], end = imports.indexOf(0, p);
         assert([5, 8, 10, 13].includes(flag) && end >= p, 'Invalid map import entry');
         const entry = imports.toString('utf8', p, end);
         const actual = flag === 10 || flag === 13 ? entry : 'war3mapImported\\' + entry;
-        if (actual.replaceAll('/', '\\').toLowerCase() === name.toLowerCase()) present = true;
+        present.add(actual.replaceAll('/', '\\').toLowerCase());
         p = end + 1;
     }
     assert.equal(p, imports.length, 'Trailing map import data');
     let updated = imports;
-    if (!present) {
-        const header = Buffer.from(imports.subarray(0, 8)); header.writeUInt32LE(count + 1, 4);
-        updated = Buffer.concat([header, imports.subarray(8), Buffer.from([13]), Buffer.from(name + '\0')]);
+    const missing = [...resources.keys()].filter(entry => !present.has(entry.toLowerCase()));
+    if (missing.length) {
+        const header = Buffer.from(imports.subarray(0, 8)); header.writeUInt32LE(count + missing.length, 4);
+        updated = Buffer.concat([header, imports.subarray(8),
+            ...missing.flatMap(entry => [Buffer.from([13]), Buffer.from(entry + '\0')])]);
     }
     const skinAsset = path.join(root, 'assets/war3mapSkin.txt'), definition = fs.readFileSync(skinAsset);
     snapshots.set(skinAsset, definition);
     const skin = installGameInterfaceLabel(map.read('war3mapSkin.txt'), definition);
-    return new Map([[name, bytes], ['war3map.imp', updated], ['war3mapSkin.txt', skin]]);
+    return new Map([...resources, ['war3map.imp', updated], ['war3mapSkin.txt', skin]]);
 }
 export function replaceBundle(script, bundle) {
     const first = script.indexOf(firstMarker), last = script.indexOf(lastMarker);
-    assert(first >= 0 && last > first, 'Input must contain a marked HeroSurvivor test bundle');
+    assert(first >= 0 && last > first, 'Input must contain a marked AnyasLongNight test bundle');
     assert.equal(script.indexOf(firstMarker, first + firstMarker.length), -1, 'Duplicate bundle');
     assert.equal(script.indexOf(lastMarker, last + lastMarker.length), -1, 'Duplicate bundle end');
     const result = script.slice(0, first) + bundle.trimEnd() + script.slice(last + lastMarker.length);
@@ -1434,13 +1458,13 @@ function stringTable(bytes) {
 }
 export function refreshBase(before, base, bundle) {
     const test = openMap(before), source = openMap(base), changes = new Map();
-    assert(test.read('war3map.lua')?.toString('utf8').includes(firstMarker), 'Input must be a HeroSurvivor test map');
+    assert(test.read('war3map.lua')?.toString('utf8').includes(firstMarker), 'Input must be a AnyasLongNight test map');
     const terrain = terrainInfo(source.read('war3map.w3e')), oldTerrain = terrainInfo(test.read('war3map.w3e'));
     for (const kind of ['ground', 'cliff']) for (const tile of oldTerrain[kind]) {
         assert(terrain[kind].includes(tile), 'Base terrain palette lost ' + tile + '; refusing a destructive refresh');
     }
     const baseInfo = source.read('war3map.w3i'), info = mapInfo(baseInfo), oldInfo = mapInfo(test.read('war3map.w3i'));
-    assert.equal(info.players.length, 1, 'HeroSurvivor requires one base player');
+    assert.equal(info.players.length, 1, 'AnyasLongNight requires one base player');
     assert.equal(info.players[0].id, 0); assert.equal(info.players[0].controller, 1, 'Base player must be human-controlled');
     assert.equal(oldInfo.players.length, 1); assert.equal(oldInfo.players[0].race, 3, 'Input test player must be undead');
     assert.equal(baseInfo.readInt32LE(info.scriptOffset), 1, 'Base map must use Lua');

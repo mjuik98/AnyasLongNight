@@ -66,7 +66,7 @@ do
         assert(ValidFrame(parent), "Missing game UI parent for loot controls")
         -- Do not leave a transparent input region when the manage button is hidden.
         root = BlzCreateFrameByType("BACKDROP", "HSLootRoot", parent, "", 0)
-        BlzFrameSetTexture(root, "HeroSurvivorUI\\Transparent.tga", 0, true)
+        BlzFrameSetTexture(root, "AnyasLongNightUI\\Transparent.tga", 0, true)
         BlzFrameSetSize(root, 0.28, 0.026)
         BlzFrameSetAbsPoint(root, FRAMEPOINT_TOPLEFT, 0.02, 0.55)
         BlzFrameSetLevel(root, 12)

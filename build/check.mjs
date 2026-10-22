@@ -83,6 +83,8 @@ function GetOwningPlayer(u) return u.owner end
 function GetUnitName(u) return u.id end
 function SetUnitMoveSpeed(u,v) u.speed=v end
 function GetUnitMoveSpeed(u) return u.speed end
+function SetUnitVertexColor(u,r,g,b,a) u.color={r,g,b,a};u.colorWrites=(u.colorWrites or 0)+1 end
+function BlzSetSpecialEffectMatrixScale(e,x,y,z)e.matrixScale={x,y,z}end
 function PauseUnit(u,v) u.paused=v end
 function IsUnitPaused(u) return u.paused == true end
 function GetUnitState(u,k) return u[k] or 0 end
@@ -415,10 +417,12 @@ now=.5;Local(SurvivorCombat.CastExtra,'Freeze')(source,.8)
 state='CHOOSING';SurvivorCombat.SetPaused(true,'CHOICE');SurvivorCombat.UpdateWeapons(.02)
 SurvivorCombat.SetPaused(false);state='RUNNING'
 assert(source.paused and missile.visual.timeScale==0 and friendly.visual.timeScale==1)
-assert(source.color[1]==94 and boss.color[1]==81,'Menu pause does not clear or compound the tint')
+assert(source.color[1]==64 and source.color[2]==74 and source.color[3]==85 and boss.color[1]==81,
+    'Menu pause preserves the blue freeze tint underneath time-stop dimming')
 now=2;SurvivorCombat.UpdateWeapons(.02)
 assert(boss.paused and boss.timeScale==0 and units[boss].nextBlast==100,'Boss motion must remain stopped after one second')
 assert(source.paused and units[source].freezeUntil==nil,'Expiring weapon freeze must not release time stop')
+assert(source.color[1]==94,'Expiring weapon freeze restores the dimmed base color')
 now=3;local ok,late=SurvivorCombat.Spawn(false,'melee');assert(ok and late.paused and late.timeScale==0)
 assert(late.color[1]==81 and late.color[2]==99 and late.color[3]==83)
 local bossOK,lateBoss=SurvivorCombat.SpawnBoss();assert(bossOK and lateBoss.paused and lateBoss.color[1]==81)
@@ -464,8 +468,8 @@ function SuspendHeroXP(u,on)u.xpSuspended=on end
 function AddHeroXP(u,amount)assert(not u.xpSuspended);u.xp=(u.xp or 0)+amount;u.level=4 end
 purges,stops=0,0
 SurvivorCombat={PurgeNearby=function()purges=purges+1;return 2 end,StopTime=function()stops=stops+1 end}
-`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-local reward=Local(HeroSurvivor.BeginRun,'BonusReward')
+`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+local reward=Local(AnyasLongNight.BeginRun,'BonusReward')
 local hero=CreateUnit(0,'hero',0,0,0);hero.maxLife=500;hero.life=200
 SetLocal(reward,'hero',hero);SetLocal(reward,'stage',1)
 reward('recovery');assert(hero.life==300)
@@ -493,8 +497,8 @@ SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 
     SpawnBoss=function()bossSpawns=bossSpawns+1;return true end,
     Spawn=function()regularSpawns=regularSpawns+1;return true end,
     UpdateWeapons=function()end,UpdateEnemies=function()end,WarnLava=function()end}
-`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-local step=Local(HeroSurvivor.BeginRun,'Step')
+`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+local step=Local(AnyasLongNight.BeginRun,'Step')
 SetLocal(step,'hero',CreateUnit(0,'hero',0,0,0))
 SetLocal(step,'stats',{extraWeapons={}})
 SetLocal(step,'selectedDifficulty','normal')
@@ -516,7 +520,7 @@ for index,expected in ipairs({{120,180},{180,240},{240,300},{240,300},{240,300}}
     now=1000+expected[2];step(.02,now)
     assert(finishedReason=='timeout','Each deadline is relative to the current stage start')
 end
-local wave=Local(HeroSurvivor.BeginRun,'SpawnWave')
+local wave=Local(AnyasLongNight.BeginRun,'SpawnWave')
 local oldStageRates,oldMinuteRates={1,1.35,1.75,2.2,2.7},{1,1.6,2.4,3.4}
 for difficulty,weight in pairs({easy=.8,normal=1,hard=1.1})do
     SetLocal(wave,'selectedDifficulty',difficulty)
@@ -975,6 +979,61 @@ for _,trigger in ipairs(triggers)do if trigger.event=='death' and not trigger.de
 assert(statuses[other]==nil,'Deaths detach active status ownership immediately')
 SurvivorCombat.Cleanup();SurvivorMetrics.Enable(false)
 hero,build,units=NewCombat('frostshard');assert(next(Local(SurvivorCombat.UpdateWeapons,'statusUnits'))==nil)
+SurvivorCombat.Cleanup()
+`);
+
+suite('enemy status colors prioritize slow, poison and curse, compose with time stop and restore without repeated writes', mocks + String.raw`
+function GetTriggerUnit()return eventUnit end
+`, [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('plaguedart')
+local target=EnemyAt(units,100,0,false)
+local boss=EnemyAt(units,120,0,false);units[boss].boss=true
+for _,u in ipairs({target,boss})do units[u].baseColor={210,150,90,220}end
+local apply=Local(SurvivorCombat.CastExtra,'ApplyStatus')
+local slow=Local(SurvivorCombat.CastExtra,'Slow')
+local freeze=Local(SurvivorCombat.FireFrostShard,'Freeze')
+local statuses=Local(SurvivorCombat.UpdateWeapons,'statusUnits')
+local function Color(u,r,g,b,a)
+    assert(u.color[1]==r and u.color[2]==g and u.color[3]==b and u.color[4]==a,
+        'Unexpected RGB/alpha: '..table.concat(u.color,','))
+end
+SurvivorConfig.status.curseDuration=6
+apply(target,'plaguedart',{curse=1},1);Color(target,198,144,180,220)
+assert(statuses[target],'Curse-only targets must stay tracked until their color expires')
+apply(target,'plaguedart',{poison=2},1);Color(target,162,198,108,220)
+slow(target,.3,1,'frostshard');Color(target,144,165,189,220)
+local writes=target.colorWrites
+for i=1,10 do SurvivorCombat.UpdateWeapons(.02)end
+assert(target.colorWrites==writes,'Unchanged status colors do not repeat native writes')
+state='INVENTORY';SurvivorCombat.UpdateWeapons(.02);Color(target,144,165,189,220)
+state='RUNNING';now=1;SurvivorCombat.UpdateWeapons(.02);Color(target,162,198,108,220)
+now=4;SurvivorCombat.UpdateWeapons(.02);Color(target,198,144,180,220)
+assert(statuses[target] and units[target].poison==0)
+now=6;SurvivorCombat.UpdateWeapons(.02);Color(target,210,150,90,220)
+assert(statuses[target]==nil)
+-- Full poison consumption must remove green immediately, before the next update.
+now=7;apply(target,'plaguedart',{poison=2},1);Color(target,162,198,108,220)
+apply(target,'plaguedart',{reaction=1,reactionAll=true},1);Color(target,210,150,90,220)
+-- Time stop dims the selected state, and its expiry restores the still-active state.
+now=8;slow(target,.3,20,'frostshard');SurvivorCombat.StopTime()
+Color(target,64,74,85,220)
+apply(boss,'plaguedart',{curse=1},1);Color(boss,89,64,81,220)
+apply(boss,'plaguedart',{poison=1},1);Color(boss,72,89,48,220)
+assert(freeze(boss,.3));Color(boss,64,74,85,220)
+now=8.35;SurvivorCombat.UpdateWeapons(.02);Color(boss,72,89,48,220)
+now=12;SurvivorCombat.UpdateWeapons(.02);Color(boss,89,64,81,220)
+now=14;SurvivorCombat.UpdateWeapons(.02);Color(boss,94,67,40,220)
+now=16;SurvivorCombat.UpdateWeapons(.02);Color(target,144,165,189,220);Color(boss,210,150,90,220)
+-- A corpse loses status tint immediately; cleanup/retry does not retain status owners.
+eventUnit=target
+for _,trigger in ipairs(triggers)do if trigger.event=='death' and not trigger.destroyed then trigger.action()end end
+Color(target,210,150,90,220);assert(statuses[target]==nil)
+apply(boss,'plaguedart',{curse=1},1);Color(boss,198,144,180,220)
+SurvivorCombat.ClearBattlefield();Color(boss,210,150,90,220)
+assert(next(statuses)==nil)
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('plaguedart')
+assert(next(Local(SurvivorCombat.UpdateWeapons,'statusUnits'))==nil)
 SurvivorCombat.Cleanup()
 `);
 
@@ -1738,7 +1797,8 @@ assert(warning.markers[1].scale==240/c.warningRingRadius,'The ring matches the b
 SurvivorCombat.Cleanup()
 `);
 
-suite('elite dashes show one direction arrow while boss dashes keep their lane', mocks + String.raw`
+suite('elite and boss dash arrows follow their real route and preserve lingering fire and search advantages', mocks + String.raw`
+SurvivorExpedition.UseAdvantage=function()return false end
 function AddLightningEx()return {}end
 function BlzSetSpecialEffectScale(e,v)e.scale=v end
 function BlzSetSpecialEffectYaw(e,v)e.yaw=v end
@@ -1757,6 +1817,153 @@ for i,arrow in ipairs(special.markers)do
     assert(arrow.model==c.dashArrowModel and math.abs(arrow.yaw)<1e-9 and arrow.scale==c.dashArrowScale)
     assert(math.abs(arrow.x-(-300+c.dashArrowOffset+(i-1)*c.dashArrowSpacing))<1e-9 and arrow.x<=-300+special.distance+1e-9,'Arrows are evenly spaced up to the dash end')
 end
+local start=Local(SurvivorCombat.UpdateEnemies,'StartSpecial')
+-- Boss warnings include the endpoint at evenly spaced intervals no greater than 150.
+for _,stage in ipairs({2,5})do
+    SetLocal(SurvivorCombat.UpdateEnemies,'stage',stage)
+    local source=EnemyAt(units,-500,0,false);units[source].boss=true
+    start('dash',units[source],source)
+    local dash=units[source].special;local markers=dash.markers
+    local count=math.ceil(dash.distance/c.dashArrowSpacing)
+    assert(#markers==count and count<18 and dash.width==100 and dash.delay==c.bossBlastDelay)
+    for i,arrow in ipairs(markers)do
+        assert(arrow.model==c.dashArrowModel and arrow.scale==c.bossDashArrowScale and arrow.scale>c.dashArrowScale)
+        assert(math.abs(arrow.yaw)<1e-9 and math.abs(arrow.x-(-500+dash.distance*i/count))<1e-9)
+    end
+    assert(math.abs(markers[count].x-dash.bx)<1e-9 and math.abs(markers[count].y-dash.by)<1e-9)
+    -- The warning is fixed at cast time; moving the hero cannot redirect the dash.
+    hero.y=500;local firstX,firstY=markers[1].x,markers[1].y
+    state='CHOOSING';dash:selfInteractions();assert(dash.elapsed==0 and markers[1].x==firstX and markers[1].y==firstY)
+    state='RUNNING';SurvivorCombat.StopTime();dash:selfInteractions();assert(dash.elapsed==0)
+    now=now+8;SurvivorCombat.UpdateWeapons(.02)
+    for i=1,110 do dash:selfInteractions()end
+    assert(dash.trail and #dash.markers==8,'Boss dash still leaves the original two-second burning trail')
+    for _,arrow in ipairs(markers)do assert(arrow.destroyed,'All arrows are removed when the dash ends')end
+    local trail=dash.markers;for i=1,101 do dash:selfInteractions()end
+    assert(dash.cleaned);for _,effect in ipairs(trail)do assert(effect.destroyed)end
+    hero.y=0
+end
+-- Clipping near an arena corner must not skew or extend the indicated route.
+local source=EnemyAt(units,4900,4800,false);units[source].boss=true
+hero.x,hero.y=5200,5500
+start('dash',units[source],source)
+local dash=units[source].special;local dx,dy=dash.bx-dash.ax,dash.by-dash.ay
+for _,arrow in ipairs(dash.markers)do
+    assert(math.abs((arrow.x-dash.ax)*dy-(arrow.y-dash.ay)*dx)<1e-6)
+    assert(arrow.x<=dash.bx+1e-9 and arrow.y<=dash.by+1e-9)
+    assert(math.abs(arrow.yaw-math.atan(dy,dx))<1e-9)
+end
+SetLocal(SurvivorCombat.UpdateEnemies,'stage',2)
+SurvivorExpedition.UseAdvantage=function()return true end
+source=EnemyAt(units,-300,0,false);units[source].boss=true;hero.x,hero.y=0,0
+start('dash',units[source],source);dash=units[source].special;local arrows=dash.markers
+assert(dash.noTrail)
+for i=1,100 do dash:selfInteractions()end
+assert(dash.cleaned and not dash.trail,'The stage-two search advantage still removes the fire trail')
+for _,arrow in ipairs(arrows)do assert(arrow.destroyed)end
+SurvivorCombat.Cleanup()
+`);
+
+const bossTelegraphMocks = mocks + String.raw`
+SurvivorExpedition.UseAdvantage=function()return advantage==true end
+function SetUnitFacing()end
+function BlzSetSpecialEffectScale(e,s)e.scale=s end
+function BlzSetSpecialEffectYaw(e,a)e.yaw=a end
+function BlzSetSpecialEffectPosition(e,x,y,z)e.x,e.y,e.z=x,y,z end
+function BlzSetSpecialEffectColor(e,r,g,b)e.color={r,g,b}end
+function BlzSetSpecialEffectAlpha(e,a)e.alpha=a;e.alphaWrites=(e.alphaWrites or 0)+1 end
+`;
+suite('wave safety rays match normal and widened safe sectors and freeze with the actual attack', bossTelegraphMocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,0,0,false);units[source].boss=true;hero.x=400
+local start=Local(SurvivorCombat.UpdateEnemies,'StartSpecial')
+SetLocal(SurvivorCombat.UpdateEnemies,'stage',3)
+for _,informed in ipairs({false,true})do
+    advantage=informed;start('wave',units[source],source)
+    local wave=units[source].special;local markers=wave.markers
+    assert(#markers==20 and wave.gapWidth==(informed and math.pi or math.pi/2))
+    for i,side in ipairs({-1,1})do
+        local ray=markers[18+i];local angle=wave.gap+side*wave.gapWidth/2
+        local reach=wave.waveMaxRadius+wave.width
+        assert(ray.model==SurvivorConfig.warningPlaneModel and ray.color[2]==255)
+        assert(math.abs(ray.x-math.cos(angle)*reach/2)<1e-7 and math.abs(ray.y-math.sin(angle)*reach/2)<1e-7)
+        assert(ray.matrixScale[1]==reach/100 and ray.matrixScale[2]==.08 and ray.alpha==185)
+    end
+    state='CHOOSING';wave:selfInteractions();assert(wave.elapsed==0)
+    state='RUNNING';SurvivorCombat.StopTime();wave:selfInteractions();assert(wave.elapsed==0)
+    now=now+8;SurvivorCombat.UpdateWeapons(.02)
+    local safe=wave.gap;hero.x,hero.y=120*math.cos(safe),120*math.sin(safe)
+    wave.elapsed=wave.delay-.02;local hp=hero.life;wave:selfInteractions();assert(hero.life==hp and not wave.hit)
+    local unsafe=wave.gap+wave.gapWidth/2+.05
+    hero.x,hero.y=125*math.cos(unsafe),125*math.sin(unsafe)
+    wave:selfInteractions();assert(wave.hit and hero.life<hp,'The warned arc still hits outside the safe wedge')
+    wave.elapsed=wave.delay+(wave.waveMaxRadius-120)/340;wave:selfInteractions()
+    assert(wave.cleaned);for _,effect in ipairs(markers)do assert(effect.destroyed)end
+    hero.x,hero.y=400,0
+end
+SurvivorCombat.Cleanup()
+`);
+
+suite('chain ribbons exactly bound the three damaging lanes and preserve the removed middle lane advantage', bossTelegraphMocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,-600,0,false);units[source].boss=true
+SetLocal(SurvivorCombat.UpdateEnemies,'stage',5)
+local start=Local(SurvivorCombat.UpdateEnemies,'StartSpecial')
+for _,informed in ipairs({false,true})do
+    advantage=informed;hero.x,hero.y=0,0;start('chains',units[source],source)
+    local chain=units[source].special;local markers=chain.markers
+    assert(#chain.lanes==(informed and 2 or 3)and #markers==#chain.lanes*3)
+    for index,lane in ipairs(chain.lanes)do
+        local fill=markers[(index-1)*3+1]
+        assert(fill.model==SurvivorConfig.warningPlaneModel and fill.color[1]==255 and fill.alpha==80)
+        assert(fill.matrixScale[1]==9 and fill.matrixScale[2]==chain.width*2/100)
+        assert(fill.x==(lane.ax+lane.bx)/2 and fill.y==(lane.ay+lane.by)/2)
+        for side=2,3 do
+            local edge=markers[(index-1)*3+side]
+            assert(edge.matrixScale[2]==.05 and edge.alpha==220)
+            assert(math.abs(math.abs(edge.y-fill.y)+2.5-chain.width)<1e-9,'Outer edge equals the damage boundary')
+        end
+    end
+    if not informed then hero.y=chain.width+1 end
+    chain.elapsed=chain.delay-.02;local hp=hero.life;chain:selfInteractions()
+    assert(chain.cleaned and hero.life==hp,'The corridor gaps and removed middle lane remain safe')
+    for _,effect in ipairs(markers)do assert(effect.destroyed)end
+end
+advantage=false;hero.x,hero.y=0,0;start('chains',units[source],source)
+local chain=units[source].special;local hp=hero.life
+chain.elapsed=chain.delay-.02;chain:selfInteractions();assert(hero.life<hp,'The red strip interior still deals damage')
+hero.life=hp;start('chains',units[source],source);chain=units[source].special
+hero.x=chain.lanes[2].bx+1;chain.elapsed=chain.delay-.02;chain:selfInteractions()
+assert(hero.life==hp,'The warning and damage both end at the lane endpoint')
+SurvivorCombat.Cleanup()
+`);
+
+suite('blast rings retain their radius and brighten by remaining time so the cross center warns before its arms', bossTelegraphMocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local source=EnemyAt(units,-600,0,false);units[source].boss=true
+SetLocal(SurvivorCombat.BossStatus,'boss',source);SetLocal(SurvivorCombat.UpdateEnemies,'stage',4)
+Local(SurvivorCombat.UpdateEnemies,'BossPattern')(units[source])
+local warnings={};for _,actor in ipairs(actors)do if actor.identifier=='hsBossWarning'then warnings[#warnings+1]=actor end end
+assert(#warnings==5)
+local center,outer=warnings[1],warnings[2];local scale=center.markers[1].scale
+assert(center.markers[1].alpha==90 and outer.markers[1].alpha==90)
+for i=1,10 do for _,warning in ipairs(warnings)do warning:selfInteractions()end end
+assert(center.markers[1].alphaWrites==1,'Steady early warnings do not repeatedly write alpha')
+for i=1,23 do for _,warning in ipairs(warnings)do warning:selfInteractions()end end
+assert(center.markers[1].alpha>outer.markers[1].alpha and center.markers[1].scale==scale)
+local remaining,alpha=center.life,center.markers[1].alpha
+state='CHOOSING';center:selfInteractions();assert(center.life==remaining and center.markers[1].alpha==alpha)
+state='RUNNING';SurvivorCombat.StopTime();center:selfInteractions()
+assert(center.life==remaining and center.markers[1].alpha==alpha)
+now=8;SurvivorCombat.UpdateWeapons(.02)
+local hp=hero.life;local ring=center.markers[1]
+for i=1,30 do center:selfInteractions();for n=2,5 do warnings[n]:selfInteractions()end end
+assert(center.cleaned and ring.destroyed and not outer.cleaned and hero.life==hp-center.damage)
+for i=1,21 do for n=2,5 do warnings[n]:selfInteractions()end end
+for _,warning in ipairs(warnings)do assert(warning.cleaned)end
 SurvivorCombat.Cleanup()
 `);
 
@@ -2366,8 +2573,8 @@ SurvivorStory={ShowInterlude=function(index,hero,callback)
 end,ShowEnding=function(hero,callback)
     assert(not SurvivorCombat.IsClearing());story=callback;storyStage=5
 end}
-`, [config, metrics, augments, combat, 'src/20_system/RunSession.lua', 'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-local step=Local(HeroSurvivor.BeginRun,"Step")
+`, [config, metrics, augments, combat, 'src/20_system/RunSession.lua', 'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+local step=Local(AnyasLongNight.BeginRun,"Step")
 for stage=1,5 do
     local hero,build,units=NewCombat("orbitblade")
     story,storyStage,rewards,restCalls,inventoryStops=nil,nil,0,0,0
@@ -2381,12 +2588,12 @@ for stage=1,5 do
         resume=function() SurvivorCombat.SetPaused(false) end,finish=function() finished=true end}))
     periodic();assert(RunSession.GetState()=="STAGE_CLEAR" and halted)
     assert(SurvivorCombat.IsClearing() and not story and restCalls==0)
-    assert(not HeroSurvivor.NextStage(),"Next stage bypassed cleanup")
+    assert(not AnyasLongNight.NextStage(),"Next stage bypassed cleanup")
     local elapsed=RunSession.GetElapsed()
     for i=1,20 do TickTimers() end
     assert(story and storyStage==stage and RunSession.GetElapsed()==elapsed)
     assert(not finished and rewards==0,"Story continued without player input")
-    assert(not HeroSurvivor.NextStage(),"Next stage bypassed story")
+    assert(not AnyasLongNight.NextStage(),"Next stage bypassed story")
     story()
     if stage<5 then
         assert(rewards==1 and restCalls==1 and inventoryStops==0 and not finished)
@@ -2749,8 +2956,8 @@ SurvivorCombat={DamageReport=function()Mark('report');return ''end,Cleanup=funct
 SurvivorStage={Cleanup=function()Mark('stage')end}
 SurvivorExpedition={EndStage=function()Mark('expedition')end}
 messages={};print=function(message)messages[#messages+1]=tostring(message)end
-`, [config,metrics,'src/20_system/RunSession.lua','src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-local finish=Local(HeroSurvivor.BeginRun,'Finish')
+`, [config,metrics,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+local finish=Local(AnyasLongNight.BeginRun,'Finish')
 SetLocal(finish,'RefreshDamageBoard',function()Mark('board')end)
 SetLocal(finish,'ResultDetails',function()Mark('details');return {}end)
 for _,label in ipairs({'expedition','board','details','report','panel','story','inventory','camera','loadout','equipment','combat','stage','result'})do
@@ -2790,25 +2997,25 @@ SurvivorNativeLoadout={Cleanup=function()loadoutCleaned=true end}
 SurvivorEquipment={Cleanup=function()equipmentCleaned=true end}
 SurvivorStage={Init=function()end,Apply=function()end,Cleanup=function()stageCleaned=true end}
 SurvivorExpedition={Reset=function()end,EndStage=function()end}
-`, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-SetLocal(HeroSurvivor.BeginRun,'initialized',true)
-SetLocal(HeroSurvivor.BeginRun,'setupPhase','MENU')
-SetLocal(HeroSurvivor.BeginRun,'selectedDifficulty','normal')
-SetLocal(HeroSurvivor.BeginRun,'selectedWeapon','firebolt')
-SetLocal(HeroSurvivor.BeginRun,'selectedTrinket','power')
+`, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+SetLocal(AnyasLongNight.BeginRun,'initialized',true)
+SetLocal(AnyasLongNight.BeginRun,'setupPhase','MENU')
+SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','normal')
+SetLocal(AnyasLongNight.BeginRun,'selectedWeapon','firebolt')
+SetLocal(AnyasLongNight.BeginRun,'selectedTrinket','power')
 local createGroup=CreateGroup
 CreateGroup=function()error('injected group initialization failure')end
-assert(not HeroSurvivor.BeginRun())
+assert(not AnyasLongNight.BeginRun())
 CreateGroup=createGroup
 assert(RunSession.GetState()=='FINISHED' and resultReason=='error')
 assert(world[#world].removed and Local(SurvivorCombat.Init,'hero')==nil and Local(SurvivorCombat.Init,'heightLocation')==nil)
 assert(storyCleaned and inventoryCleaned and loadoutCleaned and equipmentCleaned and stageCleaned)
-assert(HeroSurvivor.CanRetrySame(),'Partial initialization must not consume the selected setup')
-failName=true;assert(not HeroSurvivor.RetrySame())
+assert(AnyasLongNight.CanRetrySame(),'Partial initialization must not consume the selected setup')
+failName=true;assert(not AnyasLongNight.RetrySame())
 assert(world[#world].removed and Local(SurvivorCombat.Init,'hero')==nil and Local(SurvivorCombat.Init,'queryGroup')==nil,
     'A native name failure after unit creation must release the owned hero')
 for _,trigger in ipairs(triggers)do assert(trigger.destroyed)end
-assert(HeroSurvivor.CanRetrySame() and resultReason=='error')
+assert(AnyasLongNight.CanRetrySame() and resultReason=='error')
 `);
 
 for (const missingFrame of ['nil', '0', '{handle=0}']) {
@@ -4001,8 +4208,70 @@ SurvivorExpedition.AcceptRisk=function()riskAccepts=(riskAccepts or 0)+1;return 
 SurvivorCombat={DamageRows=function()return {}end,BossStatus=function()return nil end,
     EscapeStatus=function()return escapeReady~=false,escapeRemaining or 0 end,
     WardStatus=function()return shieldAmount or 0,shieldRemaining or 0 end}
-HeroSurvivor={CanRetrySame=function()return true end,RetrySame=function()retryCalls=(retryCalls or 0)+1;return true end}
+AnyasLongNight={CanRetrySame=function()return true end,RetrySame=function()retryCalls=(retryCalls or 0)+1;return true end}
 `;
+const timeStopFilterMocks = String.raw`
+BLEND_MODE_BLEND,TEXMAP_FLAG_NONE='blend','none'
+filter={visible=false,writes=0}
+function SetCineFilterTexture(value)filter.texture=value end
+function SetCineFilterBlendMode(value)filter.blend=value end
+function SetCineFilterTexMapFlags(value)filter.flags=value end
+function SetCineFilterStartUV(...)filter.startUV={...}end
+function SetCineFilterEndUV(...)filter.endUV={...}end
+function SetCineFilterDuration(value)filter.duration=value end
+function SetCineFilterStartColor(r,g,b,a)filter.color={r,g,b,a};filter.writes=filter.writes+1 end
+function SetCineFilterEndColor(r,g,b,a)filter.endColor={r,g,b,a}end
+function DisplayCineFilter(value)filter.visible=value end
+`;
+suite('time-stop world filter fades subtly, reverses without flashes and cancels stale timers without changing UI',
+    presentationMocks + timeStopFilterMocks, [config,'src/30_gameplay/SurvivorUI.lua'], String.raw`
+local set=SurvivorUI.SetTimeStopFilter
+set(true);local first=Local(set,'timeStopFilterTimer')
+assert(first and filter.texture==[[ReplaceableTextures\CameraMasks\White_mask.blp]])
+assert(filter.blend=='blend'and filter.flags=='none')
+AdvanceVisualTime(.1);assert(filter.visible and filter.color[4]>=6 and filter.color[4]<=7)
+local writes=filter.writes;set(true);assert(Local(set,'timeStopFilterTimer')==first and filter.writes==writes)
+AdvanceVisualTime(.1)
+assert(first.destroyed and filter.color[1]==145 and filter.color[2]==185 and filter.color[3]==225 and filter.color[4]==13)
+assert(Local(set,'timeStopFilterTimer')==nil)
+AdvanceVisualTime(1);assert(filter.writes>writes);writes=filter.writes
+AdvanceVisualTime(1);set(true);assert(filter.writes==writes,'Holding and refreshing the stop must not repaint or restart the fade')
+set(false);AdvanceVisualTime(.1);assert(filter.visible and filter.color[4]>0 and filter.color[4]<13)
+local priorAlpha=filter.color[4];local stale=Local(set,'timeStopFilterTimer')
+set(true);assert(stale.destroyed and filter.color[4]==priorAlpha,'Reacquisition reverses from the current alpha')
+stale.callback();assert(filter.color[4]==priorAlpha,'Cancelled fade-out callbacks cannot hide a refreshed filter')
+AdvanceVisualTime(.2);assert(filter.visible and filter.color[4]==13)
+set(false);AdvanceVisualTime(.3);assert(not filter.visible and filter.color[4]==0)
+assert(Local(set,'timeStopFilterTimer')==nil)
+set(true);AdvanceVisualTime(.04);stale=Local(set,'timeStopFilterTimer')
+SurvivorUI.BeginRun();assert(stale.destroyed and not filter.visible and filter.color[4]==0)
+writes=filter.writes;stale.callback();assert(filter.writes==writes)
+assert(next(frames)==nil,'World tint must not create, recolor, hide or intercept HUD/card/tooltip frames')
+GetLocalPlayer=function()return Player(1)end
+set(true);AdvanceVisualTime(.2);set(false,true)
+assert(filter.writes==writes and not filter.visible,'Only the playing client renders the filter')
+`);
+
+suite('combat time stop owns the screen filter across pause, expiry, stage cleanup and restart',
+    presentationMocks + timeStopFilterMocks, [config,metrics,augments,combat,'src/30_gameplay/SurvivorUI.lua'], String.raw`
+local hero,build,units=NewCombat('firebolt')
+SurvivorCombat.StopTime();AdvanceVisualTime(.2);assert(filter.visible and filter.color[4]==13)
+state='INVENTORY';SurvivorCombat.SetPaused(true,'INVENTORY');assert(not filter.visible)
+AdvanceVisualTime(1);assert(not filter.visible and now==0,'Menus must not consume the remaining eight seconds')
+state='RUNNING';SurvivorCombat.SetPaused(false);AdvanceVisualTime(.2);assert(filter.visible)
+now=7.9;SurvivorCombat.UpdateWeapons(.02);assert(filter.visible)
+SurvivorCombat.StopTime();now=8;SurvivorCombat.UpdateWeapons(.02);AdvanceVisualTime(.3);assert(filter.visible)
+now=15.9;SurvivorCombat.UpdateWeapons(.02);AdvanceVisualTime(.3);assert(not filter.visible)
+SurvivorCombat.StopTime();AdvanceVisualTime(.04)
+local stale=Local(SurvivorUI.SetTimeStopFilter,'timeStopFilterTimer')
+SurvivorCombat.ClearBattlefield();assert(not filter.visible and stale.destroyed)
+stale.callback();assert(not filter.visible)
+SurvivorCombat.StopTime();AdvanceVisualTime(.2);assert(filter.visible)
+SurvivorCombat.Cleanup();assert(not filter.visible)
+hero,build,units=NewCombat('firebolt');AdvanceVisualTime(1);assert(not filter.visible)
+SurvivorCombat.Cleanup()
+`);
+
 suite('custom UI containers leave pointer input to buttons across setup, HUD, story, inventory, choices and results', presentationMocks + String.raw`
 -- Conservative custom-frame hit test: alpha never makes a surface click-through.
 -- Treat generic FRAME rectangles as potential blockers even when disabled; only
@@ -4015,7 +4284,7 @@ function BlzCreateFrame(name,parent,priority,context)
     local kind=name=='ScriptDialogButton'and'GLUETEXTBUTTON'or'BACKDROP'
     local frame=BlzCreateFrameByType(kind,name..context,parent);frame.template=name;return frame
 end
-HeroSurvivor.IsStorySummary=function()return false end
+AnyasLongNight.IsStorySummary=function()return false end
 SurvivorEquipment={UIRevision=function()return 1 end,PendingRewardCount=function()return 0 end,
     PickupMode=function()return '전체'end,CleanupFamilies=function()return {'화염'}end,
     BagEntries=function()return {},0,9 end,
@@ -4111,22 +4380,22 @@ local function Inside(inner,outer)
     assert(a[1]>=b[1]-1e-9 and a[2]>=b[2]-1e-9 and a[1]+a[3]<=b[1]+b[3]+1e-9 and a[2]+a[4]<=b[2]+b[4]+1e-9,
         inner.name..' overflows '..outer.name)
 end
-local setupRoot=frames.HeroSurvivorSetupRoot
+local setupRoot=frames.AnyasLongNightSetupRoot
 local rootRect=assert(Rect(setupRoot))
 assert(rootRect[1]>=0 and rootRect[1]+rootRect[3]<=.8 and rootRect[2]>=.02 and rootRect[2]+rootRect[4]<=.56
     and math.abs(rootRect[2]+rootRect[4]/2-.3)<1e-9,'Setup is centered in the 4:3 area below the upper menu bar')
-local list,summary,preview,actions=frames.EscMenuBackdrop800,frames.EscMenuBackdrop801,frames.HeroSurvivorSetupPreview,frames.EscMenuBackdrop803
+local list,summary,preview,actions=frames.EscMenuBackdrop800,frames.EscMenuBackdrop801,frames.AnyasLongNightSetupPreview,frames.EscMenuBackdrop803
 for _,panel in ipairs({list,summary,preview,actions})do Inside(panel,setupRoot);WorldAt(panel,.5,.995)end
-assert(preview.texture==[[HeroSurvivorUI\Transparent.tga]] and frames.HeroSurvivorSetupPreviewTop.texture==[[HeroSurvivorUI\Ready.tga]],
+assert(preview.texture==[[AnyasLongNightUI\Transparent.tga]] and frames.AnyasLongNightSetupPreviewTop.texture==[[AnyasLongNightUI\Ready.tga]],
     'The preview window is clear with a thin outline so the world shows through')
 WorldAt(setupRoot,.5,.99)
 for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET','DescriptionTitle','Description'})do
-    Inside(frames['HeroSurvivorSetup'..name],summary)
+    Inside(frames['AnyasLongNightSetup'..name],summary)
 end
-for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do Surface(frames['HeroSurvivorSetup'..name],.5,.5)end
-WorldAt(frames.HeroSurvivorSetupDescription,.5,.5)
+for _,name in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do Surface(frames['AnyasLongNightSetup'..name],.5,.5)end
+WorldAt(frames.AnyasLongNightSetupDescription,.5,.5)
 WorldAt(preview,.5,.5)
-for _,button in ipairs({frames.HeroSurvivorSetupStart,frames.HeroSurvivorSetupReset,frames.HSSummaryToggle})do
+for _,button in ipairs({frames.AnyasLongNightSetupStart,frames.AnyasLongNightSetupReset,frames.HSSummaryToggle})do
     Inside(button,actions);Surface(button,.5,.5)
 end
 local anya=SurvivorConfig.heroes.anya
@@ -4139,17 +4408,17 @@ assert(previewUnit.teamGlow==false and previewUnit.animation==anya.previewAnimat
     'The preview hides the hero glow and plays its cinematic stand')
 assert(cameraNative.maxX-cameraNative.minX<=2 and cameraNative.maxY-cameraNative.minY<=2
     and cameraNative.x==(cameraNative.minX+cameraNative.maxX)/2,'Setup locks the camera on the preview shot')
-Inside(frames.HeroSurvivorSetupHole,preview)
+Inside(frames.AnyasLongNightSetupHole,preview)
 SurvivorSetupUI.ShowOptions('WEAPON',nil);assert(not previewUnit.removed,'Re-rendering keeps the same preview actor')
 for _,name in ipairs({'HERO','TRINKET'})do
-    local tile=frames['HeroSurvivorSetup'..name]
-    assert(frames['HeroSurvivorSetup'..name..'Active'].level<frames['HeroSurvivorSetup'..name..'Icon'].level,
+    local tile=frames['AnyasLongNightSetup'..name]
+    assert(frames['AnyasLongNightSetup'..name..'Active'].level<frames['AnyasLongNightSetup'..name..'Icon'].level,
         'The opaque selection rim stays behind the icon')
 end
-assert(frames.HeroSurvivorSetupChosen1.level<frames.HeroSurvivorSetupIcon1.level)
+assert(frames.AnyasLongNightSetupChosen1.level<frames.AnyasLongNightSetupIcon1.level)
 for _,kind in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do
     SurvivorSetupUI.ShowOptions(kind,nil)
-    for i=1,12 do local button=frames['HeroSurvivorSetupOption'..i]
+    for i=1,12 do local button=frames['AnyasLongNightSetupOption'..i]
         -- A locked hero card is shown disabled and never takes pointer input.
         if button.visible and button.enabled then Inside(button,list);Surface(button,.5,.5);Surface(button,.07,.5)end
     end
@@ -4158,11 +4427,11 @@ SurvivorSetupUI.Hide()
 assert(previewUnit.removed and previewUnit.visible==false and cameraNative.maxX-cameraNative.minX>1000,
     'Closing setup hides and removes the preview actor and restores the camera bounds')
 SurvivorUI.ShowNarrative('test','test',function()end)
-WorldAt(frames.HeroSurvivorStoryContent,.5,.9)
+WorldAt(frames.AnyasLongNightStoryContent,.5,.9)
 Surface(frames.ScriptDialogButton700,.5,.5)
 SurvivorUI.AdvanceNarrative()
 SurvivorUI.ShowConversation('test',{{speaker='안야',text='test'}},function()end)
-WorldAt(frames.HeroSurvivorCaption,.95,.5)
+WorldAt(frames.AnyasLongNightCaption,.95,.5)
 Surface(frames.ScriptDialogButton700,.5,.5);Surface(frames.ScriptDialogButton701,.5,.5)
 SurvivorUI.SkipConversation();AdvanceVisualTime(.7)
 state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,function()end,function()return true end)
@@ -4172,10 +4441,10 @@ SurvivorUI.HidePanel()
 Show() -- Check immediately, before the 0.05/0.1-second HUD observers run.
 local function CheckCardText()
     for i=1,3 do
-        local card=Rect(frames['HeroSurvivorCard'..i])
-        local hint=Rect(frames['HeroSurvivorHint'..i])
-        local preview=Rect(frames['HeroSurvivorPreview'..i])
-        local description=Rect(frames['HeroSurvivorDescription'..i])
+        local card=Rect(frames['AnyasLongNightCard'..i])
+        local hint=Rect(frames['AnyasLongNightHint'..i])
+        local preview=Rect(frames['AnyasLongNightPreview'..i])
+        local description=Rect(frames['AnyasLongNightDescription'..i])
         assert(hint[2]>=card[2]+.025,'Selection hint must clear the decorative bottom border')
         assert(hint[2]+hint[4]<preview[2] and preview[2]+preview[4]<description[2],
             'Description, preview and selection hint need separate vertical space')
@@ -4184,28 +4453,28 @@ end
 CheckCardText()
 local cardBuild=SurvivorAugments.NewBuild('firebolt')
 SurvivorUI.ShowChoices({'firebolt','meteor','haste'},2,cardBuild,0,3);CheckCardText()
-assert(frames.HeroSurvivorDescription1.text:find('Lv.1 → 2',1,true)
-    and frames.HeroSurvivorDescription1.text:find('[유도]',1,true)
-    and not frames.HeroSurvivorDescription1.text:find('추적 투사체',1,true),'Upgrade cards keep the level and tags without the static attack description')
-assert(not frames.HeroSurvivorPreview1.text:find('투사체 수',1,true)
-    and frames.HeroSurvivorPreview1.text:find('(+25%)',1,true))
-assert(frames.HeroSurvivorDescription2.text:find('운석 충돌',1,true)
-    and not frames.HeroSurvivorPreview2.text:find('→',1,true),'New weapon cards retain the mechanic and core values')
+assert(frames.AnyasLongNightDescription1.text:find('Lv.1 → 2',1,true)
+    and frames.AnyasLongNightDescription1.text:find('[유도]',1,true)
+    and not frames.AnyasLongNightDescription1.text:find('추적 투사체',1,true),'Upgrade cards keep the level and tags without the static attack description')
+assert(not frames.AnyasLongNightPreview1.text:find('투사체 수',1,true)
+    and frames.AnyasLongNightPreview1.text:find('(+25%)',1,true))
+assert(frames.AnyasLongNightDescription2.text:find('운석 충돌',1,true)
+    and not frames.AnyasLongNightPreview2.text:find('→',1,true),'New weapon cards retain the mechanic and core values')
 SurvivorUI.ShowChoices({'evolution1','evolution2','haste'},2,build,0,3);CheckCardText()
-assert(frames.HeroSurvivorDescription1.text:find(SurvivorAugments.Get('evolution1').text,1,true)
-    and frames.HeroSurvivorPreview1.text=='진화 선택 후 변경 불가','Evolution cards retain their full effects and tradeoffs')
+assert(frames.AnyasLongNightDescription1.text:find(SurvivorAugments.Get('evolution1').text,1,true)
+    and frames.AnyasLongNightPreview1.text=='진화 선택 후 변경 불가','Evolution cards retain their full effects and tradeoffs')
 SurvivorUI.ShowGearRewards({'gear1','gear2','gear3'},1,function()end);CheckCardText()
 Show()
-WorldAt(frames.HeroSurvivorChoiceRoot,.5,.95)
+WorldAt(frames.AnyasLongNightChoiceRoot,.5,.95)
 for i=1,3 do
-    for _,prefix in ipairs({'HeroSurvivorCard','HeroSurvivorReroll','HeroSurvivorExclude'})do
+    for _,prefix in ipairs({'AnyasLongNightCard','AnyasLongNightReroll','AnyasLongNightExclude'})do
         local button=frames[prefix..i]
         if button.enabled then
             for _,p in ipairs({{.5,.5},{.03,.03},{.97,.97},{.5,.87},{.5,.3}})do Surface(button,p[1],p[2])end
         end
     end
 end
-local card,reroll,exclude=frames.HeroSurvivorCard2,frames.HeroSurvivorReroll2,frames.HeroSurvivorExclude2
+local card,reroll,exclude=frames.AnyasLongNightCard2,frames.AnyasLongNightReroll2,frames.AnyasLongNightExclude2
 for _,button in ipairs({card,reroll,exclude})do
     Event(Surface(button,.5,.5),FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
     if button==reroll then
@@ -4230,14 +4499,14 @@ BlzFrameSetSize(nativeClose,.025,.025);BlzFrameSetPoint(nativeClose,FRAMEPOINT_T
 local oldFrameCount=0;for _ in pairs(frames)do oldFrameCount=oldFrameCount+1 end
 SurvivorUI.SetRestInventoryVisible(true)
 SurvivorLootUI.SetInventoryVisible(false,nil,true)
-assert(not frames.HeroSurvivorChoiceRoot.visible and not frames.HSLootRoot.visible and SurvivorUI.IsChoiceVisible())
+assert(not frames.AnyasLongNightChoiceRoot.visible and not frames.HSLootRoot.visible and SurvivorUI.IsChoiceVisible())
 Surface(nativeClose,.5,.5)
 SurvivorUI.SetRestInventoryVisible(false);SurvivorLootUI.SetInventoryVisible(false,nil,false)
 BlzFrameSetVisible(nativeDetails,false)
 Surface(card,.5,.5);Surface(reroll,.5,.5);Surface(exclude,.5,.5)
 -- A newly offered choice while details is already open must restore as well.
 SurvivorUI.HidePanel();SurvivorUI.SetRestInventoryVisible(true);Show()
-assert(not frames.HeroSurvivorChoiceRoot.visible)
+assert(not frames.AnyasLongNightChoiceRoot.visible)
 SurvivorUI.SetRestInventoryVisible(false);Surface(card,.5,.5)
 local frameCount=0;for _ in pairs(frames)do frameCount=frameCount+1 end
 assert(frameCount==oldFrameCount,'Opening and closing native details must not create a transparent overlay')
@@ -4251,20 +4520,20 @@ SurvivorUI.HidePanel();state='STAGE_CLEAR';SurvivorLootUI.Refresh()
 assert(frames.HSLootRoot.visible)
 SurvivorUI.ShowGearRewards({'gear1','gear2','gear3'},1,function()chosen=chosen+1 end)
 SurvivorUI.SetRestInventoryVisible(true)
-assert(not frames.HeroSurvivorChoiceRoot.visible and SurvivorUI.IsChoiceVisible())
+assert(not frames.AnyasLongNightChoiceRoot.visible and SurvivorUI.IsChoiceVisible())
 SurvivorUI.SetRestInventoryVisible(false)
-Surface(frames.HeroSurvivorCard1,.03,.97)
+Surface(frames.AnyasLongNightCard1,.03,.97)
 SurvivorLootUI.Refresh() -- Inventory observation must not put loot controls back over rewards.
 assert(not frames.HSLootRoot.visible)
-Surface(frames.HeroSurvivorCard1,.03,.97)
-ClickFrame(Surface(frames.HeroSurvivorCard2,.5,.5))
+Surface(frames.AnyasLongNightCard1,.03,.97)
+ClickFrame(Surface(frames.AnyasLongNightCard2,.5,.5))
 assert(chosen==2)
 state='FINISHED';SurvivorUI.ShowResult('defeated',10,3,1,nil,'report')
-WorldAt(frames.HeroSurvivorChoiceRoot,.02,.5)
+WorldAt(frames.AnyasLongNightChoiceRoot,.02,.5)
 Surface(frames.ScriptDialogButton501,.5,.5)
 Surface(frames.ScriptDialogButton4,.5,.5);Surface(frames.ScriptDialogButton720,.5,.5)
 SurvivorUI.HidePanel()
-WorldAt(frames.HeroSurvivorStoryContent,.5,.5)
+WorldAt(frames.AnyasLongNightStoryContent,.5,.5)
 `);
 
 suite('native top art and minimap hide locally while hotkeys, console parents and custom HUD remain usable', presentationMocks + String.raw`
@@ -4412,7 +4681,7 @@ assert(frames.NativeClock.visible and frames.NativeClockMinimapParent.visible)
 assert(#Local(SurvivorUI.Init,'nativeHiddenFrames')==11 and not frames.ConsoleTopBar.visible,
     'Missing child API skips only the clock without interrupting UI creation')
 `);
-const blackTexture = fs.readFileSync(path.join(root, 'assets/war3mapImported/HeroSurvivorUI/Black.tga'));
+const blackTexture = fs.readFileSync(path.join(root, 'assets/war3mapImported/AnyasLongNightUI/Black.tga'));
 assert.equal(blackTexture[2], 2, 'The intro uses an uncompressed true-color TGA');
 assert.equal(blackTexture[16], 32);
 assert.equal(blackTexture.length, 18 + blackTexture.readUInt16LE(12) * blackTexture.readUInt16LE(14) * 4);
@@ -4423,8 +4692,8 @@ console.log('PASS intro texture contains only opaque black pixels');
 
 suite('preparation start, black intro and dialogue retries never pass native strings, textures or renderer frames to visibility natives',
     presentationMocks + String.raw`
-HeroSurvivor.IsStorySummary=function()return false end
-HeroSurvivor.ToggleStorySummary=function()end
+AnyasLongNight.IsStorySummary=function()return false end
+AnyasLongNight.ToggleStorySummary=function()end
 `, [config,metrics,augments,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua',
     'src/30_gameplay/SurvivorSetupUI.lua'], String.raw`
 NativeGameUI()
@@ -4486,24 +4755,24 @@ assert(not console.visible and not frames.CommandBarFrame.visible,'Setup hides t
 SurvivorSetupUI.Hide();assert(console.visible and frames.CommandBarFrame.visible,'Closing setup restores the console HUD')
 Menu();assert(not console.visible)
 for _,kind in ipairs({'HERO','DIFFICULTY','WEAPON','TRINKET'})do
-    ClickFrame(frames['HeroSurvivorSetup'..kind]);ClickFrame(frames.HeroSurvivorSetupOption1)
+    ClickFrame(frames['AnyasLongNightSetup'..kind]);ClickFrame(frames.AnyasLongNightSetupOption1)
     assert(selections[kind],'The actual preparation UI must supply every required selection')
 end
-ClickFrame(frames.HeroSurvivorSetupStart);ClickFrame(frames.HeroSurvivorSetupStart)
-assert(starts==1 and frames.HeroSurvivorStageIntro.visible and frames.HeroSurvivorStageIntro.alpha==255)
-assert(frames.HeroSurvivorStageText.text==SurvivorStory.premise and completed==0)
+ClickFrame(frames.AnyasLongNightSetupStart);ClickFrame(frames.AnyasLongNightSetupStart)
+assert(starts==1 and frames.AnyasLongNightStageIntro.visible and frames.AnyasLongNightStageIntro.alpha==255)
+assert(frames.AnyasLongNightStageText.text==SurvivorStory.premise and completed==0)
 assert(frames.NativeWorldFrame.visible and frames.NativeWorldBars.visible,
     'Opaque cover supplies the black screen while the engine retains ownership of its world surfaces')
 SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.12)
 assert(not hero.visible and selectedUnit.id=='hsPP')
 SurvivorUI.SkipConversation();assert(completed==1 and hero.visible and selectedUnit==hero and LiveTimers(.03)==0)
-Menu();ClickFrame(frames.HeroSurvivorSetupStart)
-assert(starts==2 and frames.HeroSurvivorStageIntro.visible)
+Menu();ClickFrame(frames.AnyasLongNightSetupStart)
+assert(starts==2 and frames.AnyasLongNightStageIntro.visible)
 SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.06)
 SurvivorUI.HidePanel();SurvivorStory.Reset()
 assert(hero.visible and selectedUnit==hero and completed==1 and LiveTimers(.03)==0)
-state='FINISHED';Menu();ClickFrame(frames.HeroSurvivorSetupStart)
-assert(starts==3 and frames.HeroSurvivorStageText.text==SurvivorStory.premise)
+state='FINISHED';Menu();ClickFrame(frames.AnyasLongNightSetupStart)
+assert(starts==3 and frames.AnyasLongNightStageText.text==SurvivorStory.premise)
 SurvivorUI.AdvanceNarrative()
 for page=1,4 do AdvanceVisualTime(.7);SurvivorUI.AdvanceNarrative()end
 assert(completed==2 and hero.visible and selectedUnit==hero and LiveTimers(.03)==0)
@@ -4543,8 +4812,8 @@ for _,name in ipairs({'BlzFrameSetEnable','BlzFrameSetParent','BlzFrameSetAbsPoi
 end
 local completed=0
 SurvivorUI.ShowStageIntro(1,function()completed=completed+1 end,hero)
-local black,content,caption=frames.HeroSurvivorStageIntro,frames.HeroSurvivorStoryContent,frames.HeroSurvivorCaption
-assert(black.texture==[[HeroSurvivorUI\Black.tga]] and black.alpha==255 and black.visible)
+local black,content,caption=frames.AnyasLongNightStageIntro,frames.AnyasLongNightStoryContent,frames.AnyasLongNightCaption
+assert(black.texture==[[AnyasLongNightUI\Black.tga]] and black.alpha==255 and black.visible)
 assert(black.width>=2.4 and black.height>=.6 and black.x==.4 and black.y==.3 and not black.enabled)
 assert(black.parent==frames.ConsoleUIBackdrop and content.parent==black.parent and caption.parent==black.parent)
 assert(content.level>black.level and frames.ScriptDialogButton700.level>black.level)
@@ -4554,11 +4823,11 @@ assert(not frames.CommandBarFrame.visible and not frames.SimpleInventoryBar.visi
     and frames.NativeCommandButton0.visible and frames.NativeItemButton0.visible,
     'Hide command/inventory containers while engine-controlled button flags remain untouched')
 assert(frames.ConsoleUI.visible and frames.ConsoleUIBackdrop.visible and frames.GameUI.visible)
-assert(frames.HeroSurvivorStageText.text==SurvivorStory.premise and frames.HSStoryFooter.text:find('F10')
+assert(frames.AnyasLongNightStageText.text==SurvivorStory.premise and frames.HSStoryFooter.text:find('F10')
     and frames.HSStoryFooter.text:find('창작'),'Premise and the small controls/fiction footer have distinct text frames')
-local text=frames.HeroSurvivorStageText.text
+local text=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(3)
-assert(completed==0 and frames.HeroSurvivorStageText.text==text and black.alpha==255 and LiveTimers(.03)==0)
+assert(completed==0 and frames.AnyasLongNightStageText.text==text and black.alpha==255 and LiveTimers(.03)==0)
 SurvivorUI.AdvanceNarrative()
 assert(not hero.visible and #Local(SurvivorStory.Cleanup,'sceneEffects')==2)
 local sceneryCount=0;for _ in pairs(stageSceneProps)do sceneryCount=sceneryCount+1 end
@@ -4566,15 +4835,15 @@ assert(sceneryCount>=4,'The introduction retains its grave and tracks as stage-o
 assert(frames.NativeWorldFrame.visible and frames.NativeWorldBars.visible and frames.NativePortrait.visible,
     'Renderer-owned world frames remain untouched and the speaker portrait returns for dialogue')
 assert(frames.SimpleInfoPanelIconArmor2.visible and frames.SimpleNameValue.visible and not frames.CommandBarFrame.visible)
-assert(frames.HeroSurvivorStageTitle.text:find('퓨트리스') and frames.HSStoryPosition.text:find('1/4'))
+assert(frames.AnyasLongNightStageTitle.text:find('퓨트리스') and frames.HSStoryPosition.text:find('1/4'))
 assert(caption.visible and frames.HSStoryFooter.visible and black.alpha==255 and LiveTimers(.03)==2)
-local firstPage=frames.HeroSurvivorStageText.text
+local firstPage=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(.15)
 assert(black.alpha>0 and black.alpha<255 and black.visible and caption.visible,
     'The backdrop fades while the sibling dialogue remains fully visible')
 AdvanceVisualTime(.30)
 assert(not black.visible and black.alpha==0 and LiveTimers(.03)==0)
-assert(frames.HeroSurvivorStageText.text==firstPage and completed==0 and now==0,
+assert(frames.AnyasLongNightStageText.text==firstPage and completed==0 and now==0,
     'Visual time never advances a page or the paused run clock')
 SurvivorUI.SkipConversation();SurvivorUI.SkipConversation()
 assert(completed==1 and hero.visible and selectedUnit==hero)
@@ -4755,7 +5024,7 @@ SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
 local replaced=Local(SurvivorUI.SkipConversation,'returnTimer')
 SurvivorUI.ShowNarrative('replacement','new text',function()end)
 assert(replaced.destroyed and not cover.visible)
-replaced.callback();assert(not cover.visible and frames.HeroSurvivorStageIntro.alpha==255)
+replaced.callback();assert(not cover.visible and frames.AnyasLongNightStageIntro.alpha==255)
 SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
 local reset=Local(SurvivorUI.SkipConversation,'returnTimer')
 SurvivorUI.HidePanel();SurvivorStory.Reset();reset.callback()
@@ -4773,7 +5042,7 @@ SurvivorUI.ShowConversation('next scene',{{speaker='안야',text='one'}},functio
     SurvivorUI.ShowNarrative('next','preserved',function()end)
 end)
 SurvivorUI.AdvanceNarrative()
-assert(not cover.visible and LiveTimers(.02)==0 and frames.HeroSurvivorStageText.text=='preserved',
+assert(not cover.visible and LiveTimers(.02)==0 and frames.AnyasLongNightStageText.text=='preserved',
     'A completion callback opening another narrative keeps that narrative visible')
 SurvivorUI.HidePanel()
 `);
@@ -4786,23 +5055,23 @@ local completed=0;local function Done()completed=completed+1 end
 local function Reveal()local timer=Local(SurvivorUI.ShowConversation,'revealTimer');assert(timer and timer.dt==.03 and timer.repeated);return timer end
 local function Inert(timer)
     assert(timer.destroyed and not timer.running)
-    local text,alpha,visible=frames.HeroSurvivorStageText.text,frames.HeroSurvivorStageIntro.alpha,frames.HeroSurvivorStageIntro.visible
+    local text,alpha,visible=frames.AnyasLongNightStageText.text,frames.AnyasLongNightStageIntro.alpha,frames.AnyasLongNightStageIntro.visible
     timer.callback()
-    assert(text==frames.HeroSurvivorStageText.text and alpha==frames.HeroSurvivorStageIntro.alpha
-        and visible==frames.HeroSurvivorStageIntro.visible,'An old reveal cannot mutate a later presentation')
+    assert(text==frames.AnyasLongNightStageText.text and alpha==frames.AnyasLongNightStageIntro.alpha
+        and visible==frames.AnyasLongNightStageIntro.visible,'An old reveal cannot mutate a later presentation')
 end
 SurvivorUI.ShowConversation('first',pages,Done);local first=Reveal();AdvanceVisualTime(.12)
 SurvivorUI.SkipConversation();assert(completed==1);Inert(first)
 SurvivorUI.ShowConversation('replacement',pages,Done);local second=Reveal();Inert(first)
 SurvivorUI.ShowConversation('third',pages,Done);local third=Reveal();Inert(second)
-local text=frames.HeroSurvivorStageText.text;AdvanceVisualTime(.6)
-assert(frames.HeroSurvivorStageText.text==text and completed==1);Inert(third)
+local text=frames.AnyasLongNightStageText.text;AdvanceVisualTime(.6)
+assert(frames.AnyasLongNightStageText.text==text and completed==1);Inert(third)
 SurvivorUI.ShowConversation('reset',pages,Done);local fourth=Reveal()
 SurvivorUI.HidePanel();SurvivorStory.Reset();Inert(fourth)
 SurvivorUI.ShowConversation('failure',pages,Done);local fifth=Reveal()
 local alpha=BlzFrameSetAlpha
 function BlzFrameSetAlpha(frame,value)
-    if frame==frames.HeroSurvivorStageIntro and value<255 then error('reveal alpha failure')end
+    if frame==frames.AnyasLongNightStageIntro and value<255 then error('reveal alpha failure')end
     return alpha(frame,value)
 end
 local ok,message=pcall(function()AdvanceVisualTime(.03)end)
@@ -4923,9 +5192,9 @@ local function GuardTimer()
 end
 local function Cancelled(timer)
     assert(timer.destroyed and not timer.running)
-    local writes,text=#cameraBoundsWrites,frames.HeroSurvivorStageText.text
+    local writes,text=#cameraBoundsWrites,frames.AnyasLongNightStageText.text
     timer.callback()
-    assert(#cameraBoundsWrites==writes and frames.HeroSurvivorStageText.text==text,
+    assert(#cameraBoundsWrites==writes and frames.AnyasLongNightStageText.text==text,
         'A cancelled callback must neither change camera bounds nor advance dialogue')
 end
 local function PanBounds(previousX,previousY)
@@ -4947,10 +5216,10 @@ local first=GuardTimer();PanBounds(-7500,7380)
 cameraNative.x,cameraNative.y=-7243,7827
 SurvivorUI.AdvanceNarrative();PanBounds(-7243,7827)
 local second=GuardTimer();assert(second~=first);Cancelled(first)
-local text=frames.HeroSurvivorStageText.text
+local text=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(.6);Bounds(lastPan.x-64,lastPan.y-64,lastPan.x+64,lastPan.y+64)
 assert(second.destroyed and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil)
-assert(frames.HeroSurvivorStageText.text==text and completed==1,'Settling a pan does not advance the story')
+assert(frames.AnyasLongNightStageText.text==text and completed==1,'Settling a pan does not advance the story')
 Cancelled(second)
 SurvivorUI.AdvanceNarrative();assert(Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil,'An inspection uses the current shot')
 SurvivorUI.AdvanceNarrative();local third=GuardTimer()
@@ -5016,9 +5285,9 @@ SurvivorUI.ShowStageIntro(1,function()completed=completed+1 end)
 assert(frames.ScriptDialogButton700.text=='장면 보기')
 SurvivorUI.AdvanceNarrative() -- Static introduction now opens the four-line briefing.
 assert(SurvivorUI.IsNarrativeVisible() and completed==0)
-local first=frames.HeroSurvivorStageText.text
+local first=frames.AnyasLongNightStageText.text
 for i=1,300 do TickTimers()end
-assert(frames.HeroSurvivorStageText.text==first and completed==0,"Time must never advance a dialogue page")
+assert(frames.AnyasLongNightStageText.text==first and completed==0,"Time must never advance a dialogue page")
 for i=1,3 do SurvivorUI.AdvanceNarrative();assert(completed==0)end
 assert(frames.ScriptDialogButton700.text=='수색 준비','The final briefing action names the next preparation step')
 SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation()
@@ -5027,7 +5296,7 @@ local hero=CreateUnit(0,"hero",-7600,7400,0)
 for stage=1,4 do
     finding=stage%2==0
     SurvivorStory.ShowInterlude(stage,hero,function()completed=completed+1 end)
-    assert(hero.visible==false and frames.HeroSurvivorStageTitle.text:find("퓨트리스"))
+    assert(hero.visible==false and frames.AnyasLongNightStageTitle.text:find("퓨트리스"))
     local effects=Local(SurvivorStory.Cleanup,"sceneEffects")
     assert(#effects>=2)
     for _=1,3 do SurvivorUI.AdvanceNarrative()end
@@ -5039,7 +5308,7 @@ end
 assert(completed==5)
 SurvivorStory.ShowEnding(hero,function()completed=completed+1 end)
 for i=1,4 do SurvivorUI.AdvanceNarrative();assert(completed==5)end
-assert(frames.HeroSurvivorStageText.text:find("지하 묘실") and frames.HeroSurvivorStageText.text:find("이름"),
+assert(frames.AnyasLongNightStageText.text:find("지하 묘실") and frames.AnyasLongNightStageText.text:find("이름"),
     'The ending records the transport while leaving the survivor unnamed')
 assert(frames.ScriptDialogButton700.text=='결과 보기')
 SurvivorUI.AdvanceNarrative();assert(completed==6 and hero.visible)
@@ -5053,8 +5322,8 @@ state="RUNNING";now=0;SurvivorUI.ClearSpeech();SurvivorStory.SetStage(2)
 SurvivorUI.Say("안야","첫 번째 대사");SurvivorUI.Say("퓨트리스","두 번째 대사")
 SurvivorUI.Notify("수색 완료 · 보상 지급")
 SurvivorUI.UpdateSpeech();assert(frames.HSSpeech.visible and frames.HSNotice.visible)
-assert(not frames.HeroSurvivorExpedition.visible)
-riskVisible=true;SurvivorUI.UpdateSpeech();assert(frames.HeroSurvivorExpedition.visible,"Never conceal risk terms/countdown")
+assert(not frames.AnyasLongNightExpedition.visible)
+riskVisible=true;SurvivorUI.UpdateSpeech();assert(frames.AnyasLongNightExpedition.visible,"Never conceal risk terms/countdown")
 now=3;SurvivorUI.UpdateSpeech()
 state="INVENTORY";for i=1,100 do TickTimers()end
 assert(not frames.HSSpeech.visible and not frames.HSNotice.visible)
@@ -5089,18 +5358,18 @@ for index=1,4 do
         finding=found;SurvivorStory.SetSummaryMode(false)
         SurvivorStory.ShowInterlude(index,hero,function()completed=completed+1 end)
         assert(frames.HSStoryPosition.text:find('1/4'),'Both search outcomes retain four dialogue pages')
-        local observation=frames.HeroSurvivorStageText.text
+        local observation=frames.AnyasLongNightStageText.text
         if found then assert(observation~=defaultObservation,'Recovered evidence changes the observation')
         else defaultObservation=observation end
         for _=1,3 do SurvivorUI.AdvanceNarrative()end
-        assert(frames.HeroSurvivorStageText.text:find(destinations[index],1,true),
+        assert(frames.AnyasLongNightStageText.text:find(destinations[index],1,true),
             'The last line names the next destination even when optional evidence was recovered')
         assert(frames.HSStoryPosition.text:find('4/4'))
         SurvivorUI.AdvanceNarrative()
         SurvivorStory.SetSummaryMode(true)
         SurvivorStory.ShowInterlude(index,hero,function()completed=completed+1 end)
         assert(frames.HSStoryPosition.text:find('요약') and frames.HSStoryPosition.text:find('1/1'))
-        local summary=frames.HeroSurvivorStageText.text
+        local summary=frames.AnyasLongNightStageText.text
         assert(summary:find(destinations[index],1,true),'Seen summaries must retain their destination')
         assert(summary:find(found and '직접 확인한 수색 결과.' or progress[index],1,true),
             'Seen summaries keep confirmed current progress alongside the next objective')
@@ -5136,10 +5405,10 @@ local function Event(frame,event)
     error('Missing mouse binding')
 end
 Show(3)
-local reroll,exclude=frames.HeroSurvivorReroll2,frames.HeroSurvivorExclude2
+local reroll,exclude=frames.AnyasLongNightReroll2,frames.AnyasLongNightExclude2
 local gold,orange,tip=frames.HSRerollHover2,frames.HSExcludeHover2,frames.HSChoiceActionTooltip
 local timerCount=#timers;local width,height=reroll.width,reroll.height
-local card=frames.HeroSurvivorCard2
+local card=frames.AnyasLongNightCard2
 Event(card,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 assert(frames.HSCardHover2.alpha==230 and not tip.visible and selected==0,
     'Hovering a card brightens only its border without selecting it')
@@ -5150,17 +5419,17 @@ assert(tip.visible and frames.HSChoiceActionTooltipText.text:find('리롤 기회
 assert(gold.alpha==230 and LiveTimers(.02)==0 and #timers==timerCount,
     'Hover feedback switches at once; a fade timer rewrote the hovered frames and made the cursor flicker')
 assert(frames.HSCardHover2.alpha==0,'Moving from the card to its action button clears the card highlight')
-assert(reroll.width==width and reroll.height==height and frames.HeroSurvivorRerollText2.textColor.g==220)
+assert(reroll.width==width and reroll.height==height and frames.AnyasLongNightRerollText2.textColor.g==220)
 Event(reroll,FRAMEEVENT_MOUSE_DOWN);assert(frames.QuestButtonBaseTemplate202.color.r==165)
 Event(exclude,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 assert(frames.QuestButtonBaseTemplate202.color.r==255 and gold.alpha==0 and orange.alpha==230,
     'Moving to another button clears pressed styling even without the old Mouse Up')
-assert(frames.HeroSurvivorExcludeText2.textColor.g==165 and frames.HSChoiceActionTooltipText.text:find('다시 등장하지'))
+assert(frames.AnyasLongNightExcludeText2.textColor.g==165 and frames.HSChoiceActionTooltipText.text:find('다시 등장하지'))
 Event(reroll,FRAMEEVENT_MOUSE_LEAVE);assert(tip.visible,'A late leave from the old button preserves the current tooltip')
 Event(exclude,FRAMEEVENT_MOUSE_LEAVE);AdvanceVisualTime(.14)
 assert(orange.alpha==0 and not tip.visible and LiveTimers(.02)==0)
 assert(selected==0 and rerolled==0 and excluded==0 and build.excludesRemaining==SurvivorConfig.excludesPerRun)
-Event(frames.HeroSurvivorExclude1,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
+Event(frames.AnyasLongNightExclude1,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
 assert(frames.HSExcludeHover1.alpha==0 and not tip.visible,'Owned upgrades cannot be highlighted or excluded')
 Event(exclude,FRAMEEVENT_MOUSE_ENTER);Event(exclude,FRAMEEVENT_MOUSE_DOWN)
 Event(exclude,FRAMEEVENT_MOUSE_UP);assert(frames.QuestButtonBaseTemplate402.color.r==255)
@@ -5179,7 +5448,7 @@ Event(reroll,FRAMEEVENT_MOUSE_ENTER);assert(gold.alpha==230)
 SurvivorUI.HidePanel()
 assert(gold.alpha==0 and orange.alpha==0 and not tip.visible and LiveTimers(.02)==0)
 Show(3);Event(card,FRAMEEVENT_MOUSE_ENTER);AdvanceVisualTime(.14)
-ClickFrame(frames.HeroSurvivorCard2)
+ClickFrame(frames.AnyasLongNightCard2)
 assert(selected==1 and gold.alpha==0 and frames.HSCardHover2.alpha==0 and not tip.visible and #timers==timerCount,
     'Selections and repeated hovers reuse the map-lifetime timer and clear all feedback')
 `);
@@ -5196,7 +5465,7 @@ local function Inside(text,panel)
 end
 for _,pair in ipairs({{'HSSpeech','CustomTooltipBackgroundTemplate710'},{'HSNotice','CustomTooltipBackgroundTemplate711'},
     {'HSExpedition','CustomTooltipBackgroundTemplate715'},
-    {'HeroSurvivorCaption','CustomTooltipBackgroundTemplate712'}})do
+    {'AnyasLongNightCaption','CustomTooltipBackgroundTemplate712'}})do
     local panel,skin=frames[pair[1]],frames[pair[2]]
     assert(skin.parent==panel and skin.allPoints==panel)
     assert(not skin.texture, 'Keep the template border and textured background')
@@ -5217,21 +5486,21 @@ local colored=frames.HSNotice.height
 SurvivorUI.Notify('첫째 줄\n둘째 줄\n셋째 줄');SurvivorUI.UpdateSpeech()
 assert(frames.HSNotice.height==colored,'Color escapes never enlarge visible text')
 SurvivorUI.ClearSpeech()
-assert(frames.HSSpeech.width<=0.54 and frames.HeroSurvivorCaption.width<=0.54,'Dialogue stays compact')
+assert(frames.HSSpeech.width<=0.54 and frames.AnyasLongNightCaption.width<=0.54,'Dialogue stays compact')
 state='STAGE_CLEAR'
 for i=1,3 do
     SurvivorUI.ShowConversation('수색',{{speaker='퓨트리스',text='대사 한 줄'}},function()end)
-    Inside(frames.HeroSurvivorStageTitle,frames.HeroSurvivorCaption)
-    Inside(frames.HeroSurvivorStageText,frames.HeroSurvivorCaption)
-    assert(frames.HeroSurvivorStageText.vertical==TEXT_JUSTIFY_TOP)
+    Inside(frames.AnyasLongNightStageTitle,frames.AnyasLongNightCaption)
+    Inside(frames.AnyasLongNightStageText,frames.AnyasLongNightCaption)
+    assert(frames.AnyasLongNightStageText.vertical==TEXT_JUSTIFY_TOP)
     for _,name in ipairs({'ScriptDialogButton700','ScriptDialogButton701'})do
-        local button=frames[name];assert(button.anchor.target==frames.HeroSurvivorCaption)
+        local button=frames[name];assert(button.anchor.target==frames.AnyasLongNightCaption)
         assert(button.anchor.point==FRAMEPOINT_TOP and button.anchor.targetPoint==FRAMEPOINT_TOP)
-        assert(-button.anchor.y+button.height<=frames.HeroSurvivorCaption.height-0.007,'Dialogue controls stay inside the panel')
+        assert(-button.anchor.y+button.height<=frames.AnyasLongNightCaption.height-0.007,'Dialogue controls stay inside the panel')
     end
     SurvivorUI.SkipConversation()
     SurvivorUI.ShowNarrative('정적 안내','본문',function()end,'안내','수색 준비')
-    assert(frames.HeroSurvivorStageText.anchor.target==frames.HeroSurvivorStoryContent)
+    assert(frames.AnyasLongNightStageText.anchor.target==frames.AnyasLongNightStoryContent)
     assert(frames.ScriptDialogButton700.absolute==FRAMEPOINT_CENTER and not frames.ScriptDialogButton700.anchor)
     SurvivorUI.AdvanceNarrative()
 end
@@ -5271,7 +5540,7 @@ assert(frames.HSStoryPosition.text:find('요약'))
 SurvivorUI.SkipConversation();SurvivorStory.Reset()
 finding=true;SurvivorStory.ShowInterlude(4,hero,Done)
 assert(frames.HSStoryPosition.text:find('1/4') and not frames.HSStoryPosition.text:find('요약'),'A newly recovered order deserves its full scene')
-assert(frames.HeroSurvivorStageText.text:find('명령서'))
+assert(frames.AnyasLongNightStageText.text:find('명령서'))
 SurvivorUI.SkipConversation();SurvivorStory.Reset();SurvivorStory.SetSummaryMode(false)
 SurvivorStory.ShowBriefing(Done);assert(frames.HSStoryPosition.text:find('1/4'))
 SurvivorUI.SkipConversation()
@@ -5300,7 +5569,7 @@ for index=2,5 do
     for _,effect in ipairs(effects)do assert(effect.destroyed,'An arrival scene effect leaked')end
     -- A seen arrival can collapse to its one-page summary, which keeps the stage mission.
     SurvivorStory.SetSummaryMode(true);SurvivorUI.ShowStageIntro(index,function()completed=completed+1 end,hero)
-    assert(frames.HSStoryPosition.text:find('요약')and frames.HeroSurvivorStageText.text:find('mission'))
+    assert(frames.HSStoryPosition.text:find('요약')and frames.AnyasLongNightStageText.text:find('mission'))
     SurvivorUI.AdvanceNarrative();assert(completed==index and hero.visible)
     completed=completed-1
 end
@@ -5333,7 +5602,7 @@ local preparedX,preparedY=cart.x,cart.y
 SurvivorUI.AdvanceNarrative()
 AdvanceVisualTime(.7)
 assert(cart.x>preparedX and cart.y>preparedY and anya.x<cart.x and putress.x>cart.x,'Both companions depart alongside the transport')
-assert(frames.HeroSurvivorStageText.text:find('지하 묘실') and completed==0)
+assert(frames.AnyasLongNightStageText.text:find('지하 묘실') and completed==0)
 SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation()
 assert(completed==1 and hero.visible)
 for _,effect in ipairs(effects)do assert(effect.destroyed,'An ending scene effect leaked')end
@@ -5344,9 +5613,9 @@ for _,found in ipairs({false,true})do
     SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
     local putressX,putressY,anyaX=putress.x,putress.y,anya.x
     SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
-    assert(frames.HeroSurvivorStageText.text:find('물어보자')and putress.x==putressX and putress.y==putressY and anya.x~=anyaX)
+    assert(frames.AnyasLongNightStageText.text:find('물어보자')and putress.x==putressX and putress.y==putressY and anya.x~=anyaX)
     SurvivorUI.AdvanceNarrative()
-    assert((frames.HeroSurvivorStageText.text:find('사슬을 풀어')~=nil)==found,'Only a completed seal search changes the cart line')
+    assert((frames.AnyasLongNightStageText.text:find('사슬을 풀어')~=nil)==found,'Only a completed seal search changes the cart line')
     SurvivorUI.SkipConversation()
 end
 finding=nil
@@ -5371,7 +5640,7 @@ assert(#soundHandles==0,'Turning in place does not emit footsteps')
 SurvivorUI.AdvanceNarrative()
 local motion=Local(SurvivorStory.Cleanup,'motion');local timer=motion.timer
 assert(timer.dt==.03 and timer.repeated and anya.animation==ANIM_TYPE_WALK and anya.x==-160 and anya.y==95)
-local page=frames.HeroSurvivorStageText.text
+local page=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(.09)
 local eased=(1/6)^2*(3-2/6)
 Near(anya.x,-160+90*eased);Near(anya.y,95+70*eased)
@@ -5382,7 +5651,7 @@ assert(Local(SurvivorStory.Cleanup,'motion')==nil and #soundHandles==2)
 for _,sound in ipairs(soundHandles)do
     assert(sound.path:find('HeroStep')and sound.volume==18 and not sound.loop and not sound.threeD and sound.starts==1)
 end
-assert(now==0 and completed==0 and frames.HeroSurvivorStageText.text==page,'Motion never advances paused gameplay or dialogue')
+assert(now==0 and completed==0 and frames.AnyasLongNightStageText.text==page,'Motion never advances paused gameplay or dialogue')
 SurvivorUI.AdvanceNarrative()
 assert(putress.animation==ANIM_TYPE_SPELL and putress.x==125 and putress.y==165)
 AdvanceVisualTime(.48)
@@ -5427,8 +5696,8 @@ AdvanceVisualTime(.33)
 assert(math.abs(cart.x-210)<1e-6 and math.abs(cart.y-397.5)<1e-6 and completed==0)
 AdvanceVisualTime(.33)
 assert(cart.x==400 and cart.y==505 and anya.x==250 and putress.x==550 and figure.z==75)
-local text=frames.HeroSurvivorStageText.text;departing.callback()
-assert(cart.x==400 and frames.HeroSurvivorStageText.text==text and completed==0)
+local text=frames.AnyasLongNightStageText.text;departing.callback()
+assert(cart.x==400 and frames.AnyasLongNightStageText.text==text and completed==0)
 SurvivorUI.SkipConversation();assert(completed==1 and hero.visible)
 for i=1,12 do
     SurvivorStory.ShowInterlude(i%4+1,hero,function()completed=completed+1 end)
@@ -5636,14 +5905,14 @@ SafeLeftLane()
 riskOffer={name='봉인',remaining=40,seconds=30,text='risk terms'};SurvivorUI.UpdateSpeech()
 local accept=Local(SurvivorUI.UpdateExpedition,'riskAccept')
 local function SeparatedRiskControls()
-    local text,root=frames.HeroSurvivorExpedition,frames.HSExpedition
+    local text,root=frames.AnyasLongNightExpedition,frames.HSExpedition
     assert(root.y<=.515 and root.y>=.36 and text.height>=.041 and text.height<=.128)
     assert(root.y-root.height-accept.y>=.009-.00001,'Risk button must sit below its panel with visible spacing')
     assert(root.visible and text.parent==root and text.anchor.y==-0.014 and root.width==frames.HSNotice.width,
         'Search and region notices share a bordered panel width and internal padding')
 end
 riskVisible=true;SurvivorUI.UpdateSpeech()
-assert(accept.visible and frames.HeroSurvivorExpedition.visible);SeparatedRiskControls()
+assert(accept.visible and frames.AnyasLongNightExpedition.visible);SeparatedRiskControls()
 assert(frames.HSNotice.y-frames.HSNotice.height-frames.HSExpedition.y>=.012-.00001,'Urgent notices leave room above risk terms')
 SurvivorUI.ClearSpeech();SurvivorUI.UpdateSpeech();SeparatedRiskControls()
 SurvivorUI.Notify('일반 알림');SurvivorUI.UpdateSpeech();SafeLeftLane()
@@ -5652,7 +5921,7 @@ assert(frames.HSSpeech.x-frames.HSSpeech.width/2-(accept.x+accept.width/2)>=.011
 assert(accept.text=='조사 수락','Offer terms and explicit action use the same investigation label')
 ClickFrame(accept);assert(riskAccepts==1)
 riskOffer=nil;SurvivorUI.UpdateSpeech();assert(not accept.visible)
-emptyStatus=true;SurvivorUI.UpdateSpeech();assert(not frames.HSExpedition.visible and not frames.HeroSurvivorExpedition.visible and not accept.visible,
+emptyStatus=true;SurvivorUI.UpdateSpeech();assert(not frames.HSExpedition.visible and not frames.AnyasLongNightExpedition.visible and not accept.visible,
     'A completed objective leaves no persistent blank or duplicate status')
 emptyStatus=false
 state='INVENTORY';SurvivorUI.UpdateSpeech();assert(not frames.HSEssentialHUD.visible and not accept.visible)
@@ -5801,7 +6070,7 @@ frameWrites,cellGets,cellReleases,cellStyles,cellValues,cellIcons=0,0,0,0,0,0
 for _,name in ipairs({'BlzFrameSetVisible','BlzFrameSetText','BlzFrameSetSize','BlzFrameSetAbsPoint','BlzFrameClearAllPoints'})do
     local original=_G[name]
     _G[name]=function(frame,...)
-        if frame.name:find('^HS') or frame.name:find('^HeroSurvivor')then frameWrites=frameWrites+1 end
+        if frame.name:find('^HS') or frame.name:find('^AnyasLongNight')then frameWrites=frameWrites+1 end
         return original(frame,...)
     end
 end
@@ -6016,7 +6285,7 @@ local report='누적 유효 피해'
 for index=1,6 do report=report..'\n무기 '..index..' '..index*1000 end
 state='STAGE_CLEAR';SurvivorUI.ShowResult('stage_clear',122,427,1,2,report,details)
 local info,damage,rest=frames.HSResultSummaryInfo,frames.HSResultSummaryDamage,frames.HSResultSummaryRest
-assert(info.visible and damage.visible and rest.visible and not frames.HeroSurvivorResultNote.visible)
+assert(info.visible and damage.visible and rest.visible and not frames.AnyasLongNightResultNote.visible)
 assert(info.vertical==TEXT_JUSTIFY_TOP and info.horizontal==TEXT_JUSTIFY_LEFT
     and damage.vertical==TEXT_JUSTIFY_TOP and damage.horizontal==TEXT_JUSTIFY_LEFT)
 assert(info.text:find('현재 레벨 16',1,true) and info.text:find('2:02',1,true)
@@ -6024,7 +6293,7 @@ assert(info.text:find('현재 레벨 16',1,true) and info.text:find('2:02',1,tru
 assert(rest.text:find('다음 시작 지점',1,true) and frames.ScriptDialogButton4.text=='다음 스테이지')
 local tabs=Local(SurvivorUI.NavigateJournal,'resultTabs')
 ClickFrame(tabs[2].frame)
-assert(not info.visible and not damage.visible and not rest.visible and frames.HeroSurvivorResultNote.visible)
+assert(not info.visible and not damage.visible and not rest.visible and frames.AnyasLongNightResultNote.visible)
 ClickFrame(tabs[1].frame);assert(info.visible and damage.visible and rest.visible)
 state='FINISHED';SurvivorUI.ShowResult('timeout',180,427,1,60,'',details)
 assert(rest.text=='' and info.text:find('종료 레벨 16',1,true) and damage.text:find('없음',1,true),
@@ -6040,20 +6309,20 @@ local details={difficulty='보통',level=1,weapons={},trinkets={},stages={},jour
 SurvivorUI.ShowResult('boss_defeated',500,100,5,nil,'',details)
 local tab=Local(SurvivorUI.NavigateJournal,'resultTabs')[5].frame
 ClickFrame(tab)
-local note=frames.HeroSurvivorResultNote.text
+local note=frames.AnyasLongNightResultNote.text
 assert(note:find('첫 장 요약'))
-ClickFrame(tab);assert(frames.HeroSurvivorResultNote.text==note,'Repeated tab clicks never move a page')
-SurvivorUI.NavigateJournal(-1,0);assert(frames.HeroSurvivorResultNote.text==note)
-ClickFrame(Local(SurvivorUI.NavigateJournal,'journalNext'));assert(frames.HeroSurvivorResultNote.text:find('첫 장 대화'))
-SurvivorUI.NavigateJournal(99,0);assert(frames.HeroSurvivorResultNote.text:find('첫 장 대화'))
-ClickFrame(Local(SurvivorUI.NavigateJournal,'journalPrevious'));assert(frames.HeroSurvivorResultNote.text==note)
-ClickFrame(Local(SurvivorUI.NavigateJournal,'chapterNext'));assert(frames.HeroSurvivorResultNote.text:find('둘째 장 요약'))
-SurvivorUI.NavigateJournal(0,99);assert(frames.HeroSurvivorResultNote.text:find('둘째 장 요약'))
-ClickFrame(Local(SurvivorUI.NavigateJournal,'chapterPrevious'));assert(frames.HeroSurvivorResultNote.text==note)
+ClickFrame(tab);assert(frames.AnyasLongNightResultNote.text==note,'Repeated tab clicks never move a page')
+SurvivorUI.NavigateJournal(-1,0);assert(frames.AnyasLongNightResultNote.text==note)
+ClickFrame(Local(SurvivorUI.NavigateJournal,'journalNext'));assert(frames.AnyasLongNightResultNote.text:find('첫 장 대화'))
+SurvivorUI.NavigateJournal(99,0);assert(frames.AnyasLongNightResultNote.text:find('첫 장 대화'))
+ClickFrame(Local(SurvivorUI.NavigateJournal,'journalPrevious'));assert(frames.AnyasLongNightResultNote.text==note)
+ClickFrame(Local(SurvivorUI.NavigateJournal,'chapterNext'));assert(frames.AnyasLongNightResultNote.text:find('둘째 장 요약'))
+SurvivorUI.NavigateJournal(0,99);assert(frames.AnyasLongNightResultNote.text:find('둘째 장 요약'))
+ClickFrame(Local(SurvivorUI.NavigateJournal,'chapterPrevious'));assert(frames.AnyasLongNightResultNote.text==note)
 assert(frames.HSJournalPosition.text:find('1/2장') and frames.HSJournalPosition.text:find('1/2쪽'))
 ClickFrame(Local(SurvivorUI.NavigateJournal,'resultTabs')[1].frame)
 assert(not frames.HSJournalPosition.visible)
-SurvivorUI.NavigateJournal(1,1);assert(not frames.HeroSurvivorResultNote.text:find('둘째 장 요약'),'Journal actions only work on its tab')
+SurvivorUI.NavigateJournal(1,1);assert(not frames.AnyasLongNightResultNote.text:find('둘째 장 요약'),'Journal actions only work on its tab')
 `);
 
 suite('setup preserves selections and same-settings retry consumes one valid finished run', mocks + String.raw`
@@ -6063,29 +6332,29 @@ SurvivorSetupUI={ShowMenu=function(difficulty,weapon,trinket)
     setupShown={difficulty=difficulty,weapon=weapon,trinket=trinket}
 end,ShowOptions=function()end}
 SurvivorStory={SetSummaryMode=function(value)summaryMode=value end}
-`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-SetLocal(HeroSurvivor.Start,'initialized',true)
-state='READY';HeroSurvivor.Start()
+`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+SetLocal(AnyasLongNight.Start,'initialized',true)
+state='READY';AnyasLongNight.Start()
 assert(not setupShown.difficulty and not setupShown.weapon and not setupShown.trinket)
-assert(not HeroSurvivor.RetrySame(),'Cannot retry before selecting a complete setup')
+assert(not AnyasLongNight.RetrySame(),'Cannot retry before selecting a complete setup')
 local selections={DIFFICULTY='normal',WEAPON=SurvivorConfig.startingWeapons[1],TRINKET=SurvivorConfig.startingTrinkets[1]}
 for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
-    assert(HeroSurvivor.OpenSetup(kind) and HeroSurvivor.SelectSetup(kind,selections[kind]))
+    assert(AnyasLongNight.OpenSetup(kind) and AnyasLongNight.SelectSetup(kind,selections[kind]))
 end
-assert(not HeroSurvivor.IsStorySummary())
-assert(HeroSurvivor.ToggleStorySummary());assert(HeroSurvivor.IsStorySummary())
-HeroSurvivor.Start()
+assert(not AnyasLongNight.IsStorySummary())
+assert(AnyasLongNight.ToggleStorySummary());assert(AnyasLongNight.IsStorySummary())
+AnyasLongNight.Start()
 assert(setupShown.difficulty==selections.DIFFICULTY and setupShown.weapon==selections.WEAPON and setupShown.trinket==selections.TRINKET)
-assert(HeroSurvivor.IsStorySummary(),'Restart retains the explicitly chosen story preference')
+assert(AnyasLongNight.IsStorySummary(),'Restart retains the explicitly chosen story preference')
 local starts=0
-SetLocal(HeroSurvivor.BeginRun,'Start',function(weapon,trinket)
+SetLocal(AnyasLongNight.BeginRun,'Start',function(weapon,trinket)
     starts=starts+1;assert(weapon==selections.WEAPON and trinket==selections.TRINKET);state='RUNNING'
 end)
-state='FINISHED';assert(HeroSurvivor.RetrySame() and starts==1)
-assert(not HeroSurvivor.RetrySame() and starts==1,'Retry is rejected once a run is active')
-state='FINISHED';HeroSurvivor.Start()
+state='FINISHED';assert(AnyasLongNight.RetrySame() and starts==1)
+assert(not AnyasLongNight.RetrySame() and starts==1,'Retry is rejected once a run is active')
+state='FINISHED';AnyasLongNight.Start()
 assert(setupShown.difficulty==selections.DIFFICULTY and setupShown.weapon==selections.WEAPON and setupShown.trinket==selections.TRINKET)
-assert(HeroSurvivor.ToggleStorySummary() and not HeroSurvivor.IsStorySummary())
+assert(AnyasLongNight.ToggleStorySummary() and not AnyasLongNight.IsStorySummary())
 assert(summaryMode==false,'Setup summary preference reaches the story runtime')
 `);
 
@@ -6096,25 +6365,25 @@ SurvivorSetupUI={ShowMenu=function(difficulty,weapon,trinket,hero)
     setupShown={difficulty=difficulty,weapon=weapon,trinket=trinket,hero=hero}
 end,ShowOptions=function(kind,selected,hero)optionsShown={kind=kind,selected=selected,hero=hero}end}
 SurvivorStory={SetSummaryMode=function()end}
-`, [config,augments,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-SetLocal(HeroSurvivor.Start,'initialized',true)
-state='READY';HeroSurvivor.Start()
+`, [config,augments,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+SetLocal(AnyasLongNight.Start,'initialized',true)
+state='READY';AnyasLongNight.Start()
 assert(setupShown.hero==SurvivorConfig.defaultHero and SurvivorConfig.heroes[setupShown.hero].unitId,
     'Setup opens with a playable default hero')
-assert(HeroSurvivor.OpenSetup('HERO') and optionsShown.kind=='HERO' and optionsShown.selected=='anya')
+assert(AnyasLongNight.OpenSetup('HERO') and optionsShown.kind=='HERO' and optionsShown.selected=='anya')
 SurvivorConfig.heroes.putress.locked=true
-assert(not HeroSurvivor.SelectSetup('HERO','putress'),'A locked hero cannot be selected')
+assert(not AnyasLongNight.SelectSetup('HERO','putress'),'A locked hero cannot be selected')
 SurvivorConfig.heroes.putress.locked=nil
-assert(not HeroSurvivor.SelectSetup('HERO','missing'))
-assert(HeroSurvivor.SelectSetup('HERO','anya') and setupShown.hero=='anya')
-assert(HeroSurvivor.OpenSetup('WEAPON') and HeroSurvivor.SelectSetup('WEAPON','firebolt'))
-assert(HeroSurvivor.OpenSetup('HERO') and HeroSurvivor.SelectSetup('HERO','anya') and setupShown.weapon=='firebolt',
+assert(not AnyasLongNight.SelectSetup('HERO','missing'))
+assert(AnyasLongNight.SelectSetup('HERO','anya') and setupShown.hero=='anya')
+assert(AnyasLongNight.OpenSetup('WEAPON') and AnyasLongNight.SelectSetup('WEAPON','firebolt'))
+assert(AnyasLongNight.OpenSetup('HERO') and AnyasLongNight.SelectSetup('HERO','anya') and setupShown.weapon=='firebolt',
     'Confirming the same hero keeps the starting weapon')
-assert(HeroSurvivor.OpenSetup('HERO') and HeroSurvivor.SelectSetup('HERO','putress'))
+assert(AnyasLongNight.OpenSetup('HERO') and AnyasLongNight.SelectSetup('HERO','putress'))
 assert(setupShown.hero=='putress' and setupShown.weapon==nil,'Switching heroes clears the previous hero weapon')
-assert(HeroSurvivor.OpenSetup('WEAPON') and optionsShown.hero=='putress')
-assert(not HeroSurvivor.SelectSetup('WEAPON','firebolt'),'A weapon owned by another hero is rejected')
-assert(HeroSurvivor.SelectSetup('WEAPON','deathcoil') and setupShown.weapon=='deathcoil' and setupShown.hero=='putress')
+assert(AnyasLongNight.OpenSetup('WEAPON') and optionsShown.hero=='putress')
+assert(not AnyasLongNight.SelectSetup('WEAPON','firebolt'),'A weapon owned by another hero is rejected')
+assert(AnyasLongNight.SelectSetup('WEAPON','deathcoil') and setupShown.weapon=='deathcoil' and setupShown.hero=='putress')
 local anya=SurvivorAugments.NewBuild('firebolt',nil,'anya')
 assert(anya.hero=='anya' and SurvivorAugments.CanChoose('frostshard',anya) and SurvivorAugments.CanChoose('power',anya))
 assert(not pcall(SurvivorAugments.NewBuild,'firebolt',nil,'putress'),'A starting weapon must belong to the hero')
@@ -6142,8 +6411,8 @@ SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 
     SpawnBoss=function()return true end,Spawn=function()return true end,
     CastWeapon=function(id)casts[#casts+1]=id end,
     UpdateWeapons=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
-`, [config,'src/00_bootstrap/HeroSurvivor.lua'], String.raw`
-local step=Local(HeroSurvivor.BeginRun,'Step')
+`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+local step=Local(AnyasLongNight.BeginRun,'Step')
 SetLocal(step,'hero',CreateUnit(0,'hero',0,0,0))
 SetLocal(step,'stats',{zoneEnabled=true,zoneInterval=.05,missileEnabled=true,missileInterval=.05,
     bladeEnabled=true,bladeInterval=.05,extraWeapons={meteor={enabled=true,interval=.05},blizzard={enabled=false,interval=.01}}})
@@ -6225,9 +6494,9 @@ for _,name in ipairs({'SimpleEquipmentInventoryPanel','SimpleEquipmentPanel','Si
 end
 `, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/30_gameplay/SurvivorNativeLoadout.lua',
     'src/30_gameplay/SurvivorInventoryPause.lua','src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua',
-    'src/30_gameplay/SurvivorSetupUI.lua','src/00_bootstrap/HeroSurvivor.lua'], String.raw`
+    'src/30_gameplay/SurvivorSetupUI.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
 SurvivorConfig.debugCommands=false
-HeroSurvivor.Init()
+AnyasLongNight.Init()
 local introduction=SurvivorUI.ShowStageIntro
 function SurvivorUI.ShowStageIntro(index,onReady,hero)
     latestIntroduction=onReady
@@ -6245,16 +6514,16 @@ local function Waiting(index)
     assert(select(2,SurvivorNativeLoadout.TalentStatus())==index,'Each actual preparation grants its own stage point exactly once')
     assert(RunSession.GetState()=='STAGE_CLEAR'and halted and expeditionPaused
         and SurvivorUI.IsCombatPreparationVisible()and SurvivorUI.IsNarrativeVisible())
-    local current=Local(HeroSurvivor.BeginRun,'hero')
+    local current=Local(AnyasLongNight.BeginRun,'hero')
     assert(current.visible and selectedUnit==current and not current.removed
         and cameraNative.x==current.x and cameraNative.y==current.y)
     assert(frames.HSCombatPreparation.visible and frames.HSCombatPreparationStart.visible
         and frames.HSCombatPreparationStart.kind=='GLUETEXTBUTTON'
-        and not frames.HeroSurvivorStageIntro.visible and LiveTimers(.03)==0 and LiveTimers(1)==0)
+        and not frames.AnyasLongNightStageIntro.visible and LiveTimers(.03)==0 and LiveTimers(1)==0)
     assert(frames.HSCombatPreparationTitle.text:find(index..' / 5',1,true)
         and frames.HSCombatPreparationMission.text:find('mission',1,true)
         and frames.HSCombatPreparationHint.text:find('hint',1,true))
-    assert(not HeroSurvivor.NextStage(),'A pending preparation must block queued Next Stage actions')
+    assert(not AnyasLongNight.NextStage(),'A pending preparation must block queued Next Stage actions')
     local elapsed=RunSession.GetElapsed()
     local currentReady=latestReady
     latestIntroduction();latestIntroduction()
@@ -6287,20 +6556,20 @@ local function StartCountdown()
         and not frames.HSCombatPreparation.visible and not frames.HSCombatPreparationStart.visible
         and not frames.HSCombatCountdown.visible and LiveTimers(1)==0)
 end
-assert(RunSession.GetState()=='READY'and frames.HeroSurvivorSetupShade.visible
-    and frames.HeroSurvivorSetupShadeTop.texture==[[HeroSurvivorUI\Black.tga]])
+assert(RunSession.GetState()=='READY'and frames.AnyasLongNightSetupShade.visible
+    and frames.AnyasLongNightSetupShadeTop.texture==[[AnyasLongNightUI\Black.tga]])
 for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
-    ClickFrame(frames['HeroSurvivorSetup'..kind])
-    ClickFrame(frames[kind=='DIFFICULTY'and'HeroSurvivorSetupOption2'or'HeroSurvivorSetupOption1'])
+    ClickFrame(frames['AnyasLongNightSetup'..kind])
+    ClickFrame(frames[kind=='DIFFICULTY'and'AnyasLongNightSetupOption2'or'AnyasLongNightSetupOption1'])
 end
-ClickFrame(frames.HeroSurvivorSetupStart);ClickFrame(frames.HeroSurvivorSetupStart)
-local hero=Local(HeroSurvivor.BeginRun,'hero')
+ClickFrame(frames.AnyasLongNightSetupStart);ClickFrame(frames.AnyasLongNightSetupStart)
+local hero=Local(AnyasLongNight.BeginRun,'hero')
 assert(hero and not hero.removed and RunSession.GetState()=='STAGE_CLEAR'and halted and expeditionPaused)
-local build=Local(HeroSurvivor.BeginRun,'build')
+local build=Local(AnyasLongNight.BeginRun,'build')
 assert(build.weapons[1]=='firebolt'and build.trinkets[1]=='power'
-    and Local(HeroSurvivor.BeginRun,'selectedDifficulty')=='normal',
+    and Local(AnyasLongNight.BeginRun,'selectedDifficulty')=='normal',
     'Exercise the reported firebolt and increased-damage trinket combination through actual preparation controls')
-assert(not frames.HeroSurvivorSetupShade.visible and frames.HeroSurvivorStageIntro.visible)
+assert(not frames.AnyasLongNightSetupShade.visible and frames.AnyasLongNightStageIntro.visible)
 assert(frames.ScriptDialogButton700.text=='장면 보기')
 periodic();AdvanceVisualTime(.2)
 assert(RunSession.GetElapsed()==0 and SurvivorCombat.Counts()==0,'Preparing and reading never starts combat time or waves')
@@ -6327,60 +6596,60 @@ local firstReady,firstCanStart=latestReady,latestCanStart
 StartCountdown()
 assert(RunSession.IsRunning()and not halted and not expeditionPaused and resumeCount==1)
 assert(hero.visible and selectedUnit==hero and not hero.paused and not hero.removed)
-assert(not SurvivorUI.IsNarrativeVisible()and not frames.HeroSurvivorSetupShade.visible
-    and not frames.HeroSurvivorStageIntro.visible and LiveTimers(.03)==0)
+assert(not SurvivorUI.IsNarrativeVisible()and not frames.AnyasLongNightSetupShade.visible
+    and not frames.AnyasLongNightStageIntro.visible and LiveTimers(.03)==0)
 assert(SurvivorCombat.Counts()==3,'The actual first-story callback creates three enemies outside the new spawn distance')
 assert(hero.inventory[1]and not hero.inventory[1].removed,'Starting trinket survives narrative selection restoration')
 local elapsed=RunSession.GetElapsed();periodic();assert(RunSession.GetElapsed()>elapsed and expeditionSteps==1)
 AdvanceVisualTime(.12);assert(RunSession.IsRunning()and #unsafeFrameCalls==0,
     'Real combat resume and following UI/inventory timers use only supported native frame calls')
 hero.level=3;periodic()
-assert(RunSession.GetState()=='CHOOSING'and halted and expeditionPaused and frames.HeroSurvivorChoiceRoot.visible,
+assert(RunSession.GetState()=='CHOOSING'and halted and expeditionPaused and frames.AnyasLongNightChoiceRoot.visible,
     'Two actual hero levels open the growth controls and pause combat')
 local choiceTime=RunSession.GetElapsed()
-local pendingOffers=Local(HeroSurvivor.BeginRun,'offers')
+local pendingOffers=Local(AnyasLongNight.BeginRun,'offers')
 local details=frames.SimpleStatDetailsPanel
 details.visible=true;AdvanceVisualTime(.05)
 assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
-    and not frames.HeroSurvivorChoiceRoot.visible and GetUnitAbilityLevel(hero,'ASde')==1,
+    and not frames.AnyasLongNightChoiceRoot.visible and GetUnitAbilityLevel(hero,'ASde')==1,
     'The real native details observer hides cards without consuming their queued offers')
 details.visible=false;AdvanceVisualTime(.05)
 assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
-    and frames.HeroSurvivorChoiceRoot.visible and Local(HeroSurvivor.BeginRun,'offers')==pendingOffers
+    and frames.AnyasLongNightChoiceRoot.visible and Local(AnyasLongNight.BeginRun,'offers')==pendingOffers
     and RunSession.GetElapsed()==choiceTime,'Closing details restores the same live card controls')
-local rerolls=Local(HeroSurvivor.BeginRun,'rerollsRemaining')
-assert(frames.HeroSurvivorReroll2.enabled);ClickFrame(frames.HeroSurvivorReroll2)
-assert(Local(HeroSurvivor.BeginRun,'rerollsRemaining')==rerolls-1 and RunSession.GetState()=='CHOOSING')
-local excluded=Local(HeroSurvivor.BeginRun,'offers')[2]
-assert(frames.HeroSurvivorExclude2.enabled);ClickFrame(frames.HeroSurvivorExclude2)
+local rerolls=Local(AnyasLongNight.BeginRun,'rerollsRemaining')
+assert(frames.AnyasLongNightReroll2.enabled);ClickFrame(frames.AnyasLongNightReroll2)
+assert(Local(AnyasLongNight.BeginRun,'rerollsRemaining')==rerolls-1 and RunSession.GetState()=='CHOOSING')
+local excluded=Local(AnyasLongNight.BeginRun,'offers')[2]
+assert(frames.AnyasLongNightExclude2.enabled);ClickFrame(frames.AnyasLongNightExclude2)
 assert(build.excluded[excluded]and build.excludesRemaining==SurvivorConfig.excludesPerRun-1
-    and Local(HeroSurvivor.BeginRun,'rerollsRemaining')==rerolls-1,
+    and Local(AnyasLongNight.BeginRun,'rerollsRemaining')==rerolls-1,
     'Real exclusion replaces the candidate without consuming another reroll or level')
 for remaining=1,0,-1 do
-    local id=Local(HeroSurvivor.BeginRun,'offers')[1]
+    local id=Local(AnyasLongNight.BeginRun,'offers')[1]
     local previous=SurvivorAugments.Level(build,id)
-    ClickFrame(frames.HeroSurvivorCard1)
+    ClickFrame(frames.AnyasLongNightCard1)
     assert(SurvivorAugments.Level(build,id)==previous+1,'Each card click grants exactly one queued growth reward')
     if remaining>0 then
         periodic();assert(RunSession.GetState()=='CHOOSING'and halted and RunSession.GetElapsed()==choiceTime)
     end
 end
-assert(RunSession.IsRunning()and not halted and not expeditionPaused and not frames.HeroSurvivorChoiceRoot.visible,
+assert(RunSession.IsRunning()and not halted and not expeditionPaused and not frames.AnyasLongNightChoiceRoot.visible,
     'The last growth selection closes the modal and resumes the actual session')
-ClickFrame(frames.HeroSurvivorCard1)
+ClickFrame(frames.AnyasLongNightCard1)
 assert(RunSession.IsRunning(),'A stale click cannot consume another reward or pause the resumed run')
 for index=2,5 do
     assert(RunSession.BeginStageClear())
     if index==2 then
         -- Reproduce the same hero/stage/run guard values while the defeated-boss cleanup owns the transition.
-        SetLocal(HeroSurvivor.NextStage,'stageTransition',true)
+        SetLocal(AnyasLongNight.NextStage,'stageTransition',true)
         local resumed=resumeCount
         assert(not firstCanStart()and not firstReady()and resumeCount==resumed
             and RunSession.GetState()=='STAGE_CLEAR'and SurvivorCombat.Counts()==3,
             'A consumed preparation callback cannot reactivate during the same stage boss pause')
-        SetLocal(HeroSurvivor.NextStage,'stageTransition',false)
+        SetLocal(AnyasLongNight.NextStage,'stageTransition',false)
     end
-    assert(HeroSurvivor.NextStage())
+    assert(AnyasLongNight.NextStage())
     assert(appliedStage==index and equipmentStage==index and expeditionStage==index and expeditionHero==hero)
     -- Each later stage opens on its arrival scene in the new place; nothing resumes until preparation.
     assert(frames.ScriptDialogButton700.text=='다음 대사'and frames.HSStoryPosition.text:find('1/3')and not hero.visible)
@@ -6390,15 +6659,15 @@ for index=2,5 do
     local currentText=frames.HSCombatPreparationTitle.text
     assert(not firstReady()and frames.HSCombatPreparationTitle.text==currentText and RunSession.GetState()=='STAGE_CLEAR',
         'An earlier stage start callback cannot resume a later stage preparation')
-    StartCountdown();assert(Local(HeroSurvivor.BeginRun,'stage')==index and selectedUnit==hero)
+    StartCountdown();assert(Local(AnyasLongNight.BeginRun,'stage')==index and selectedUnit==hero)
 end
 assert(RunSession.Finish('test')and hero.removed and not halted and periodic==nil)
 local cast=SurvivorCombat.CastWeapon
 SurvivorCombat.CastWeapon=function(id)lastFirstCast=id;return cast(id)end
 for _,id in ipairs(SurvivorConfig.startingWeapons)do
-    HeroSurvivor.Start();assert(HeroSurvivor.OpenSetup('WEAPON')and HeroSurvivor.SelectSetup('WEAPON',id))
-    ClickFrame(frames.HeroSurvivorSetupStart)
-    local nextHero=Local(HeroSurvivor.BeginRun,'hero')
+    AnyasLongNight.Start();assert(AnyasLongNight.OpenSetup('WEAPON')and AnyasLongNight.SelectSetup('WEAPON',id))
+    ClickFrame(frames.AnyasLongNightSetupStart)
+    local nextHero=Local(AnyasLongNight.BeginRun,'hero')
     assert(RunSession.GetState()=='STAGE_CLEAR'and nextHero and not nextHero.removed,
         'Every supported starting weapon reaches the initial narrative')
     SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
@@ -6440,20 +6709,20 @@ for _,id in ipairs(SurvivorConfig.startingWeapons)do
     AdvanceVisualTime(.06);assert(RunSession.IsRunning(),'Inventory observation after '..id..' leaves the run active')
     assert(RunSession.Finish('test')and nextHero.removed and not halted and periodic==nil)
 end
-assert(HeroSurvivor.RetrySame());SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
+assert(AnyasLongNight.RetrySame());SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
 local staleReady,staleCanStart=latestReady,latestCanStart
 assert(SurvivorUI.BeginPreparedCombat());local staleTimer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
 assert(RunSession.Finish('test')and staleTimer.destroyed and not SurvivorUI.IsCombatPreparationVisible())
-assert(HeroSurvivor.RetrySame());SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
+assert(AnyasLongNight.RetrySame());SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
 assert(not staleCanStart()and not staleReady(),'Previous-run preparation closures must fail their expected run/hero guards')
 staleTimer.callback();assert(LiveTimers(1)==0 and SurvivorUI.IsCombatPreparationVisible()and RunSession.GetElapsed()==0)
 StartCountdown();assert(RunSession.IsRunning()and SurvivorCombat.Counts()==3)
 assert(RunSession.Finish('test'))
-HeroSurvivor.Start();assert(HeroSurvivor.OpenSetup('HERO')and HeroSurvivor.SelectSetup('HERO','putress'))
+AnyasLongNight.Start();assert(AnyasLongNight.OpenSetup('HERO')and AnyasLongNight.SelectSetup('HERO','putress'))
 for _,id in ipairs(SurvivorConfig.heroes.putress.startingWeapons)do
-    HeroSurvivor.Start();assert(HeroSurvivor.OpenSetup('WEAPON')and HeroSurvivor.SelectSetup('WEAPON',id))
-    ClickFrame(frames.HeroSurvivorSetupStart)
-    local nextHero=Local(HeroSurvivor.BeginRun,'hero')
+    AnyasLongNight.Start();assert(AnyasLongNight.OpenSetup('WEAPON')and AnyasLongNight.SelectSetup('WEAPON',id))
+    ClickFrame(frames.AnyasLongNightSetupStart)
+    local nextHero=Local(AnyasLongNight.BeginRun,'hero')
     assert(RunSession.GetState()=='STAGE_CLEAR'and nextHero and GetUnitTypeId(nextHero)==SurvivorConfig.heroes.putress.unitId,
         'Selecting Putress creates the Putress hero unit')
     assert(nextHero.properName=='퓨트리스','The Putress hero is named Putress, not Anya')
@@ -6477,7 +6746,7 @@ SurvivorUI.ShowNarrative('background','premise',Ready)
 SurvivorUI.ShowCombatPreparation(2,Ready,CanStart)
 local root,start,countdown=frames.HSCombatPreparation,frames.HSCombatPreparationStart,frames.HSCombatCountdown
 assert(root.visible and start.visible and not countdown.visible and SurvivorUI.IsNarrativeVisible())
-assert(not frames.HeroSurvivorStageIntro.visible and not frames.HeroSurvivorShade.visible
+assert(not frames.AnyasLongNightStageIntro.visible and not frames.AnyasLongNightShade.visible
     and frames.NativeWorldFrame.visible and frames.NativeWorldBars.visible and frames.NativePortrait.visible
     and frames.CommandBarFrame.visible and frames.SimpleInventoryBar.visible,
     'Preparation restores the normal arena and hero HUD after a narrative screen')
@@ -6530,7 +6799,7 @@ assert(fourth.destroyed and completed==10 and not SurvivorUI.IsNarrativeVisible(
 SurvivorUI.ShowCombatPreparation(5,Ready,CanStart);ClickFrame(start)
 local fifth=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
 SurvivorUI.ShowStageIntro(2,Ready);fifth.callback()
-assert(fifth.destroyed and not SurvivorUI.IsCombatPreparationVisible()and frames.HeroSurvivorStageIntro.visible)
+assert(fifth.destroyed and not SurvivorUI.IsCombatPreparationVisible()and frames.AnyasLongNightStageIntro.visible)
 SurvivorUI.HidePanel();assert(#unsafeFrameCalls==0 and completed==10)
 `);
 
@@ -6600,8 +6869,8 @@ SurvivorUI.HidePanel=function()end
 SurvivorUI.ClearDamageBoard=function()end
 SurvivorUI.SetSetupCinematic=function()end
 SurvivorStory={title='안야의 긴 밤',notice='창작 외전'}
-HeroSurvivor.IsStorySummary=function()return false end
-HeroSurvivor.ToggleStorySummary=function()end
+AnyasLongNight.IsStorySummary=function()return false end
+AnyasLongNight.ToggleStorySummary=function()end
 `, [config,metrics,augments,'src/30_gameplay/SurvivorSetupUI.lua'], String.raw`
 NativeGameUI()
 local nativeSetupSnapshots={}
@@ -6626,89 +6895,89 @@ SurvivorSetupUI.Init(function(kind)SurvivorSetupUI.ShowOptions(kind,kind=='TRINK
     end,function()resets=resets+1;SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)end,
     function()starts=starts+1;if failStart then error('intentional start failure')end end)
 SurvivorSetupUI.ShowMenu(nil,nil,nil)
-local setupBlack=frames.HeroSurvivorSetupShade
+local setupBlack=frames.AnyasLongNightSetupShade
 assert(setupBlack.alpha==255 and setupBlack.visible)
 for _,side in ipairs({'Top','Bottom','Left','Right'})do
-    local piece=frames['HeroSurvivorSetupShade'..side]
-    assert(piece.parent==setupBlack and piece.texture==[[HeroSurvivorUI\Black.tga]] and not piece.enabled and piece.anchor.target==frames.HeroSurvivorSetupHole)
+    local piece=frames['AnyasLongNightSetupShade'..side]
+    assert(piece.parent==setupBlack and piece.texture==[[AnyasLongNightUI\Black.tga]] and not piece.enabled and piece.anchor.target==frames.AnyasLongNightSetupHole)
 end
-local hole=frames.HeroSurvivorSetupHole
-assert(hole.parent==setupBlack and hole.anchor.target==frames.HeroSurvivorSetupPreview and hole.width>.15 and hole.height>.15,
+local hole=frames.AnyasLongNightSetupHole
+assert(hole.parent==setupBlack and hole.anchor.target==frames.AnyasLongNightSetupPreview and hole.width>.15 and hole.height>.15,
     'Only the preview window is left uncovered')
-assert(frames.HeroSurvivorSetupShadeTop.width>=2.4 and frames.HeroSurvivorSetupShadeBottom.width>=2.4
-    and frames.HeroSurvivorSetupShadeLeft.width>=1.2 and frames.HeroSurvivorSetupShadeRight.width>=1.2
-    and frames.HeroSurvivorSetupShadeLeft.height==hole.height and frames.HeroSurvivorSetupShadeRight.height==hole.height,
+assert(frames.AnyasLongNightSetupShadeTop.width>=2.4 and frames.AnyasLongNightSetupShadeBottom.width>=2.4
+    and frames.AnyasLongNightSetupShadeLeft.width>=1.2 and frames.AnyasLongNightSetupShadeRight.width>=1.2
+    and frames.AnyasLongNightSetupShadeLeft.height==hole.height and frames.AnyasLongNightSetupShadeRight.height==hole.height,
     'The four pieces reach past ultrawide edges around the hole')
 assert(setupBlack.width>=2.4 and setupBlack.height>=.6 and setupBlack.x==.4 and setupBlack.y==.3
-    and not setupBlack.enabled and frames.HeroSurvivorSetupRoot.level>setupBlack.level,
+    and not setupBlack.enabled and frames.AnyasLongNightSetupRoot.level>setupBlack.level,
     'The disabled opaque backdrop spans ultrawide screens while setup controls remain above it')
-assert(not frames.HeroSurvivorSetupStart.enabled)
-ClickFrame(frames.HeroSurvivorSetupStart);assert(starts==0)
+assert(not frames.AnyasLongNightSetupStart.enabled)
+ClickFrame(frames.AnyasLongNightSetupStart);assert(starts==0)
 -- Both heroes are listed; the description opens with the selected hero's story.
 local anyaStory=SurvivorConfig.heroes.anya.story
-assert(frames.HeroSurvivorSetupListTitle.text:find('영웅',1,true)and frames.HeroSurvivorSetupOption1.visible
-    and frames.HeroSurvivorSetupOption2.visible and not frames.HeroSurvivorSetupOption3.visible
-    and frames.HeroSurvivorSetupChosen1.visible and not frames.HeroSurvivorSetupChosen2.visible
-    and frames.HeroSurvivorSetupDescription.text:sub(1,#anyaStory)==anyaStory,
+assert(frames.AnyasLongNightSetupListTitle.text:find('영웅',1,true)and frames.AnyasLongNightSetupOption1.visible
+    and frames.AnyasLongNightSetupOption2.visible and not frames.AnyasLongNightSetupOption3.visible
+    and frames.AnyasLongNightSetupChosen1.visible and not frames.AnyasLongNightSetupChosen2.visible
+    and frames.AnyasLongNightSetupDescription.text:sub(1,#anyaStory)==anyaStory,
     'Setup opens on the hero list with the selected hero story')
-assert(frames.HeroSurvivorSetupWEAPONCaption.text:find('미선택',1,true)and frames.HeroSurvivorSetupWEAPONLabel.text:find('?',1,true))
+assert(frames.AnyasLongNightSetupWEAPONCaption.text:find('미선택',1,true)and frames.AnyasLongNightSetupWEAPONLabel.text:find('?',1,true))
 SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)
-local trinketTile=frames.HeroSurvivorSetupTRINKET;local writes=trinketTile.enableWrites or 0
+local trinketTile=frames.AnyasLongNightSetupTRINKET;local writes=trinketTile.enableWrites or 0
 ClickFrame(trinketTile)
 assert(trinketTile.enabled and trinketTile.enableWrites==writes+2,'A click drops the button focus that made hovers flicker')
 assert(setupBlack.visible and setupBlack.alpha==255,'Equipment option lists retain the black cover')
-assert(frames.HeroSurvivorSetupOption11.visible and not frames.HeroSurvivorSetupOption12.visible,'Every trinket fits one list')
+assert(frames.AnyasLongNightSetupOption11.visible and not frames.AnyasLongNightSetupOption12.visible,'Every trinket fits one list')
 local tenth=SurvivorAugments.Get(SurvivorConfig.startingTrinkets[10]).name
-Event(frames.HeroSurvivorSetupOption10,FRAMEEVENT_MOUSE_ENTER)
-assert(frames.HeroSurvivorSetupDescriptionTitle.text:find(tenth,1,true),'Hovering previews an option')
-Event(frames.HeroSurvivorSetupOption10,FRAMEEVENT_MOUSE_LEAVE)
-assert(frames.HeroSurvivorSetupDescriptionTitle.text:find(SurvivorAugments.Get(chosen).name,1,true),'Leaving restores the choice')
-ClickFrame(frames.HeroSurvivorSetupOption10)
+Event(frames.AnyasLongNightSetupOption10,FRAMEEVENT_MOUSE_ENTER)
+assert(frames.AnyasLongNightSetupDescriptionTitle.text:find(tenth,1,true),'Hovering previews an option')
+Event(frames.AnyasLongNightSetupOption10,FRAMEEVENT_MOUSE_LEAVE)
+assert(frames.AnyasLongNightSetupDescriptionTitle.text:find(SurvivorAugments.Get(chosen).name,1,true),'Leaving restores the choice')
+ClickFrame(frames.AnyasLongNightSetupOption10)
 assert(selects==1 and chosen==SurvivorConfig.startingTrinkets[10])
-assert(frames.HeroSurvivorSetupListTitle.text:find('장신구',1,true)and frames.HeroSurvivorSetupChosen10.visible
-    and not frames.HeroSurvivorSetupChosen1.visible and frames.HeroSurvivorSetupTRINKETCaption.text:find(tenth,1,true),
+assert(frames.AnyasLongNightSetupListTitle.text:find('장신구',1,true)and frames.AnyasLongNightSetupChosen10.visible
+    and not frames.AnyasLongNightSetupChosen1.visible and frames.AnyasLongNightSetupTRINKETCaption.text:find(tenth,1,true),
     'Selecting keeps the list open, marks the choice and updates the summary')
-ClickFrame(frames.HeroSurvivorSetupHERO)
-assert(frames.HeroSurvivorSetupListTitle.text:find('영웅',1,true)and frames.HeroSurvivorSetupHEROActive.visible
-    and not frames.HeroSurvivorSetupTRINKETActive.visible)
-ClickFrame(frames.HeroSurvivorSetupOption1)
-assert(selects==1 and heroSelects==1 and frames.HeroSurvivorSetupChosen1.visible,'A hero card hands the choice to gameplay')
+ClickFrame(frames.AnyasLongNightSetupHERO)
+assert(frames.AnyasLongNightSetupListTitle.text:find('영웅',1,true)and frames.AnyasLongNightSetupHEROActive.visible
+    and not frames.AnyasLongNightSetupTRINKETActive.visible)
+ClickFrame(frames.AnyasLongNightSetupOption1)
+assert(selects==1 and heroSelects==1 and frames.AnyasLongNightSetupChosen1.visible,'A hero card hands the choice to gameplay')
 -- Switching to Putress swaps the preview model and lists only Putress's starting weapons.
 local createUnit,previewSkin=CreateUnit,nil
 CreateUnit=function(...)local unit=createUnit(...);local skin=BlzSetUnitSkin
     BlzSetUnitSkin=function(u,id)if u==unit then previewSkin=id end;return skin(u,id)end;return unit end
-ClickFrame(frames.HeroSurvivorSetupOption2)
+ClickFrame(frames.AnyasLongNightSetupOption2)
 CreateUnit=createUnit
-assert(heroSelects==2 and frames.HeroSurvivorSetupChosen2.visible and not frames.HeroSurvivorSetupChosen1.visible
-    and frames.HeroSurvivorSetupHeroName.text:find(SurvivorConfig.heroes.putress.name,1,true)
+assert(heroSelects==2 and frames.AnyasLongNightSetupChosen2.visible and not frames.AnyasLongNightSetupChosen1.visible
+    and frames.AnyasLongNightSetupHeroName.text:find(SurvivorConfig.heroes.putress.name,1,true)
     and previewSkin==SurvivorConfig.heroes.putress.previewSkin,'The hero card swaps the summary and the preview model')
-ClickFrame(frames.HeroSurvivorSetupWEAPON)
+ClickFrame(frames.AnyasLongNightSetupWEAPON)
 local putressWeapons=SurvivorConfig.heroes.putress.startingWeapons
 for i,id in ipairs(putressWeapons)do
-    assert(frames['HeroSurvivorSetupName'..i].text:find(SurvivorAugments.Get(id).name,1,true),'Putress lists its own starting weapon '..id)
+    assert(frames['AnyasLongNightSetupName'..i].text:find(SurvivorAugments.Get(id).name,1,true),'Putress lists its own starting weapon '..id)
 end
-assert(not frames['HeroSurvivorSetupOption'..(#putressWeapons+1)].visible,'Anya weapons never appear for Putress')
-ClickFrame(frames.HeroSurvivorSetupHERO);ClickFrame(frames.HeroSurvivorSetupOption1)
-assert(heroSelects==3 and frames.HeroSurvivorSetupChosen1.visible)
-ClickFrame(frames.HeroSurvivorSetupReset);assert(resets==1)
+assert(not frames['AnyasLongNightSetupOption'..(#putressWeapons+1)].visible,'Anya weapons never appear for Putress')
+ClickFrame(frames.AnyasLongNightSetupHERO);ClickFrame(frames.AnyasLongNightSetupOption1)
+assert(heroSelects==3 and frames.AnyasLongNightSetupChosen1.visible)
+ClickFrame(frames.AnyasLongNightSetupReset);assert(resets==1)
 assert(setupBlack.visible and setupBlack.alpha==255,'Resetting the preparation screen retains opaque black')
-failStart=true;ClickFrame(frames.HeroSurvivorSetupStart);ClickFrame(frames.HeroSurvivorSetupStart)
+failStart=true;ClickFrame(frames.AnyasLongNightSetupStart);ClickFrame(frames.AnyasLongNightSetupStart)
 assert(starts==1 and failures==1 and failure:find('intentional start failure'))
-assert(not frames.HeroSurvivorSetupRoot.visible and not frames.HeroSurvivorSetupShade.visible)
+assert(not frames.AnyasLongNightSetupRoot.visible and not frames.AnyasLongNightSetupShade.visible)
 SurvivorSetupUI.ShowMenu('normal','firebolt',chosen);failStart=false
-ClickFrame(frames.HeroSurvivorSetupStart);ClickFrame(frames.HeroSurvivorSetupStart)
+ClickFrame(frames.AnyasLongNightSetupStart);ClickFrame(frames.AnyasLongNightSetupStart)
 assert(starts==2 and failures==1,'A fresh preparation can start once after a handled failure')
-local setupRoot,setupShade=frames.HeroSurvivorSetupRoot,frames.HeroSurvivorSetupShade
+local setupRoot,setupShade=frames.AnyasLongNightSetupRoot,frames.AnyasLongNightSetupShade
 for _=1,3 do
     SurvivorSetupUI.ShowMenu('normal','firebolt',chosen)
     for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
-        ClickFrame(frames['HeroSurvivorSetup'..kind])
+        ClickFrame(frames['AnyasLongNightSetup'..kind])
         assert(setupShade.visible and setupShade.alpha==255 and setupRoot.visible)
-        ClickFrame(frames.HeroSurvivorSetupReset)
+        ClickFrame(frames.AnyasLongNightSetupReset)
     end
     SurvivorSetupUI.Hide();SurvivorSetupUI.Hide()
     assert(not setupRoot.visible and not setupShade.visible)
-    assert(frames.HeroSurvivorSetupRoot==setupRoot and frames.HeroSurvivorSetupShade==setupShade,
+    assert(frames.AnyasLongNightSetupRoot==setupRoot and frames.AnyasLongNightSetupShade==setupShade,
         'Menu, option and retry cycles reuse both map-lifetime black-cover siblings')
 end
 for frame,snapshot in pairs(nativeSetupSnapshots)do
@@ -7023,7 +7292,7 @@ const originalPathMap = openMap(baseMapPath);
 const originalPathTerrain = terrainInfo(originalPathMap.read('war3map.w3e'));
 const originalPathInfoBytes = originalPathMap.read('war3map.w3i'), originalPathInfo = mapInfo(originalPathInfoBytes);
 const originalMargins = Array.from({length: 4}, (_,i) => originalPathInfoBytes.readInt32LE(originalPathInfo.cameraOffset + 32 + i * 4));
-// Match InitMapRects and HeroSurvivor.Start's 128-unit inset, rather than treating camera coordinates as playable bounds.
+// Match InitMapRects and AnyasLongNight.Start's 128-unit inset, rather than treating camera coordinates as playable bounds.
 const originalArena = {minX: originalPathTerrain.x + originalMargins[0] * 128 + 128,
     maxX: originalPathTerrain.x + (originalPathTerrain.width - 1 - originalMargins[1]) * 128 - 128,
     minY: originalPathTerrain.y + originalMargins[2] * 128 + 128,
@@ -7086,17 +7355,17 @@ end
 
 for (const profile of ['development', 'playtest', 'release']) {
     const profileBundle = collectSources({profile}).bundle;
-    assert(profileBundle.indexOf('HERO_SURVIVOR_PROFILE = "' + profile + '"') < profileBundle.indexOf('Debug = {'),
+    assert(profileBundle.indexOf('ANYAS_LONG_NIGHT_PROFILE = "' + profile + '"') < profileBundle.indexOf('Debug = {'),
         'The profile must be available before vendor configuration');
     suite('build profile preserves error protection and disables release diagnostics: ' + profile,
         mocks + String.raw`
-HERO_SURVIVOR_PROFILE='` + profile + String.raw`'
+ANYAS_LONG_NIGHT_PROFILE='` + profile + String.raw`'
 InitBlizzard=function()end
 function GetBJMaxPlayerSlots()return 24 end
 oldTimerStart,oldTriggerAddAction,oldTostring=TimerStart,TriggerAddAction,tostring
 `, ['src/05_vendor/DebugUtils.lua', config], String.raw`
-local development=HERO_SURVIVOR_PROFILE=='development'
-local release=HERO_SURVIVOR_PROFILE=='release'
+local development=ANYAS_LONG_NIGHT_PROFILE=='development'
+local release=ANYAS_LONG_NIGHT_PROFILE=='release'
 assert(Debug.settings.USE_NAME_CACHE==development and Debug.settings.AUTO_REGISTER_NEW_NAMES==development)
 assert(Debug.settings.NAME_CACHE_DEPTH==(development and 4 or 0))
 assert(SurvivorConfig.debugCommands==not release and ALICE_Config.PROTECTED_MODE)
@@ -7602,8 +7871,23 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
 }
 {
     const snapshots = new Map(), entries = prepareUIResources(map, snapshots);
-    const texture = entries.get('HeroSurvivorUI\\Transparent.tga');
-    assert(texture && snapshots.size === 2, 'Texture and game interface labels are guarded build inputs');
+    const texture = entries.get('AnyasLongNightUI\\Transparent.tga');
+    const planeName = 'AnyasLongNightUI\\WarningPlane.mdx';
+    const plane = entries.get(planeName);
+    assert(texture && snapshots.size === 3, 'Texture, warning plane and game interface labels are guarded build inputs');
+    assert.deepEqual(plane, fs.readFileSync(path.join(root,'assets/war3mapImported/AnyasLongNightUI/WarningPlane.mdx')));
+    const planeChunks = new Map();
+    for (let at=4;at<plane.length;) {
+        const size=plane.readUInt32LE(at+4);planeChunks.set(plane.toString('ascii',at,at+4),plane.subarray(at+8,at+8+size));at+=8+size;
+    }
+    assert.deepEqual([...planeChunks.keys()],['VERS','MODL','SEQS','MTLS','TEXS','GEOS','BONE','PIVT']);
+    assert.equal(planeChunks.get('SEQS').length,132);
+    assert.equal(planeChunks.get('SEQS').toString('ascii',0,80).split('\0')[0],'Stand');
+    const geoset=planeChunks.get('GEOS');const corners=new Set();
+    for(let i=0;i<4;i++)corners.add([0,1,2].map(axis=>geoset.readFloatLE(12+i*12+axis*4)).join(','));
+    assert.equal(corners.size,4,'Four distinct corners form the rectangular warning');
+    assert.equal(planeChunks.get('MTLS').length,48,'The warning has no animated alpha tracks');
+    assert.equal(planeChunks.get('MTLS').readFloatLE(44),1);
     const definition=fs.readFileSync(path.join(root,'assets/war3mapSkin.txt'));
     const lines=bytes=>bytes.toString('utf8').split(/\r?\n/);
     const sectionOf=(text,key)=>{let section=null;for(const line of lines(text)){const header=line.match(/^\[([^\]]+)\]/);
@@ -7638,15 +7922,18 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.throws(()=>installGameInterfaceLabel(Buffer.from('[FrameDef]\n[framedef]\n'),definition),/Duplicate FrameDef/);
     for (let i = 21; i < texture.length; i += 4) assert.equal(texture[i], 0);
     const installed = map.replace(entries), readback = openMap(installed);
-    assert.deepEqual(readback.read('HeroSurvivorUI\\Transparent.tga'), texture);
-    assert(readback.read('(listfile)').toString('utf8').includes('HeroSurvivorUI\\Transparent.tga'));
+    assert.deepEqual(readback.read('AnyasLongNightUI\\Transparent.tga'), texture);
+    assert.deepEqual(readback.read(planeName),plane);
+    assert(readback.read('war3map.imp').includes(Buffer.from(planeName+'\0')));
+    assert.deepEqual(openMap(fs.readFileSync(baseMapPath)).read(planeName),plane,'Editor and playtest maps share the exact warning plane');
+    assert(readback.read('(listfile)').toString('utf8').includes('AnyasLongNightUI\\Transparent.tga'));
     assert.deepEqual(readback.replace(entries), installed, 'Resource installation is idempotent');
     assert.deepEqual(readback.replace(prepareUIResources(readback)), installed, 'Editor import registration is idempotent');
     const oldImports = map.read('war3map.imp'), imports = readback.read('war3map.imp');
     assert.deepEqual(imports.subarray(8, oldImports.length), oldImports.subarray(8), 'Existing import paths and flags are preserved');
-    assert(imports.includes(Buffer.from('HeroSurvivorUI\\Transparent.tga\0')), 'The editor must retain the imported texture on save');
+    assert(imports.includes(Buffer.from('AnyasLongNightUI\\Transparent.tga\0')), 'The editor must retain the imported texture on save');
     assert.deepEqual(readback.read('war3mapSkin.txt'),entries.get('war3mapSkin.txt'));
-    verifyPreserved(original, installed, ['HeroSurvivorUI\\Transparent.tga', 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
+    verifyPreserved(original, installed, ['AnyasLongNightUI\\Transparent.tga', 'AnyasLongNightUI\\WarningPlane.mdx', 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
     console.log('PASS fully transparent container texture is imported, listed, byte-verified and preserves unrelated map data');
 }
 {
@@ -7654,7 +7941,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const match = ui.match(/BlzFrameSetTexture\(introRoot,\s*"((?:\\.|[^"\\])*)"/);
     assert(match, 'The intro backdrop must declare its actual texture path');
     const texturePath = JSON.parse('"' + match[1] + '"');
-    assert.equal(texturePath, 'HeroSurvivorUI\\Black.tga', 'Runtime texture paths use the actual MPQ import name');
+    assert.equal(texturePath, 'AnyasLongNightUI\\Black.tga', 'Runtime texture paths use the actual MPQ import name');
     assert.deepEqual(map.read(texturePath), blackTexture, 'The runtime path must resolve to the exact opaque black asset inside the saved map');
     console.log('PASS runtime intro texture path resolves to the unchanged opaque black asset in the saved MPQ');
 }
@@ -7664,8 +7951,8 @@ const preserved = verifyPreserved(original, result);
 assert.equal(replaceBundle(changed, bundle), changed, 'Repeated build must be idempotent');
 assert.throws(() => replaceBundle('function main() end', bundle), /marked/);
 assert.throws(() => replaceBundle(old + old, bundle), /Duplicate/);
-assert.equal(old.slice(old.lastIndexOf('-- ===== END src/00_bootstrap/HeroSurvivor.lua =====')),
-    changed.slice(changed.lastIndexOf('-- ===== END src/00_bootstrap/HeroSurvivor.lua =====')));
+assert.equal(old.slice(old.lastIndexOf('-- ===== END src/00_bootstrap/AnyasLongNight.lua =====')),
+    changed.slice(changed.lastIndexOf('-- ===== END src/00_bootstrap/AnyasLongNight.lua =====')));
 console.log(`PASS Lua syntax (${count} sources), repeated bundle replacement, native map script and ${preserved} unrelated entries preserved`);
 {
     const wct = map.read('war3map.wct'), commentEnd = wct.indexOf(0, 8), start = commentEnd + 5;
@@ -7862,7 +8149,7 @@ assert.equal(mergedMetadata.players[0].race, 3);
 assert.equal(mergedMetadata.flags & 0x20, 0x20, 'Fixed player settings must survive');
 assert.deepEqual([mergedMetadata.players[0].x, mergedMetadata.players[0].y],
     [baseMetadata.players[0].x, baseMetadata.players[0].y]);
-const nativeMarker = '-- ===== END src/00_bootstrap/HeroSurvivor.lua =====';
+const nativeMarker = '-- ===== END src/00_bootstrap/AnyasLongNight.lua =====';
 const native = refreshed.script.slice(refreshed.script.indexOf(nativeMarker) + nativeMarker.length).trim();
 const expectedNative = baseMap.read('war3map.lua').toString('utf8')
     .replace(/SetPlayerRacePreference\(Player\(0\), RACE_PREF_\w+\)/, 'SetPlayerRacePreference(Player(0), RACE_PREF_UNDEAD)')

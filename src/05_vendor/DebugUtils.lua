@@ -258,12 +258,12 @@ do; local _, codeLoc = pcall(error, "", 2) --get line number where DebugUtils be
     }
     -- Project profile is declared before vendor loading by build/build.mjs.
     -- Playtests keep automatic error protection without global name-cache metatables.
-    if HERO_SURVIVOR_PROFILE ~= "development" then
+    if ANYAS_LONG_NIGHT_PROFILE ~= "development" then
         Debug.settings.USE_NAME_CACHE = false
         Debug.settings.AUTO_REGISTER_NEW_NAMES = false
         Debug.settings.NAME_CACHE_DEPTH = 0
     end
-    if HERO_SURVIVOR_PROFILE == "release" then
+    if ANYAS_LONG_NIGHT_PROFILE == "release" then
         Debug.settings.enabled = false
         Debug.settings.ALLOW_INGAME_CODE_EXECUTION = false
     end
