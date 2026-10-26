@@ -2764,6 +2764,96 @@ assert(#actors>0,'Ranged enemies can fire exactly at distance 400')
 SurvivorCombat.Cleanup()
 `);
 
+suite('swarm rush warns a lane through the hero, marches a straight block once across it and leaves without kills', mocks + String.raw`
+PATHING_TYPE_WALKABILITY,PLAYER_NEUTRAL_AGGRESSIVE='walk',12
+function GetRandomInt(a,b)return a end
+rushAngles={}
+function GetRandomReal(a,b)if b==2*math.pi and #rushAngles>0 then return table.remove(rushAngles,1)end;return a end
+function IsTerrainPathable()return false end
+for _,name in ipairs({'BlzSetUnitName','BlzSetUnitBaseDamage','BlzSetUnitAttackCooldown','SetUnitScale','SetUnitVertexColor',
+    'ALICE_AddIdentifier','SetUnitCreepGuard','RemoveGuardPosition','BlzUnitDisableAbility','IssueImmediateOrder','SetUnitAnimation'})do
+    _G[name]=function()end
+end
+function SetUnitFacing(unit,facing)unit.facing=facing end
+function BlzGetUnitAttackCooldown()return 1.5 end
+function IssueTargetOrder(unit,order)unit.order=order end
+function IssuePointOrder(unit,order,x,y)unit.order,unit.target=order,{x,y} end
+function GetUnitCurrentOrder(unit)return unit.order or 0 end
+function OrderId(order)return order end
+function AddSpecialEffect(model,x,y)return {model=model,x=x,y=y}end
+function BlzSetSpecialEffectAlpha(e,alpha)e.alpha=alpha end
+function BlzSetSpecialEffectYaw(e,yaw)e.yaw=yaw end
+function GetTriggerUnit()return eventUnit end
+function GetEventDamage()return eventDamage end
+function GetEventDamageSource()return eventSource end
+function BlzSetEventDamage(amount)eventDamage=amount end
+function UnitDamageTarget(source,u,amount)
+    eventUnit,eventSource,eventDamage=u,source,amount
+    for _,t in ipairs(triggers)do if not t.destroyed and t.event=='damage'then t.action()end end
+    hits[#hits+1]={unit=u,damage=eventDamage,source=source};u.life=math.max(0,u.life-eventDamage)
+end
+flashes,cues={},{}
+SurvivorUI.HitFlash=function(fraction)flashes[#flashes+1]=fraction end
+SurvivorUI.Cue=function(kind)cues[#cues+1]=kind end
+SurvivorStage.Get=function(index)return {ids={melee='sm0'..index,ranged='sr0'..index,flying='sf0'..index,boss='sb0'..index},
+    color={180,220,185}}end
+`, [config,metrics,augments,combat], String.raw`
+local c=SurvivorConfig.swarmRush
+local hero,build,units=NewCombat('orbitblade')
+local function Rushers()local list={};for u,r in pairs(units)do if r.rush and not u.removed then list[#list+1]=u end end;return list end
+local function Step(warning,seconds)for _=1,math.floor(seconds/0.02+0.5)do warning.selfInteractions(warning)end end
+assert(SurvivorCombat.WarnRush())
+local warning=actors[#actors]
+assert(warning.identifier=='hsEnemyRushWarning' and warning.hostile,'The warning freezes with other enemy telegraphs')
+assert(math.abs(warning.ax+c.distance)<1e-6 and warning.ay==0 and math.abs(warning.length-2*c.distance)<1e-6,
+    'The lane starts off screen behind the hero and runs the same distance past it')
+local arrows=0
+for _,marker in ipairs(warning.markers)do if marker.model==SurvivorConfig.dashArrowModel then arrows=arrows+1;assert(marker.yaw==0)end end
+assert(#warning.markers==3+arrows and arrows==math.floor(warning.length/c.arrowSpacing),'One lane, two edges and direction arrows')
+assert(warning.markers[1].matrixScale[2]==((c.columns-1)*c.spacing+2*c.hitRadius)/100,'The lane is as wide as the block can hit')
+assert(lastMessage:find('무리 돌진')and cues[1]=='elite')
+SurvivorCombat.StopTime()
+Step(warning,c.warning+1);assert(#Rushers()==0 and not warning.cleaned,'Time stop holds the warning')
+now=9;Step(warning,c.warning-c.brightTime+0.02);assert(warning.markers[1].alpha==c.finalLaneAlpha and #Rushers()==0)
+Step(warning,c.brightTime)
+assert(warning.cleaned and #Rushers()==c.rows*c.columns,'The block appears once the warning ends')
+for _,u in ipairs(Rushers())do
+    local rush=units[u].rush
+    assert(u.speed==c.speed and u.order=='move' and u.facing==0)
+    assert(math.abs(u.target[1]-(u.x+warning.length))<1e-6 and u.target[2]==u.y,'Each unit marches straight down the lane')
+end
+SurvivorCombat.UpdateEnemies(now)
+assert(#hits==0,'Units that have not crossed the hero do not hurt it')
+for _,u in ipairs(Rushers())do u.x=u.x+c.distance+300 end
+SurvivorCombat.UpdateEnemies(now+0.5)
+local inside=0
+for _,u in ipairs(Rushers())do if math.abs(u.y)<=c.hitRadius then inside=inside+1 end end
+assert(inside==2*c.rows and #hits==inside and #flashes==inside,'Only paths crossing the hero hit it, and each hit flashes')
+assert(math.abs(hits[1].damage-SurvivorConfig.enemyDamage*units[hits[1].source].damageScale*c.damage)<1e-6)
+assert(math.abs(flashes[1]-hits[1].damage/hero.maxLife)<1e-9,'The flash strength is damage over max HP')
+for _,u in ipairs(Rushers())do u.x=u.x+100 end
+SurvivorCombat.UpdateEnemies(now+1);assert(#hits==inside,'Each marcher hurts at most once')
+local before=select(1,SurvivorCombat.Counts())
+SurvivorCombat.UpdateEnemies(now+c.life+0.01)
+assert(#Rushers()==0 and select(1,SurvivorCombat.Counts())==before-c.rows*c.columns,'Expired marchers leave without dying')
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('orbitblade')
+hero.x=-4000;rushAngles={0,math.pi}
+assert(SurvivorCombat.WarnRush())
+warning=actors[#actors]
+assert(math.abs(warning.angle-math.pi)<1e-9 and math.abs(warning.ax-(-4000+c.distance))<1e-6,'A wall behind the hero turns the lane around')
+assert(math.abs(warning.length-c.distance-(5000-32-4000))<1e-6,'The lane stops at the arena edge')
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('orbitblade')
+SetLocal(SurvivorCombat.Init,'bounds',{minX=-600,maxX=600,minY=-600,maxY=600})
+assert(not SurvivorCombat.WarnRush() and #actors==0,'A cramped arena has no off-screen start')
+SurvivorCombat.Cleanup()
+hero,build,units=NewCombat('orbitblade')
+SurvivorCombat.SpawnBoss()
+assert(not SurvivorCombat.WarnRush(),'No rush while the boss is out')
+SurvivorCombat.Cleanup()
+`);
+
 suite('risk investigations require explicit live acceptance and search deadlines use paused run time', mocks + String.raw`
 function CreateTextTag()return {}end
 function DestroyTextTag(tag)assert(not tag.destroyed);tag.destroyed=true end
@@ -4250,6 +4340,29 @@ assert(next(frames)==nil,'World tint must not create, recolor, hide or intercept
 GetLocalPlayer=function()return Player(1)end
 set(true);AdvanceVisualTime(.2);set(false,true)
 assert(filter.writes==writes and not filter.visible,'Only the playing client renders the filter')
+`);
+
+suite('hit vignette scales with damage, ignores chip hits during its cooldown and fits the local screen',
+    presentationMocks, [config,'src/30_gameplay/SurvivorUI.lua'], String.raw`
+local c=SurvivorConfig.hitVignette
+local frame=BlzCreateFrameByType('BACKDROP','HSHitVignette',nil)
+SetLocal(SurvivorUI.HitFlash,'hitVignette',frame)
+local function Near(a,b)return math.abs(a-b)<=1 end
+local small=c.minAlpha+(c.maxAlpha-c.minAlpha)*0.01/c.fullFraction
+SurvivorUI.HitFlash(0.01);assert(frame.visible and Near(frame.alpha,small) and math.abs(frame.width-0.8)<1e-9)
+SurvivorUI.HitFlash(0.01);assert(Near(frame.alpha,small),'An equal hit never restarts the flash')
+SurvivorUI.HitFlash(0.5);assert(frame.alpha==c.maxAlpha,'A heavier hit relights at once and caps at maxAlpha')
+AdvanceVisualTime(0.3);local faded=frame.alpha;assert(faded<c.maxAlpha and faded>0)
+SurvivorUI.HitFlash(0.01);assert(frame.alpha==faded,'Chip damage inside the cooldown keeps fading')
+AdvanceVisualTime(c.fade-0.3+0.02);assert(not frame.visible)
+SurvivorUI.HitFlash(0.01);assert(not frame.visible,'The cooldown outlasts the fade, so constant chip damage pulses')
+AdvanceVisualTime(c.cooldown);assert(not Local(SurvivorUI.HitFlash,'hitTimerRunning'),'An idle flash stops its timer')
+function BlzGetLocalClientWidth()return 1920 end
+function BlzGetLocalClientHeight()return 1080 end
+SurvivorUI.HitFlash(0.01);assert(frame.visible and math.abs(frame.width-0.6*16/9)<1e-9,'Edges sit on a widescreen border')
+SurvivorUI.BeginRun();assert(not frame.visible and not Local(SurvivorUI.HitFlash,'hitTimerRunning'))
+GetLocalPlayer=function()return Player(1)end
+frame.alpha=nil;SurvivorUI.HitFlash(0.5);assert(frame.alpha==nil and not frame.visible,'Only the playing client draws the flash')
 `);
 
 suite('combat time stop owns the screen filter across pause, expiry, stage cleanup and restart',
@@ -7874,7 +7987,9 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     const texture = entries.get('AnyasLongNightUI\\Transparent.tga');
     const planeName = 'AnyasLongNightUI\\WarningPlane.mdx';
     const plane = entries.get(planeName);
-    assert(texture && snapshots.size === 3, 'Texture, warning plane and game interface labels are guarded build inputs');
+    assert(texture && snapshots.size === 4, 'Textures, warning plane and game interface labels are guarded build inputs');
+    const vignetteName = 'AnyasLongNightUI\\HitVignette.tga';
+    assert.deepEqual(entries.get(vignetteName), fs.readFileSync(path.join(root,'assets/war3mapImported/AnyasLongNightUI/HitVignette.tga')));
     assert.deepEqual(plane, fs.readFileSync(path.join(root,'assets/war3mapImported/AnyasLongNightUI/WarningPlane.mdx')));
     const planeChunks = new Map();
     for (let at=4;at<plane.length;) {
@@ -7925,6 +8040,8 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.deepEqual(readback.read('AnyasLongNightUI\\Transparent.tga'), texture);
     assert.deepEqual(readback.read(planeName),plane);
     assert(readback.read('war3map.imp').includes(Buffer.from(planeName+'\0')));
+    assert.deepEqual(readback.read(vignetteName),entries.get(vignetteName));
+    assert(readback.read('war3map.imp').includes(Buffer.from(vignetteName+'\0')),'The editor must retain the hit vignette on save');
     assert.deepEqual(openMap(fs.readFileSync(baseMapPath)).read(planeName),plane,'Editor and playtest maps share the exact warning plane');
     assert(readback.read('(listfile)').toString('utf8').includes('AnyasLongNightUI\\Transparent.tga'));
     assert.deepEqual(readback.replace(entries), installed, 'Resource installation is idempotent');
@@ -7933,7 +8050,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.deepEqual(imports.subarray(8, oldImports.length), oldImports.subarray(8), 'Existing import paths and flags are preserved');
     assert(imports.includes(Buffer.from('AnyasLongNightUI\\Transparent.tga\0')), 'The editor must retain the imported texture on save');
     assert.deepEqual(readback.read('war3mapSkin.txt'),entries.get('war3mapSkin.txt'));
-    verifyPreserved(original, installed, ['AnyasLongNightUI\\Transparent.tga', 'AnyasLongNightUI\\WarningPlane.mdx', 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
+    verifyPreserved(original, installed, ['AnyasLongNightUI\\Transparent.tga', 'AnyasLongNightUI\\WarningPlane.mdx', vignetteName, 'war3map.imp', 'war3mapSkin.txt', '(listfile)']);
     console.log('PASS fully transparent container texture is imported, listed, byte-verified and preserves unrelated map data');
 }
 {

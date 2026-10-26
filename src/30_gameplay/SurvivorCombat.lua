@@ -207,7 +207,7 @@ do
     end
     local function ReleaseUnitTime(u, record, now)
         local duration = math.max(0, math.min(now, record.timeStopUntil) - record.timeStopStarted)
-        for _, key in ipairs({"nextShot", "nextBlast", "nextTrait", "supportAt"}) do
+        for _, key in ipairs({"nextShot", "nextBlast", "nextTrait", "supportAt", "rushExpires"}) do
             if record[key] then record[key] = record[key] + duration end
         end
         record.wasPaused = record.timeStopWasPaused
@@ -1890,6 +1890,107 @@ do
             for _, point in ipairs(SurvivorStage.LavaPoints()) do WarnBossBlast(point.x, point.y, point.radius, 1.8, true) end
         end
     end
+    -- Length of the ray from (x, y) along unit (dx, dy) that stays inside the arena.
+    local function ArenaReach(x, y, dx, dy, length)
+        local reach = length
+        if dx > 0 then reach = math.min(reach, (bounds.maxX - 32 - x) / dx)
+        elseif dx < 0 then reach = math.min(reach, (bounds.minX + 32 - x) / dx) end
+        if dy > 0 then reach = math.min(reach, (bounds.maxY - 32 - y) / dy)
+        elseif dy < 0 then reach = math.min(reach, (bounds.minY + 32 - y) / dy) end
+        return math.max(0, reach)
+    end
+    local function SpawnRush(rush)
+        local c = SurvivorConfig.swarmRush
+        for row = 0, c.rows - 1 do
+            for column = 0, c.columns - 1 do
+                local along, side = -row * c.spacing, (column - (c.columns - 1) / 2) * c.spacing
+                local x = rush.ax + rush.ca * along - rush.sa * side
+                local y = rush.ay + rush.sa * along + rush.ca * side
+                if x > bounds.minX and x < bounds.maxX and y > bounds.minY and y < bounds.maxY
+                    and not IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) then
+                    local success, unit = SurvivorCombat.Spawn(false, "melee")
+                    if not success then return end
+                    local record = units[unit]
+                    SetUnitX(unit, x); SetUnitY(unit, y)
+                    SetUnitFacing(unit, rush.angle * bj_RADTODEG)
+                    SetUnitMoveSpeed(unit, c.speed)
+                    record.baseSpeed = GetUnitMoveSpeed(unit)
+                    -- Every rank travels the lane's full length, so the block keeps its shape.
+                    record.rush = {x = x, y = y, endX = x + rush.ca * rush.length, endY = y + rush.sa * rush.length}
+                    record.rushExpires = RunSession.GetElapsed() + c.life
+                    MoveEnemy(unit, record, record.rush.endX, record.rush.endY, 0, true)
+                end
+            end
+        end
+    end
+    local function StepRushWarning(warning)
+        local dt = ALICE_Config.MIN_INTERVAL
+        if not RunSession.IsRunning() or warning.cleaned then return dt end
+        if not Alive(hero) then ALICE_Kill(warning); return dt end
+        if HostileStopped(warning) then return dt end
+        warning.life = warning.life - dt
+        if warning.life > 0 then
+            local c = SurvivorConfig.swarmRush
+            if not warning.bright and warning.life <= c.brightTime then
+                warning.bright = true
+                BlzSetSpecialEffectAlpha(warning.markers[1], c.finalLaneAlpha)
+            end
+            return dt
+        end
+        ALICE_Kill(warning)
+        SpawnRush(warning)
+        return dt
+    end
+    -- The lane passes through the hero's position at warning time; the block starts off screen behind it.
+    function SurvivorCombat.WarnRush()
+        local c = SurvivorConfig.swarmRush
+        if not RunSession.IsRunning() or not Alive(hero) or boss ~= nil or bossDefeated then return false end
+        local cap = math.min(SurvivorConfig.maxEnemies, SurvivorConfig.stageEnemyCaps[stage])
+        if enemyCount + math.ceil(c.rows * c.columns / 2) >= cap then return false end
+        local hx, hy, best = GetUnitX(hero), GetUnitY(hero), nil
+        for _ = 1, 12 do
+            local angle = GetRandomReal(0, 2 * math.pi)
+            local ca, sa = math.cos(angle), math.sin(angle)
+            local back = ArenaReach(hx, hy, -ca, -sa, c.distance)
+            if back >= c.minDistance and not IsTerrainPathable(hx - ca * back, hy - sa * back, PATHING_TYPE_WALKABILITY)
+                and (not best or back > best.back) then
+                best = {angle = angle, back = back}
+                if back >= c.distance - 1 then break end
+            end
+        end
+        if not best then return false end
+        local angle = best.angle
+        local ca, sa = math.cos(angle), math.sin(angle)
+        local forward = ArenaReach(hx, hy, ca, sa, c.distance)
+        local ax, ay, bx, by = hx - ca * best.back, hy - sa * best.back, hx + ca * forward, hy + sa * forward
+        local warning = {identifier = "hsEnemyRushWarning", x = hx, y = hy, z = Height(hx, hy),
+            angle = angle, ca = ca, sa = sa, ax = ax, ay = ay, length = best.back + forward,
+            life = c.warning, markers = {}, isStationary = true, isAnonymous = true,
+            selfInteractions = StepRushWarning, destroy = DestroyObject}
+        objects[warning] = true
+        local danger, width = SurvivorConfig.warningColors.danger, (c.columns - 1) * c.spacing + 2 * c.hitRadius
+        WarningStrip(warning, ax, ay, bx, by, width, danger, c.laneAlpha)
+        for _, side in ipairs({-1, 1}) do
+            local offset = (width / 2 - 2.5) * side
+            local dx, dy = -sa * offset, ca * offset
+            WarningStrip(warning, ax + dx, ay + dy, bx + dx, by + dy, 5, danger, c.edgeAlpha, 6)
+        end
+        -- Arrows along the lane show where the block comes from and where it heads.
+        for distance = c.arrowSpacing / 2, warning.length, c.arrowSpacing do
+            local px, py = ax + ca * distance, ay + sa * distance
+            local arrow = AddSpecialEffect(SurvivorConfig.dashArrowModel, px, py)
+            warning.markers[#warning.markers + 1] = arrow
+            BlzSetSpecialEffectScale(arrow, SurvivorConfig.bossDashArrowScale)
+            BlzSetSpecialEffectYaw(arrow, angle)
+            BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
+        end
+        warningUntil = math.max(warningUntil, RunSession.GetElapsed() + c.warning)
+        SurvivorUI.Alert(c.warning + 1, "|cffff7060무리 돌진|r · 붉은 통로 바깥으로 벗어나세요", 55, "rush")
+        SurvivorUI.Cue("elite")
+        TrackHostile(warning)
+        ALICE_Create(warning)
+        return true
+    end
     local function ReleaseSpecial(self)
         local record = units[self.source]
         if record and record.special == self then
@@ -2251,7 +2352,8 @@ do
         MoveEnemy(unit, record, points[2].x, points[2].y, 0, true)
         return unit
     end
-    function SurvivorCombat.ReleaseCourier(unit)
+    -- Removes a living enemy without a kill: no XP, drops or death effects.
+    local function ReleaseEnemy(unit)
         local record = units[unit]
         if not record then return end
         statusUnits[unit] = nil
@@ -2262,6 +2364,7 @@ do
         units[unit] = nil
         RemoveUnit(unit)
     end
+    function SurvivorCombat.ReleaseCourier(unit) ReleaseEnemy(unit) end
     function SurvivorCombat.SpawnBoss()
         return SurvivorCombat.Spawn(false, "boss")
     end
@@ -2398,7 +2501,7 @@ do
         if not RunSession.IsRunning() or not Alive(hero) then return end
         UpdateBonuses(elapsed)
         orderPhase = orderPhase % SurvivorConfig.enemyOrderGroups + 1
-        local guardians = {}
+        local guardians, rushHits = {}, {}
         for u, record in pairs(units) do
             if record.trait == "guardian" and Enemy(u) then
                 guardians[#guardians + 1] = {unit = u, x = GetUnitX(u), y = GetUnitY(u)}
@@ -2429,6 +2532,19 @@ do
                             point = record.courier[record.waypoint]
                         end
                         MoveEnemy(u, record, point.x, point.y, 0, true)
+                    elseif record.rush then
+                        -- Straight marchers never re-aim; each one hurts at most once when its path crosses the hero.
+                        local rush, x, y, crossed = record.rush, GetUnitX(u), GetUnitY(u), false
+                        if not rush.hit and SegmentDistanceSquared(GetUnitX(hero), GetUnitY(hero), rush.x, rush.y, x, y)
+                            <= SurvivorConfig.swarmRush.hitRadius^2 then
+                            rush.hit, crossed = true, true
+                            rushHits[#rushHits + 1] = u
+                        end
+                        rush.x, rush.y = x, y
+                        if elapsed >= record.rushExpires or (x - rush.endX)^2 + (y - rush.endY)^2 < 60^2 then
+                            -- A marcher hitting on this scan stays until its damage source is used below.
+                            if crossed then record.releaseRush = true else ReleaseEnemy(u) end
+                        else MoveEnemy(u, record, rush.endX, rush.endY, 0, true) end
                     elseif record.profile then
                         local profile = record.profile
                         local dx, dy = GetUnitX(hero) - GetUnitX(u), GetUnitY(hero) - GetUnitY(u)
@@ -2460,6 +2576,16 @@ do
                     end
                 elseif not record.alive and record.removeAt and elapsed >= record.removeAt then units[u] = nil; RemoveUnit(u) end
             end
+        end
+        -- Damage after the scan: a lethal hit may finish the run and replace the unit table.
+        for _, u in ipairs(rushHits) do
+            local record = units[u]
+            if record and Enemy(u) then
+                HurtHero(u, SurvivorConfig.enemyDamage * record.damageScale * SurvivorConfig.swarmRush.damage, "무리 돌진",
+                    "붉은 통로가 표시되면 화살표와 수직으로 벗어나세요.")
+                if not RunSession.IsRunning() or not Alive(hero) then return end
+            end
+            if units[u] and units[u].releaseRush then ReleaseEnemy(u) end
         end
     end
     function SurvivorCombat.MaintainInventoryPause()
@@ -2795,6 +2921,7 @@ do
                 if damage > 0 then
                     if #recentDamage == 5 then table.remove(recentDamage, 1) end
                     recentDamage[#recentDamage + 1] = entry
+                    if not entry.escaped and SurvivorUI.HitFlash then SurvivorUI.HitFlash(damage / BlzGetUnitMaxHP(hero)) end
                 end
             elseif record and record.shieldSource and Enemy(record.shieldSource)
                 and (GetUnitX(target) - GetUnitX(record.shieldSource))^2 + (GetUnitY(target) - GetUnitY(record.shieldSource))^2 <= 400^2 then

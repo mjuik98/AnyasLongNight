@@ -105,6 +105,44 @@ do
         local state = FrameState(frame)
         if state.visible ~= visible then BlzFrameSetVisible(frame, visible); state.visible = visible end
     end
+    -- A UI frame, not a cine filter: the world filter belongs to time stop.
+    local hitVignette, hitTimer, hitTimerRunning = nil, nil, false
+    local hitAlpha, hitPeak, hitHold, hitRate = 0, 0, 0, 0
+    local function PaintHitVignette(alpha)
+        hitAlpha = alpha
+        if not hitVignette or GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        local opacity = math.floor(alpha + 0.5)
+        if opacity > 0 then
+            -- Stretch to the local screen so the red edges sit on its real borders.
+            local width = BlzGetLocalClientWidth and BlzGetLocalClientWidth() or 0
+            local height = BlzGetLocalClientHeight and BlzGetLocalClientHeight() or 0
+            local aspect = width > 0 and height > 0 and width / height or 4 / 3
+            BlzFrameSetSize(hitVignette, 0.6 * aspect, 0.6)
+            BlzFrameSetAlpha(hitVignette, opacity)
+        end
+        BlzFrameSetVisible(hitVignette, opacity > 0)
+    end
+    local function StopHitVignette()
+        if hitTimer and hitTimerRunning then PauseTimer(hitTimer) end
+        hitTimerRunning, hitPeak, hitHold, hitRate = false, 0, 0, 0
+        PaintHitVignette(0)
+    end
+    function SurvivorUI.HitFlash(fraction)
+        if not hitVignette then return end
+        local c = SurvivorConfig.hitVignette
+        local target = c.minAlpha + (c.maxAlpha - c.minAlpha) * math.max(0, math.min(1, fraction / c.fullFraction))
+        if target <= hitAlpha or (hitHold > 0 and target <= hitPeak) then return end
+        hitPeak, hitHold, hitRate = target, c.cooldown, target / c.fade
+        PaintHitVignette(target)
+        if hitTimerRunning then return end
+        hitTimer = hitTimer or CreateTimer()
+        hitTimerRunning = true
+        TimerStart(hitTimer, 0.02, true, function()
+            hitHold = math.max(0, hitHold - 0.02)
+            if hitAlpha > 0 then PaintHitVignette(math.max(0, hitAlpha - hitRate * 0.02)) end
+            if hitAlpha == 0 and hitHold == 0 then StopHitVignette() end
+        end)
+    end
     local function SetText(frame, text)
         local state = FrameState(frame)
         if state.text ~= text then BlzFrameSetText(frame, text); state.text = text end
@@ -929,6 +967,7 @@ do
     end
     function SurvivorUI.BeginRun()
         SurvivorUI.SetTimeStopFilter(false, true)
+        StopHitVignette()
         if not initialized then return end
         -- Reuse the one map-lifetime handle after a failed run; never duplicate it.
         if speechTimer == nil then speechTimer = CreateTimer(); speechTimerPaused = true end
@@ -997,6 +1036,14 @@ do
         -- The opaque backdrop covers the world and its overlays. Leave renderer-owned
         -- origin frames and undocumented child indices alone when opening a modal UI.
         AcquireCinematicFrames()
+        -- Created first and display-only, so every HUD panel draws above the flash.
+        hitVignette = BlzCreateFrameByType("BACKDROP", "HSHitVignette", parent, "", 0)
+        BlzFrameSetAbsPoint(hitVignette, FRAMEPOINT_CENTER, 0.4, 0.3)
+        BlzFrameSetSize(hitVignette, 0.8, 0.6)
+        BlzFrameSetTexture(hitVignette, SurvivorConfig.hitVignette.texture, 0, true)
+        BlzFrameSetEnable(hitVignette, false)
+        BlzFrameSetLevel(hitVignette, 1)
+        BlzFrameSetVisible(hitVignette, false)
         expeditionRoot = FramedPanel(parent, "HSExpedition", 715, 0.29, 0.069)
         BlzFrameSetAbsPoint(expeditionRoot, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
         BlzFrameSetLevel(expeditionRoot, 15)

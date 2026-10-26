@@ -208,7 +208,17 @@ export function prepareUIResources(map, snapshots = new Map()) {
     }
     assert.equal(chunks.get('TEXS')?.toString('ascii', 4, 264).split('\0')[0], 'ReplaceableTextures\\CameraMasks\\White_mask.blp');
     snapshots.set(planeAsset, plane);
-    const resources = new Map([[name, bytes], [planeName, plane]]);
+    // Red edge flash on hero damage; the frame's alpha sets the strength.
+    const vignetteName = 'AnyasLongNightUI\\HitVignette.tga';
+    const vignetteAsset = path.join(root, 'assets/war3mapImported/AnyasLongNightUI/HitVignette.tga');
+    const vignette = fs.readFileSync(vignetteAsset);
+    assert.equal(vignette.length, 18 + 128 * 128 * 4, 'Unexpected hit vignette texture size');
+    assert.equal(vignette[2], 2); assert.equal(vignette.readUInt16LE(12), 128); assert.equal(vignette.readUInt16LE(14), 128);
+    assert.equal(vignette[16], 32); assert.equal(vignette[17] & 15, 8);
+    const centre = 18 + (64 * 128 + 64) * 4, corner = 18;
+    assert(vignette[centre + 3] === 0 && vignette[corner + 3] === 255, 'Hit vignette must keep the screen centre clear');
+    snapshots.set(vignetteAsset, vignette);
+    const resources = new Map([[name, bytes], [planeName, plane], [vignetteName, vignette]]);
     const imports = map.read('war3map.imp');
     assert(imports && imports.length >= 8 && imports.readUInt32LE(0) === 1, 'Invalid map import table');
     const count = imports.readUInt32LE(4);

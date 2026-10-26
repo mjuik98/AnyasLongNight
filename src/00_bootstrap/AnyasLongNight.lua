@@ -22,6 +22,7 @@ do
     local gearOffers
     local eventOffers
     local stageTransition, nextHazard = false, 35
+    local nextRush = SurvivorConfig.swarmRush.firstAt
     local runSerial = 0
     local firstEvolution, peakEnemies, peakVisuals = nil, 0, 0
 
@@ -286,6 +287,12 @@ do
             nextHazard = stageElapsed + 22
             SurvivorCombat.WarnLava()
         end
+        if not bossStarted and stageElapsed >= nextRush then
+            local rush = SurvivorConfig.swarmRush
+            -- A blocked rush (crowded field, wall behind the hero) retries shortly instead of skipping its turn.
+            local warned = stageElapsed < timing.bossStart - rush.bossMargin and SurvivorCombat.WarnRush()
+            nextRush = stageElapsed + (warned and rush.interval or rush.retry)
+        end
         QueueLevelRewards()
         choiceGrace = math.max(0, choiceGrace - dt)
         if queueHead <= #queuedLevels and choiceGrace == 0 then
@@ -372,7 +379,7 @@ do
     end
     function AnyasLongNight.NextStage()
         if RunSession.GetState() ~= "STAGE_CLEAR" or stageTransition or gearOffers or stage >= SurvivorConfig.stages then return false end
-        stageTransition, nextHazard = true, 35
+        stageTransition, nextHazard, nextRush = true, 35, SurvivorConfig.swarmRush.firstAt
         stage, stageStarted, bossEngagedAt = stage + 1, RunSession.GetElapsed(), nil
         stageStartKills = kills
         SurvivorEquipment.SetStage(stage)
@@ -389,7 +396,7 @@ do
     end
     local function Start(startingWeapon, startingTrinket)
         runSerial = runSerial + 1
-        stageTransition, nextHazard = false, 35
+        stageTransition, nextHazard, nextRush = false, 35, SurvivorConfig.swarmRush.firstAt
         gearOffers = nil
         RunSession.Finish("restarted")
         SurvivorUI.HidePanel()

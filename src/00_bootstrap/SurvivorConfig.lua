@@ -66,6 +66,16 @@ SurvivorConfig = {
     -- Elite arrows use a fixed offset/spacing; larger boss arrows evenly cover the path to its endpoint.
     dashArrowModel = [[abilities\spells\other\spellmarker\spellarrowred.mdl]], dashArrowScale = 1.2, dashArrowOffset = 150,
     dashArrowSpacing = 150, bossDashArrowScale = 1.6,
+    -- A warned lane through the hero, then a block of chasers marches straight across it.
+    -- Combat seconds per stage; no rush starts within bossMargin of the boss.
+    swarmRush = {firstAt = 50, interval = 50, retry = 5, bossMargin = 15, warning = 2.5,
+        rows = 3, columns = 6, spacing = 110, distance = 1500, minDistance = 1100,
+        speed = 340, life = 12, hitRadius = 85, damage = 1.5,
+        laneAlpha = 60, finalLaneAlpha = 120, edgeAlpha = 210, brightTime = 0.65, arrowSpacing = 300},
+    -- Red screen-edge flash on hero damage; strength follows damage / max HP.
+    -- Within the cooldown only a heavier hit relights it, so chip damage pulses instead of glowing.
+    hitVignette = {texture = [[AnyasLongNightUI\HitVignette.tga]], minAlpha = 90, maxAlpha = 235,
+        fullFraction = 0.12, cooldown = 0.6, fade = 0.5},
     -- One effect per role: weapon procs and set effects never share a model.
     fireBurstModel = [[abilities\spells\other\renault\firenova.mdl]],
     emberBurstModel = [[Abilities\Spells\Orc\WarStomp\WarStompCaster.mdl]],
