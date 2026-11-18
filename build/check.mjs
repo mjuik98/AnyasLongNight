@@ -3211,6 +3211,42 @@ assert(Burst(units,build),'Status-death set effects keep working after a failed 
 SurvivorCombat.Cleanup()
 `);
 
+suite('combat trigger failures reach the run owner and a failed death proc keeps its kill reward', mocks + String.raw`
+function AddLightningEx()return {}end
+`, [config, metrics, augments, combat], String.raw`
+local failures={}
+RunSession.Fail=function(message)failures[#failures+1]=tostring(message)end
+local _,build,units=NewCombat('plaguedart')
+local kills=0
+SetLocal(SurvivorCombat.Init,'onKill',function()kills=kills+1 end)
+build.stats.sets.gravewarden=true
+local apply=Local(SurvivorCombat.UpdateWeapons,'ApplyStatus');local hit=Local(SurvivorCombat.UpdateWeapons,'Hit')
+local near=EnemyAt(units,100,100,false);near.life=100000
+local cursed=EnemyAt(units,100,0,false);cursed.life=100000
+now=10 -- Past the initial soul-burst cooldown; the curse is applied at this time.
+apply(cursed,'plaguedart',{curse=SurvivorConfig.status.curseMax},1);hit(cursed,40,'plaguedart',false,false,1,{})
+local procVisual=Local(SurvivorCombat.UpdateWeapons,'ProcVisual')
+SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',function()error('injected proc failure')end)
+cursed.life=0;GetTriggerUnit=function()return cursed end
+for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
+SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',procVisual)
+assert(kills==1,'A failed death proc must not cancel the kill reward')
+assert(#failures==1 and failures[1]:find('injected proc failure'),'The proc failure reaches RunSession.Fail')
+assert(Local(SurvivorCombat.Cleanup,'inStatusProc')==false,'The status-death guard is released')
+-- Hero damage: Debug.try would only print; the run owner must hear about it.
+local hero=Local(SurvivorCombat.Init,'hero')
+local risk=SurvivorExpedition.RiskActive
+SurvivorExpedition.RiskActive=function()error('injected damage failure')end
+GetTriggerUnit=function()return hero end
+GetEventDamage=function()return 10 end
+GetEventDamageSource=function()return near end
+BlzSetEventDamage=function()end
+for _,t in ipairs(triggers)do if t.event=='damage' and not t.destroyed then t.action()end end
+SurvivorExpedition.RiskActive=risk
+assert(#failures==2 and failures[2]:find('injected damage failure'),'Damage trigger failures reach RunSession.Fail')
+SurvivorCombat.Cleanup()
+`);
+
 suite('stat recalculation keeps combat-owned pause flags and drops derived keys that are no longer produced', mocks,
     [config, augments], String.raw`
 local build=SurvivorAugments.NewBuild('firebolt')
@@ -3708,6 +3744,20 @@ assert(not pcall(SurvivorEquipment.Cleanup),'The trigger failure is reported')
 DestroyTrigger=destroy
 assert(first.removed and second.removed,'Owned gear is removed even when trigger teardown fails')
 NewGear();SurvivorEquipment.Cleanup()
+`);
+suite('equipment item-event failures reach the run owner instead of only printing', gearMocks,
+    [config, metrics, augments, equipment], String.raw`
+local hero=NewGear()
+local failures={}
+RunSession.Fail=function(message)failures[#failures+1]=tostring(message)end
+local trigger=Local(SurvivorEquipment.Init,'eventTrigger')
+local manipulated=GetManipulatedItem
+GetTriggerUnit=function()return hero end
+GetManipulatedItem=function()error('injected item event failure')end
+trigger.action()
+GetManipulatedItem=manipulated
+assert(#failures==1 and failures[1]:find('injected item event failure'),'Item-event failures reach RunSession.Fail')
+SurvivorEquipment.Cleanup()
 `);
 
 suite('equipment and native trinkets omit redundant text while preserving stats and cleanup mechanics', gearMocks + String.raw`
@@ -7522,6 +7572,38 @@ for _,fixture in ipairs({
 end
 `);
 
+suite('stage teardown attempts every native restore after failures and permits a fresh arena', stageMocks,
+    [config,metrics,'src/30_gameplay/SurvivorStage.lua'], String.raw`
+local bounds=bj_mapInitialPlayableArea
+SurvivorStage.Init(bounds);SurvivorStage.Apply(3)
+local cells,owned=Local(SurvivorStage.Apply,'cells'),Local(SurvivorStage.Apply,'painted')
+local rect,height,weather=Local(SurvivorStage.Apply,'rect'),Local(SurvivorStage.Apply,'heightLocation'),Local(SurvivorStage.Apply,'weather')
+assert(#cells>1 and #owned>1 and weather,'The fixture owns pathing, terrain and weather')
+local first=cells[1]
+local function Key(x,y)return math.floor(x/32)..":"..math.floor(y/32)end
+local setPathable,removeRect=SetTerrainPathable,RemoveRect
+local failedPathing=0
+SetTerrainPathable=function(x,y,kind,walkable)
+    if x==first.x and y==first.y then failedPathing=failedPathing+1;error('injected pathing failure')end
+    setPathable(x,y,kind,walkable)
+end
+RemoveRect=function(r)if r==rect then error('injected rect failure')end;removeRect(r)end
+local ok,message=pcall(SurvivorStage.Cleanup)
+SetTerrainPathable,RemoveRect=setPathable,removeRect
+assert(not ok and message:find('injected pathing failure') and message:find('injected rect failure'),'Every failure is reported')
+assert(failedPathing==1,'A failed cell is skipped, not replayed')
+for i=2,#cells do
+    local cell=cells[i]
+    if Key(cell.x,cell.y)~=Key(first.x,first.y)then
+        assert(blocked[Key(cell.x,cell.y)]==not cell.walkable,'Later pathing cells are restored after one failure')
+    end
+end
+for _,cell in ipairs(owned)do assert(TerrainCell(cell.x,cell.y).tile==cell.tile,'Terrain is restored after a pathing failure')end
+for _,e in ipairs(sceneEffects)do assert(e.destroyed,'Scenery is destroyed after earlier failures')end
+assert(weather.removed and height.removed,'Weather and height location are released')
+assert(Local(SurvivorStage.Apply,'rect')==nil and #Local(SurvivorStage.Apply,'cells')==0,'Ownership is detached even when natives fail')
+SurvivorStage.Init(bounds);SurvivorStage.Apply(1);SurvivorStage.Cleanup()
+`);
 suite('stage reachability reuses native samples only within one geometry build and reports transition work', stageMocks,
     [config,metrics,'src/30_gameplay/SurvivorStage.lua'], String.raw`
 SurvivorMetrics.Enable(true)
