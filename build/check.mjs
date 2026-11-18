@@ -14,7 +14,7 @@ import {collectSources, replaceBundle, verifyPreserved, refreshBase, terrainInfo
     installGrowthObjects, weaponObjectPattern, weaponObjectCount, additionalWeaponObjects, installPutressHero, putressHero,
     cleanItemTooltipText, cleanItemTooltipEntries, prepareItemTooltipCleanup,
     removeGoldObjectData, removeGoldStrings, removeGoldMisc,
-    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, installGameInterfaceLabel, root, baseMapPath} from './build.mjs';
+    prepareGoldRemoval, validateGoldRemoval, installExperienceCurve, prepareUIResources, installGameInterfaceLabel, installMapVersion, mapVersion, root, baseMapPath} from './build.mjs';
 import {openMap} from './mpq.mjs';
 import {syncBase} from './sync-base.mjs';
 const testArgs = process.argv.slice(2);
@@ -8214,6 +8214,18 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.equal(texturePath, 'AnyasLongNightUI\\Black.tga', 'Runtime texture paths use the actual MPQ import name');
     assert.deepEqual(map.read(texturePath), blackTexture, 'The runtime path must resolve to the exact opaque black asset inside the saved map');
     console.log('PASS runtime intro texture path resolves to the unchanged opaque black asset in the saved MPQ');
+}
+{
+    const wts = map.read('war3map.wts'), info = map.read('war3map.w3i');
+    const labelled = installMapVersion(wts, info, '9.9z'), text = labelled.toString('utf8');
+    assert(text.includes('|cff8080ff포세이큰: 안야의 긴 밤 9.9z|r') && text.includes('포세이큰 왕국 이전의 하룻밤 9.9z'));
+    assert.equal(text.length - wts.toString('utf8').length, 0, 'Same-length labels keep every other byte');
+    assert.deepEqual(installMapVersion(labelled, info, '9.9z'), labelled, 'Map version installation is idempotent');
+    assert.deepEqual(installMapVersion(installMapVersion(wts, info, '9.9z'), info), installMapVersion(wts, info));
+    assert.throws(() => installMapVersion(wts, info, '0.1'), /Invalid map version/);
+    assert(mapVersion === '0.1d' && map.read('war3map.wts').toString('utf8').includes('안야의 긴 밤 ' + mapVersion + '|r'),
+        'The test map carries the current version label');
+    console.log('PASS map name and loading subtitle carry the managed version label');
 }
 const changed = replaceBundle(old, bundle);
 const result = map.replace(new Map([['war3map.lua', Buffer.from(changed)]]));

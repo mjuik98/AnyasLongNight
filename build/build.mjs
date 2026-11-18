@@ -1466,6 +1466,29 @@ function stringTable(bytes) {
     assert(entries.size > 0, 'Invalid map string table');
     return entries;
 }
+// Release label shown in the map name and loading-screen subtitle. World Editor keeps both
+// in war3map.wts; the map name string must be the one war3map.w3i references.
+export const mapVersion = '0.1d';
+const mapVersionStrings = [
+    {key: 'name', pattern: /^(\|cff8080ff포세이큰: 안야의 긴 밤 )\d+\.\d+[a-z](\|r)$/},
+    {key: 'subtitle', pattern: /^(포세이큰 왕국 이전의 하룻밤 )\d+\.\d+[a-z]()$/},
+];
+export function installMapVersion(wts, info, version = mapVersion) {
+    assert(/^\d+\.\d+[a-z]$/.test(version), 'Invalid map version: ' + version);
+    const strings = stringTable(wts), expected = new Map();
+    for (const {key, pattern} of mapVersionStrings) {
+        const ids = [...strings].filter(([, text]) => pattern.test(text)).map(([id]) => id);
+        assert.equal(ids.length, 1, 'Expected one versioned map string: ' + key);
+        expected.set(ids[0], strings.get(ids[0]).replace(pattern, (_, head, tail) => head + version + tail));
+        if (key === 'name') assert.equal(Number(mapInfo(info).name.match(/^TRIGSTR_(\d+)$/)?.[1]), ids[0],
+            'Map name must use the versioned string');
+    }
+    const updated = Buffer.from(wts.toString('utf8').replace(/^((?:﻿)?STRING[ \t]+(\d+)[ \t]*\r?\n(?:\/\/[^\r\n]*\r?\n|[ \t]*\r?\n)*\{[ \t]*\r?\n)([\s\S]*?)(\r?\n\})/gm,
+        (whole, header, id, text, end) => expected.has(Number(id)) ? header + expected.get(Number(id)) + end : whole));
+    const after = stringTable(updated); assert.equal(after.size, strings.size, 'Map version changed string count');
+    for (const [id, text] of strings) assert.equal(after.get(id), expected.get(id) ?? text, 'Map version readback differs: ' + id);
+    return updated;
+}
 export function refreshBase(before, base, bundle) {
     const test = openMap(before), source = openMap(base), changes = new Map();
     assert(test.read('war3map.lua')?.toString('utf8').includes(firstMarker), 'Input must be a AnyasLongNight test map');
@@ -1720,6 +1743,9 @@ function main() {
     patched = openMap(patched).replace(talents.entries);
     const weaponTooltips = prepareWeaponTooltips(openMap(patched),snapshots,new Map([...itemTooltips.assets,...talents.assets]));
     patched = openMap(patched).replace(weaponTooltips.entries);
+    const versioned = openMap(patched);
+    const mapLabel = new Map([['war3map.wts', installMapVersion(versioned.read('war3map.wts'), versioned.read('war3map.w3i'))]]);
+    patched = versioned.replace(mapLabel);
     const companionAssets = new Map([...bonusPickups.assets, ...bonusProps.assets, ...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []), ...growth.assets,
         ...itemTooltips.assets, ...interfaceTooltip.assets, ...statDetails.assets, ...regeneration.assets, ...talents.assets, ...weaponTooltips.assets]);
     // replace() already compacts its own output; this also drops orphaned data an unchanged input carried in.
@@ -1732,7 +1758,7 @@ function main() {
     validateGoldRemoval(preparedMap);
     const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
         ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []), ...growth.entries.keys(),
-        ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...bonusProps.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(), ...bonusPickups.entries.keys(),
+        ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...bonusProps.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(), ...mapLabel.keys(), ...bonusPickups.entries.keys(),
         ...(map.read('(listfile)').equals(preparedMap.read('(listfile)')) ? [] : ['(listfile)']),
         ...(experience ? ['war3mapMisc.txt'] : [])])];
     const preserved = verifyPreserved(original, patched, changedEntries);
