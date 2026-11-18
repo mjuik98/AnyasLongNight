@@ -881,7 +881,7 @@ for _,failureKind in ipairs({'DestroyTrigger','DestroyEffect','ALICE_Kill','Remo
     SurvivorCombat.CastBlades()
     local object=actors[1];object.markers={AddSpecialEffect('marker',0,0),AddSpecialEffect('marker',0,0)}
     local markers=object.markers
-    local height=Local(SurvivorCombat.Init,'heightLocation');local group=Local(SurvivorCombat.Init,'queryGroup')
+    local group=Local(SurvivorCombat.Init,'queryGroup')
     state='STAGE_CLEAR';SurvivorCombat.ClearBattlefieldAsync(function()error('stale completion')end)
     local timer=timers[#timers];local stale=timer.callback
     local realFunction=_G[failureKind];local first=true;local calls=0
@@ -893,7 +893,7 @@ for _,failureKind in ipairs({'DestroyTrigger','DestroyEffect','ALICE_Kill','Remo
     local ok,message=pcall(SurvivorCombat.Cleanup)
     _G[failureKind]=realFunction
     assert(not ok and tostring(message):find('injected '..failureKind..' failure'))
-    assert(timer.destroyed and not SurvivorCombat.IsClearing() and height.removed)
+    assert(timer.destroyed and not SurvivorCombat.IsClearing())
     if failureKind~='DestroyGroup' then assert(group.destroyed)end
     assert(Local(SurvivorCombat.Init,'hero')==nil and Local(SurvivorCombat.Init,'queryGroup')==nil)
     assert(Local(SurvivorCombat.Init,'damageTrigger')==nil and Local(SurvivorCombat.Init,'deathTrigger')==nil)
@@ -3083,6 +3083,8 @@ function GetRectMinX(rect)return rect.minX end
 function GetRectMaxX(rect)return rect.maxX end
 function GetRectMinY(rect)return rect.minY end
 function GetRectMaxY(rect)return rect.maxY end
+function GetRectCenterX(rect)return (rect.minX+rect.maxX)/2 end
+function GetRectCenterY(rect)return (rect.minY+rect.maxY)/2 end
 function IsTerrainPathable()return false end
 function BlzSetHeroProperName()if failName then error('injected hero name failure')end end
 SurvivorUI={HidePanel=function()end,BeginRun=function()end,ShowResult=function(reason)resultReason=reason end}
@@ -3103,7 +3105,7 @@ CreateGroup=function()error('injected group initialization failure')end
 assert(not AnyasLongNight.BeginRun())
 CreateGroup=createGroup
 assert(RunSession.GetState()=='FINISHED' and resultReason=='error')
-assert(world[#world].removed and Local(SurvivorCombat.Init,'hero')==nil and Local(SurvivorCombat.Init,'heightLocation')==nil)
+assert(world[#world].removed and Local(SurvivorCombat.Init,'hero')==nil)
 assert(storyCleaned and inventoryCleaned and loadoutCleaned and equipmentCleaned and stageCleaned)
 assert(AnyasLongNight.CanRetrySame(),'Partial initialization must not consume the selected setup')
 failName=true;assert(not AnyasLongNight.RetrySame())
@@ -3122,6 +3124,8 @@ function GetRectMinX(rect)return rect.minX end
 function GetRectMaxX(rect)return rect.maxX end
 function GetRectMinY(rect)return rect.minY end
 function GetRectMaxY(rect)return rect.maxY end
+function GetRectCenterX(rect)return (rect.minX+rect.maxX)/2 end
+function GetRectCenterY(rect)return (rect.minY+rect.maxY)/2 end
 function IsTerrainPathable()return false end
 function BlzSetHeroProperName()end
 function ALICE_CallPeriodic(fn) periodic=fn;return fn end
@@ -4477,6 +4481,8 @@ function GetRectMinX(r)return r.minX end
 function GetRectMinY(r)return r.minY end
 function GetRectMaxX(r)return r.maxX end
 function GetRectMaxY(r)return r.maxY end
+function GetRectCenterX(r)return (r.minX+r.maxX)/2 end
+function GetRectCenterY(r)return (r.minY+r.maxY)/2 end
 SurvivorStage.Get=function(index)return {name="stage "..index,mission="mission",hint="hint"}end
 -- Most UI suites isolate Story; the integrated Stage suite below exercises real ownership.
 stageSceneProps={}
@@ -6032,13 +6038,12 @@ state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);selectedUnit=he
 SurvivorStory.ShowInterlude(1,hero,function()end)
 local scene=Local(SurvivorStory.Cleanup,'sceneEffects')
 local old=Local(SurvivorStory.Cleanup,'motion').timer;local camera=Local(SurvivorStory.Cleanup,'cameraGuardTimer')
-local location=Local(SurvivorStory.Cleanup,'sceneLocation')
 local timerDestroy,effectDestroy=DestroyTimer,DestroyEffect
 function DestroyTimer(timer)if timer==old then error('motion destroy failure')end;timerDestroy(timer)end
 function DestroyEffect(effect)if effect==scene[1]then error('actor destroy failure')end;effectDestroy(effect)end
 local ok,message=pcall(SurvivorStory.Cleanup)
 assert(not ok and message:find('motion destroy failure')and message:find('actor destroy failure'))
-assert(not old.running and camera.destroyed and location.removed and hero.visible and selectedUnit==hero)
+assert(not old.running and camera.destroyed and hero.visible and selectedUnit==hero)
 for index=2,#scene do assert(scene[index].destroyed,'A failed native must not abandon later actors')end
 assert(Local(SurvivorStory.Cleanup,'motion')==nil and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil)
 DestroyTimer,DestroyEffect=timerDestroy,effectDestroy;effectDestroy(scene[1]);timerDestroy(old)
@@ -6114,7 +6119,7 @@ for _,fault in ipairs({'effect hide','effect sink','portrait hide'})do
         if fault~='portrait hide'or unit~=firstProxy then assert(unit.visible==false)end
     end
     assert(Local(SurvivorStory.Cleanup,'motion')==nil and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil
-        and Local(SurvivorStory.Cleanup,'sceneLocation')==nil)
+        and Local(SurvivorStory.Cleanup,'sceneX')==nil)
     BlzSetSpecialEffectAlpha,ShowUnit,BlzSetSpecialEffectPosition,DestroyEffect,RemoveUnit=
         effectAlpha,unitVisibility,effectPosition,effectDestroy,nativeRemove
     SurvivorUI.HidePanel();SurvivorStory.Cleanup();assert(LiveTimers(.03)==0)
@@ -7563,7 +7568,7 @@ for _,fixture in ipairs({
     assert(blocked[key],"Editor pathing was overwritten")
     for k,v in pairs(blocked)do if k~=key then assert(not v,"Temporary wall survived cleanup")end end
     for _,e in ipairs(sceneEffects)do assert(e.destroyed,"Scenery leaked across stage cleanup")end
-    for _,l in ipairs(heightLocations)do assert(l.removed,'Scenery height Location leaked')end
+    assert(#heightLocations<=1,'Terrain heights share one map-lifetime probe')
     for _,cell in pairs(terrainCells)do
         assert(cell.tile==cell.originalTile and cell.variance==cell.originalVariance and cell.blighted==cell.originalBlighted,
             'Cleanup must restore each authored tile, variation and blight')
@@ -7577,7 +7582,7 @@ suite('stage teardown attempts every native restore after failures and permits a
 local bounds=bj_mapInitialPlayableArea
 SurvivorStage.Init(bounds);SurvivorStage.Apply(3)
 local cells,owned=Local(SurvivorStage.Apply,'cells'),Local(SurvivorStage.Apply,'painted')
-local rect,height,weather=Local(SurvivorStage.Apply,'rect'),Local(SurvivorStage.Apply,'heightLocation'),Local(SurvivorStage.Apply,'weather')
+local rect,weather=Local(SurvivorStage.Apply,'rect'),Local(SurvivorStage.Apply,'weather')
 assert(#cells>1 and #owned>1 and weather,'The fixture owns pathing, terrain and weather')
 local first=cells[1]
 local function Key(x,y)return math.floor(x/32)..":"..math.floor(y/32)end
@@ -7600,7 +7605,7 @@ for i=2,#cells do
 end
 for _,cell in ipairs(owned)do assert(TerrainCell(cell.x,cell.y).tile==cell.tile,'Terrain is restored after a pathing failure')end
 for _,e in ipairs(sceneEffects)do assert(e.destroyed,'Scenery is destroyed after earlier failures')end
-assert(weather.removed and height.removed,'Weather and height location are released')
+assert(weather.removed,'Weather is released')
 assert(Local(SurvivorStage.Apply,'rect')==nil and #Local(SurvivorStage.Apply,'cells')==0,'Ownership is detached even when natives fail')
 SurvivorStage.Init(bounds);SurvivorStage.Apply(1);SurvivorStage.Cleanup()
 `);

@@ -41,7 +41,7 @@ do
         triggers[#triggers + 1] = trigger -- Map lifetime: Init runs only once.
         BlzTriggerRegisterFrameEvent(trigger, frame, FRAMEEVENT_CONTROL_CLICK)
         TriggerAddAction(trigger, function()
-            if GetTriggerPlayer() ~= Player(SurvivorConfig.playerId) then return end
+            if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
             BlzFrameSetEnable(frame, false); BlzFrameSetEnable(frame, true)
             if rendered[frame] then rendered[frame].enabled = nil end
             local state = RunSession.GetState()

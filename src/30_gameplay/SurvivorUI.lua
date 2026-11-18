@@ -748,14 +748,7 @@ do
         return frame
     end
     local function Bind(frame, event, callback)
-        local trigger = CreateTrigger()
-        triggers[#triggers + 1] = trigger
-        BlzTriggerRegisterFrameEvent(trigger, frame, event)
-        TriggerAddAction(trigger, function()
-            if GetTriggerPlayer() ~= Player(SurvivorConfig.playerId) then return end
-            local ok, message = pcall(callback)
-            if not ok then RunSession.Fail(message) end
-        end)
+        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback)
     end
     local function ReleaseFocus(frame)
         BlzFrameSetEnable(frame, false)
@@ -771,7 +764,7 @@ do
         -- The backdrop owns its geometry and the clickable content, as in the
         -- original visible panel. Do not put it under a BUTTON at frame level 0.
         local skin = BlzCreateFrame(template, parent, 0, context)
-        assert(skin ~= nil and GetHandleId(skin) ~= 0, "Missing UI backdrop: " .. template)
+        assert(SurvivorConfig.ValidFrame(skin), "Missing UI backdrop: " .. template)
         BlzFrameSetSize(skin, width, height)
         BlzFrameSetAlpha(skin, 255)
         BlzFrameSetLevel(skin, 2)

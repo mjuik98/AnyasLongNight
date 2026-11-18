@@ -72,10 +72,10 @@ do
         SurvivorLootUI.Reset()
         sentSequence, receivedSequence, lastSentOpen, frames = 0, 0, false, {}
         syncTrigger = CreateTrigger()
-        BlzTriggerRegisterPlayerSyncEvent(syncTrigger, Player(SurvivorConfig.playerId), prefix, false)
+        BlzTriggerRegisterPlayerSyncEvent(syncTrigger, SurvivorConfig.Owner(), prefix, false)
         TriggerAddAction(syncTrigger, function()
             if activeGeneration ~= runGeneration then return end
-            if GetTriggerPlayer() ~= Player(SurvivorConfig.playerId) then return end
+            if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
             local state = RunSession.GetState()
             if state == "READY" or state == "FINISHED" then return end
             local data = BlzGetTriggerSyncData()
