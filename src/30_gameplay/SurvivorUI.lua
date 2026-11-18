@@ -66,7 +66,7 @@ do
         if active then timeStopFilterOwned = true end
         local function Paint(alpha)
             timeStopFilterAlpha = alpha
-            if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+            if SurvivorConfig.IsLocalPlayer() then
                 local color, opacity = config.color, math.floor(alpha + 0.5)
                 SetCineFilterDuration(0)
                 SetCineFilterStartColor(color[1], color[2], color[3], opacity)
@@ -74,7 +74,7 @@ do
                 DisplayCineFilter(opacity > 0)
             end
         end
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if SurvivorConfig.IsLocalPlayer() then
             SetCineFilterTexture(config.texture)
             SetCineFilterBlendMode(BLEND_MODE_BLEND)
             SetCineFilterTexMapFlags(TEXMAP_FLAG_NONE)
@@ -115,7 +115,7 @@ do
     local hitAlpha, hitPeak, hitHold, hitRate = 0, 0, 0, 0
     local function PaintHitVignette(alpha)
         hitAlpha = alpha
-        if not hitVignette or GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not hitVignette or not SurvivorConfig.IsLocalPlayer() then return end
         local opacity = math.floor(alpha + 0.5)
         if opacity > 0 then
             -- Stretch to the local screen so the red edges sit on its real borders.
@@ -168,7 +168,7 @@ do
     local function RestoreDamageBoardMinimize()
         local original = damageBoardOriginalMinimized
         damageBoardOriginalMinimized, damageBoardQuiet = nil, false
-        if original == false and damageBoard and GetLocalPlayer() == Player(SurvivorConfig.playerId)
+        if original == false and damageBoard and SurvivorConfig.IsLocalPlayer()
             and IsMultiboardMinimized(damageBoard) then
             MultiboardMinimize(damageBoard, false)
         end
@@ -247,9 +247,7 @@ do
         end
         return noticeHeight
     end
-    local function ValidNativeFrame(frame)
-        return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
-    end
+    local ValidNativeFrame = SurvivorConfig.ValidFrame
     local function CacheHiddenNativeFrame(frame)
         if ValidNativeFrame(frame) then nativeHiddenFrames[#nativeHiddenFrames + 1] = frame end
     end
@@ -260,7 +258,7 @@ do
         return ValidNativeFrame(child) and child or nil
     end
     local function HideNativeHUD()
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         for _, frame in ipairs(nativeHiddenFrames) do
             if ValidNativeFrame(frame) and BlzFrameIsVisible(frame) then BlzFrameSetVisible(frame, false) end
         end
@@ -281,7 +279,7 @@ do
     end
     local function RestoreCinematicFrames()
         cinematicMode = nil
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         local pending, failures = cinematicSaved, {}
         cinematicSaved = {}
         for frame, state in pairs(pending) do
@@ -298,7 +296,7 @@ do
     local function ApplyCinematicFrames(mode)
         AcquireCinematicFrames()
         cinematicMode = mode
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         local hidden = {}
         for _, entry in ipairs(cinematicFrames) do
             if ValidNativeFrame(entry.frame) and (mode == "intro" or mode == "setup" or not entry.introOnly) then
@@ -498,7 +496,7 @@ do
     end
     local function DisplayDamageBoard(visible, quiet)
         if essentialRoot and not (visible and CombatHUDVisible()) then SetVisible(essentialRoot, false) end
-        if damageBoard and GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if damageBoard and SurvivorConfig.IsLocalPlayer() then
             local shown = visible and CombatHUDVisible()
             if shown and quiet then
                 -- Fold once on entry; subsequent native corner clicks belong to the player.
@@ -660,7 +658,7 @@ do
         end
     end
     local function RefreshDamageExpansion(refresh)
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         local expanded = damageBoard ~= nil and damageBuild ~= nil and damageBoardVisible and not IsMultiboardMinimized(damageBoard)
         if expanded and (refresh or not damageBoardExpanded) then
             -- The 0.1-second UI observer fills newly expanded rows immediately.
@@ -872,7 +870,7 @@ do
         actionFeedback[#actionFeedback + 1] = control
         local function LocalEvent(event, action)
             Bind(button, event, function()
-                if GetLocalPlayer() == Player(SurvivorConfig.playerId) then action() end
+                if SurvivorConfig.IsLocalPlayer() then action() end
             end)
         end
         LocalEvent(FRAMEEVENT_MOUSE_ENTER, function()
@@ -1358,7 +1356,7 @@ do
         if essentialRoot then SetVisible(essentialRoot, false) end
         if riskAccept then SetVisible(riskAccept, false) end
         -- Native timed messages can render above the cinematic caption.
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then ClearTextMessages() end
+        if SurvivorConfig.IsLocalPlayer() then ClearTextMessages() end
         introReady = onReady
         DialogueAmbience(true)
         ApplyCinematicFrames("intro")
@@ -1700,7 +1698,7 @@ do
         BlzFrameSetVisible(panel, true)
     end
     function SurvivorUI.DebugStatus()
-        if not initialized or GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not initialized or not SurvivorConfig.IsLocalPlayer() then return end
         print(string.format("[AnyasLongNight UI difficulty-v7] parent=%s visible=%s choosing=%s",
             parentName, tostring(BlzFrameIsVisible(panel)), tostring(choosing)))
         for i, card in ipairs(cards) do

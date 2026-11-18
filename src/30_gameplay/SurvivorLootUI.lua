@@ -10,9 +10,7 @@ do
     local rendered, lastRevision, bagList, bagCount, bagCapacity = {}, nil, {}, 0, 0
     local expeditionView
     function SurvivorLootUI.IsExpanded() return expanded end
-    local function ValidFrame(frame)
-        return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
-    end
+    local ValidFrame = SurvivorConfig.ValidFrame
     local function Set(frame, property, value)
         local cached = rendered[frame]
         if not cached then cached = {}; rendered[frame] = cached end

@@ -123,7 +123,7 @@ do
     -- the preview window, the one hole in the black shade. The sky behind it is black and
     -- the far clip plane stops before the ground below, so only the hero shows.
     local function AimPreview()
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) or not previewSpot then return end
+        if not SurvivorConfig.IsLocalPlayer() or not previewSpot then return end
         local shot = SurvivorConfig.setupPreview
         SetCameraPosition(previewSpot.cameraX, previewSpot.y)
         SetCameraField(CAMERA_FIELD_TARGET_DISTANCE, shot.distance, 0)
@@ -142,7 +142,7 @@ do
             RemoveUnit(previewUnit)
             previewUnit, previewSkin = nil, nil
         end
-        if previewSpot and GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if previewSpot and SurvivorConfig.IsLocalPlayer() then
             SetCameraBounds(savedBounds.minX, savedBounds.minY, savedBounds.minX, savedBounds.maxY,
                 savedBounds.maxX, savedBounds.maxY, savedBounds.maxX, savedBounds.minY)
             ResetToGameCamera(0)
@@ -188,7 +188,7 @@ do
         local holeY = rootTop + panelTop - previewHeight / 2
         previewSpot = {cameraX = x - (holeX - 0.4) * scale, y = y,
             z = shot.lift + shot.height - (holeY - 0.3) * scale}
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if SurvivorConfig.IsLocalPlayer() then
             savedBounds = {minX = GetCameraBoundMinX(), minY = GetCameraBoundMinY(),
                 maxX = GetCameraBoundMaxX(), maxY = GetCameraBoundMaxY()}
             ResetToGameCamera(0)
@@ -304,7 +304,7 @@ do
         summaryCallback = isSummary or function() return AnyasLongNight.IsStorySummary() end
         toggleSummaryCallback = onToggleSummary or function() return AnyasLongNight.ToggleStorySummary() end
         local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
-        if parent == nil or parent == 0 or GetHandleId(parent) == 0 then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
+        if not SurvivorConfig.ValidFrame(parent) then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
         -- Layout groups carry no mouse surface; only their actual buttons take input.
         root = BlzCreateFrameByType("BACKDROP", "AnyasLongNightSetupRoot", parent, "", 0)
         BlzFrameSetTexture(root, "AnyasLongNightUI\\Transparent.tga", 0, true)

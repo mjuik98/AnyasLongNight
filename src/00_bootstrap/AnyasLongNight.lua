@@ -80,7 +80,7 @@ do
         Attempt(errors, "inventory observer", SurvivorInventoryPause.Cleanup)
         -- Detach the camera before removing its target, even if scene cleanup failed.
         Attempt(errors, "camera", function()
-            if GetLocalPlayer() == Player(SurvivorConfig.playerId) then ResetToGameCamera(0) end
+            if SurvivorConfig.IsLocalPlayer() then ResetToGameCamera(0) end
         end)
         Attempt(errors, "native loadout", SurvivorNativeLoadout.Cleanup)
         Attempt(errors, "equipment", SurvivorEquipment.Cleanup)
@@ -500,7 +500,7 @@ do
         SurvivorCombat.TrackWeapons(build.weapons)
         RefreshDamageBoard()
         SurvivorInventoryPause.Init()
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if SurvivorConfig.IsLocalPlayer() then
             ClearSelection()
             SelectUnit(hero, true)
             SetCameraPosition(x, y)
