@@ -173,7 +173,12 @@ function UnitAddItem(u,item)
     return false
 end
 RunSession = {GetElapsed=function() return now end, IsRunning=function() return state=="RUNNING" end,
-    GetState=function() return state end, Fail=function(message) error(message) end}
+    GetState=function() return state end, Fail=function(message) error(message) end,
+    Attempt=function(errors,label,action)
+        local ok,result=pcall(action)
+        if not ok then errors[#errors+1]=label..": "..tostring(result) end
+        return ok,result
+    end}
 SurvivorStage = {LineClear=function() return true end}
 SurvivorExpedition = {RiskActive=function() return false end}
 SurvivorUI = {Notify=function(text) lastMessage=text end, Alert=function(seconds,text) lastMessage=text end,

@@ -47,11 +47,8 @@ do
         return false
     end
 
-    local function CleanupCall(errors, label, action)
-        local ok, message = pcall(action)
-        if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
-        return ok
-    end
+    local CleanupCall = RunSession.Attempt
+    local function HeroYaw() return GetUnitFacing(hero) * bj_DEGTORAD end
 
     local function HurtHero(source, amount, name, hint)
         local previous = damageContext
@@ -535,7 +532,7 @@ do
         local x, y = GetUnitX(hero), GetUnitY(hero)
         local hasSource = source ~= nil and source ~= hero and GetUnitTypeId(source) ~= 0
         local angle = hasSource and Atan2(y - GetUnitY(source), x - GetUnitX(source))
-            or GetUnitFacing(hero) * bj_DEGTORAD
+            or HeroYaw()
         local enemies = {}
         for u in pairs(units) do
             if Enemy(u) then enemies[#enemies + 1] = {GetUnitX(u), GetUnitY(u)} end
@@ -604,7 +601,7 @@ do
         local primary = ALICE_GetClosestObject(x, y, "hsEnemy", stats.missileRange,
             function(u) return AttackTarget(u) and SurvivorStage.LineClear(x, y, GetUnitX(u), GetUnitY(u)) end)
         if primary == nil then return end
-        local selected, yaw = {}, GetUnitFacing(hero) * bj_DEGTORAD
+        local selected, yaw = {}, HeroYaw()
         local z = Height(x, y) + GetUnitFlyHeight(hero) + SurvivorConfig.missileLaunchHeight
         local extra = shot and shot.index ~= nil
         for shot = 1, stats.missileCount do
@@ -625,7 +622,7 @@ do
     end
     local function SpreadPoint(x, y, distance, shot)
         if shot and shot.index then
-            local angle = GetUnitFacing(hero) * bj_DEGTORAD + (shot.index == 1 and -1 or 1) * math.pi / 2
+            local angle = HeroYaw() + (shot.index == 1 and -1 or 1) * math.pi / 2
             return x + math.cos(angle) * distance, y + math.sin(angle) * distance
         end
         return x, y
@@ -692,7 +689,7 @@ do
         local orbit = blade.orbit
         if blade.evolution == "evolution7" then orbit = orbit * (1 + 0.325 * (1 - math.cos(blade.age * 2 * math.pi / 3))) end
         if blade.evolution == "evolution8" then
-            local desired = GetUnitFacing(hero) * bj_DEGTORAD + math.sin(blade.age * 2 * math.pi / blade.period) * 0.65 + blade.offset
+            local desired = HeroYaw() + math.sin(blade.age * 2 * math.pi / blade.period) * 0.65 + blade.offset
             local delta = Atan2(math.sin(desired - blade.angle), math.cos(desired - blade.angle))
             blade.angle = blade.angle + math.max(-dt * 6, math.min(dt * 6, delta))
         else blade.angle = (blade.angle + dt * 2 * math.pi / blade.period) % (2 * math.pi) end
@@ -725,7 +722,7 @@ do
         for i = 1, count do
             local angle = 2 * math.pi * (i - 1) / count + phase
             local offset = (i - (count + 1) / 2) / math.max(1, count - 1) * 0.8
-            if view.bladeEvolution == "evolution8" then angle = GetUnitFacing(hero) * bj_DEGTORAD + offset end
+            if view.bladeEvolution == "evolution8" then angle = HeroYaw() + offset end
             local x, y = centerX + math.cos(angle) * view.bladeRadius, centerY + math.sin(angle) * view.bladeRadius
             local damage = view.bladeDamage * (i > view.bladeCount and stats.multiDamage or 1)
             CreateObject({identifier = view.weaponId and "hsWraith" or "hsBlade", weapon = weapon, x = x, y = y, z = Height(x, y) + 65,
@@ -942,7 +939,7 @@ do
         local stats = shot and shot.stats or stats
         if not RunSession.IsRunning() or not Alive(hero) or not stats.slashEnabled then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
-        local facing, arc = GetUnitFacing(hero) * bj_DEGTORAD, stats.slashAngle * bj_DEGTORAD
+        local facing, arc = HeroYaw(), stats.slashAngle * bj_DEGTORAD
         local radius = stats.slashRange
         local target = ALICE_GetClosestObject(x, y, "hsEnemy", radius, GroundEnemy)
         if target then
@@ -1402,7 +1399,7 @@ do
             summon.target = SummonTarget(summon, w)
         end
         local hx, hy = GetUnitX(hero), GetUnitY(hero)
-        local angle = GetUnitFacing(hero) * bj_DEGTORAD + math.pi + (summon.slot - 1) * 0.65
+        local angle = HeroYaw() + math.pi + (summon.slot - 1) * 0.65
         local tx, ty = hx + math.cos(angle) * 100, hy + math.sin(angle) * 100
         local reach = w.summonKind == "archer" and w.range * 0.8 or w.summonKind == "banshee" and 180
             or w.summonKind == "brute" and 120 or 60
@@ -1451,7 +1448,7 @@ do
         end
         while (summonCounts[id] or 0) < count do
             local slot = (summonCounts[id] or 0) + 1
-            local angle = GetUnitFacing(hero) * bj_DEGTORAD + math.pi + (slot - 1) * 0.65
+            local angle = HeroYaw() + math.pi + (slot - 1) * 0.65
             local x, y = GetUnitX(hero) + math.cos(angle) * 80, GetUnitY(hero) + math.sin(angle) * 80
             x = math.max(bounds.minX + 32, math.min(bounds.maxX - 32, x))
             y = math.max(bounds.minY + 32, math.min(bounds.maxY - 32, y))
@@ -1508,7 +1505,7 @@ do
             if hx * hx + hy * hy <= 25 ^ 2 then
                 -- Longevity buys additional travel/hits instead of unused maximum lifetime.
                 local target = ALICE_GetClosestObject(blade.x, blade.y, "hsEnemy", blade.range, GroundTarget)
-                local angle = GetUnitFacing(hero) * bj_DEGTORAD
+                local angle = HeroYaw()
                 if target then angle = Atan2(GetUnitY(target) - blade.y, GetUnitX(target) - blade.x) end
                 blade.dx, blade.dy = math.cos(angle), math.sin(angle)
                 blade.remaining, blade.returning, blade.leg, blade.hitTimes = blade.range, false, leg + 1, {}
@@ -1586,7 +1583,7 @@ do
         local orb = engine == "orb"
         local dx, dy, dz = tx - x, ty - y, orb and tz - z or 0
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-        if distance < 1 then dx, dy, dz, distance = math.cos(GetUnitFacing(hero) * bj_DEGTORAD), math.sin(GetUnitFacing(hero) * bj_DEGTORAD), 0, 1 end
+        if distance < 1 then local yaw = HeroYaw(); dx, dy, dz, distance = math.cos(yaw), math.sin(yaw), 0, 1 end
         -- Putress models keep their own colours; only Anya's glaive is tinted.
         local object = {identifier = orb and "hsOrb" or w.model and "hsScythe" or "hsReturnBlade", weapon = id, opaque = w.opaque,
             x = x, y = y, z = z, dx = dx / distance, dy = dy / distance, dz = dz / distance,
@@ -1650,7 +1647,7 @@ do
         local tx, ty, tz = ImpactPoint(target)
         local dx, dy, dz = tx - x, ty - y, tz - z
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-        if distance < 1 then dx, dy, dz, distance = math.cos(GetUnitFacing(hero) * bj_DEGTORAD), math.sin(GetUnitFacing(hero) * bj_DEGTORAD), 0, 1 end
+        if distance < 1 then local yaw = HeroYaw(); dx, dy, dz, distance = math.cos(yaw), math.sin(yaw), 0, 1 end
         dx, dy, dz = dx / distance, dy / distance, dz / distance
         local count = stats.frostCount or 1
         for k = 1, count do

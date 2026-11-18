@@ -40,15 +40,18 @@ do
     local noticeHeightText, noticeHeightUrgent, noticeHeight
     local timeStopFilterTimer, timeStopFilterGeneration = nil, 0
     local timeStopFilterActive, timeStopFilterOwned, timeStopFilterAlpha = false, false, 0
+    -- Attempt both natives, then raise the first failure.
+    local function StopTimer(timer)
+        if not timer then return end
+        local paused, pauseError = pcall(PauseTimer, timer)
+        local destroyed, destroyError = pcall(DestroyTimer, timer)
+        if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
+    end
     local function CancelTimeStopFilterFade()
         timeStopFilterGeneration = timeStopFilterGeneration + 1
         local timer = timeStopFilterTimer
         timeStopFilterTimer = nil
-        if timer then
-            local paused, pauseError = pcall(PauseTimer, timer)
-            local destroyed, destroyError = pcall(DestroyTimer, timer)
-            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
-        end
+        StopTimer(timer)
     end
     -- Cine filters tint the world render, without recoloring UI frames or consuming input.
     function SurvivorUI.SetTimeStopFilter(active, immediate)
@@ -323,11 +326,7 @@ do
         local timer = returnTimer
         returnTimer = nil
         if returnShade then BlzFrameSetVisible(returnShade, false) end
-        if timer then
-            local paused, pauseError = pcall(PauseTimer, timer)
-            local destroyed, destroyError = pcall(DestroyTimer, timer)
-            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
-        end
+        StopTimer(timer)
     end
     local function DialogueAmbience(enabled)
         if SurvivorStage and SurvivorStage.SetDialogueAmbience then
@@ -338,21 +337,13 @@ do
         revealGeneration = revealGeneration + 1
         local timer = revealTimer
         revealTimer = nil
-        if timer then
-            local paused, pauseError = pcall(PauseTimer, timer)
-            local destroyed, destroyError = pcall(DestroyTimer, timer)
-            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
-        end
+        StopTimer(timer)
     end
     local function CancelPreparationCountdown()
         preparationGeneration = preparationGeneration + 1
         local timer = preparationTimer
         preparationTimer = nil
-        if timer then
-            local paused, pauseError = pcall(PauseTimer, timer)
-            local destroyed, destroyError = pcall(DestroyTimer, timer)
-            if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
-        end
+        StopTimer(timer)
     end
     local function RenderPreparationVisibility()
         local waiting = preparationReady ~= nil and preparationTimer == nil
