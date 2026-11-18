@@ -1,5 +1,5 @@
 // Synchronize the editor base map's runtime Lua and WCT with the playtest sources.
-// Gameplay unit fields, item RGB and catalog text are synchronized too; unrelated entries stay intact.
+// Gameplay unit fields, item RGB, catalog text and the map version label are synchronized too; unrelated entries stay intact.
 // Usage: npm run sync:base            (back up, patch, compact and publish)
 //        npm run sync:base -- --check (report only; exit 1 if stale or carrying unused data)
 import fs from 'node:fs';
@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {openMap} from './mpq.mjs';
 import {root, baseMapPath, collectSources, replaceBundle, editorBundle, verifyPreserved, publishTransaction,
     installBonusUnits, installEnemyCombatFields, installBonusItems, cleanItemTooltipEntries, loadItemTooltipCatalog,
-    cleanWeaponTooltipEntries, loadWeaponTooltipCatalog, installGrowthObjects, prepareUIResources} from './build.mjs';
+    cleanWeaponTooltipEntries, loadWeaponTooltipCatalog, installGrowthObjects, prepareUIResources, installMapVersion} from './build.mjs';
 
 export function syncBase(base, bundle, snapshots = new Map()) {
     const map = openMap(base);
@@ -33,6 +33,7 @@ export function syncBase(base, bundle, snapshots = new Map()) {
         changes.set(name, bytes);
     const weapons = cleanWeaponTooltipEntries(new Map(weaponNames.map(name => [name, changes.get(name) ?? map.read(name)])), loadWeaponTooltipCatalog());
     for (const [name, bytes] of weapons) changes.set(name, bytes);
+    changes.set('war3map.wts', installMapVersion(changes.get('war3map.wts') ?? map.read('war3map.wts'), map.read('war3map.w3i')));
     // replace() leaves an already-current archive untouched, so compact explicitly as well.
     const patched = openMap(map.replace(changes)).compact();
     const preserved = verifyPreserved(base, patched, [...changes.keys(),
