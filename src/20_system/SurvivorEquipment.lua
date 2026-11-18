@@ -301,6 +301,8 @@ do
     local byType, byId = {}, {}
     for _, entry in ipairs(catalog) do byType[FourCC(entry.id)], byId[entry.id] = entry, entry end
     local hero, build, eventTrigger
+    -- Injected by the run owner so this system layer never calls up into the UI.
+    local notify = function() end
     local owned, lastSlots, lastBag = {}, {}, {}
     local dryKills, bonusesDirty, allTooltipsDirty = 0, true, true
     local equippedIds, descriptionCache, tooltipDirty = {}, {}, {}
@@ -872,7 +874,7 @@ do
         -- The observer can reuse the revision from this exact native snapshot.
         return changed, uiRevision
     end
-    function SurvivorEquipment.Init(unit, runBuild)
+    function SurvivorEquipment.Init(unit, runBuild, onNotify)
         assert(hero == nil, "Equipment must be cleaned before initialization")
         assert(type(UnitEquipItem) == "function" and type(UnitUnequipItem) == "function"
             and type(UnitItemInEquipmentSlot) == "function" and type(UnitItemInBagSlot) == "function"
@@ -881,6 +883,8 @@ do
             and EVENT_PLAYER_UNIT_EQUIP_ITEM ~= nil and EVENT_PLAYER_UNIT_UNEQUIP_ITEM ~= nil,
             "장비 시스템은 Warcraft III 3.0 이상이 필요합니다.")
         hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = unit, runBuild, 0, true, true, 1
+        -- Isolated fixtures omit the notifier; the global lookup keeps them working.
+        notify = onNotify or function(text) if SurvivorUI and SurvivorUI.Notify then SurvivorUI.Notify(text) end end
         pickupMode, locked = 1, {}
         -- AInv holds level-up trinket indicators; AIni/AEqu hold physical dropped gear.
         for _, code in ipairs({"AInv", "AIni", "AEqu"}) do
@@ -933,8 +937,12 @@ do
         assert(item ~= nil and GetItemTypeId(item) == FourCC(entry.id), "Missing equipment objects: import assets/war3map.w3t")
         owned[item] = {expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime, carried = false,
             pendingReward = pendingReward == true, reward = pendingReward == true, restPickup = pendingReward == true}
-        if pendingReward then TouchUI() end
-        SurvivorEquipment.Reconcile()
+        -- An ordinary floor drop changes no slot, bag or pending reward; the next
+        -- Step/observer tick reconciles. Only protected rewards need it now.
+        if pendingReward then
+            TouchUI()
+            SurvivorEquipment.Reconcile()
+        end
         RefreshTooltip(item, equippedIds)
         return item
     end
@@ -944,7 +952,7 @@ do
         for i, entry in ipairs(catalog) do if entry.id == id then index = i; break end end
         local item = SurvivorEquipment.DropAt(GetUnitX(hero), GetUnitY(hero), index, true)
         SurvivorEquipment.CollectRest()
-        SurvivorUI.Notify(
+        notify(
             (source or "보스 보상") .. ": " .. SurvivorEquipment.Name(id)
                 .. (owned[item].pendingReward and "\n발밑에 보관 · 수령 전 자동 소멸 없음"
                     or " · 가방에 수령했습니다."))
@@ -982,7 +990,7 @@ do
                     if dx * dx + dy * dy <= radius * radius and CanAutoPick(item, record, inventory) then
                         record.retry = elapsed + 0.5
                         if inventory.count < inventory.capacity and TryPickup(item, record, inventory) then
-                            SurvivorUI.Notify("장비 획득: " .. SurvivorEquipment.Name(Entry(item).id) .. "\n확장 인벤토리에서 장착하세요.")
+                            notify("장비 획득: " .. SurvivorEquipment.Name(Entry(item).id) .. "\n확장 인벤토리에서 장착하세요.")
                         end
                     end
                 end
@@ -1041,13 +1049,24 @@ do
         end
     end
     function SurvivorEquipment.Cleanup()
-        if eventTrigger ~= nil then DestroyTrigger(eventTrigger); eventTrigger = nil end
-        for item in pairs(owned) do owned[item] = nil; RemoveItem(item) end
+        -- Detach ownership before native calls; Init asserts on a leftover hero.
+        local oldTrigger, oldOwned = eventTrigger, owned
+        eventTrigger = nil
+        local errors = {}
+        local function Attempt(label, action)
+            local ok, message = pcall(action)
+            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
+        end
+        if oldTrigger ~= nil then Attempt("equipment trigger", function() DestroyTrigger(oldTrigger) end) end
+        for item in pairs(oldOwned) do
+            Attempt("equipment item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
+        end
         owned, lastSlots, lastBag = {}, {}, {}
         equippedIds, descriptionCache, tooltipDirty = {}, {}, {}
         tooltipCache, lastBagCapacity, lastPendingCount = setmetatable({}, {__mode = "k"}), nil, nil
         locked, pickupMode = {}, 1
         hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = nil, nil, 0, true, true, 1
-        TouchUI()
+        Attempt("equipment UI revision", TouchUI)
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
 end

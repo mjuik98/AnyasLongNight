@@ -24,6 +24,8 @@ do
     local stageTransition, nextHazard = false, 35
     local runSerial = 0
     local firstEvolution, peakEnemies, peakVisuals = nil, 0, 0
+    -- Set from the native death event; Step finishes the run outside any hit loop.
+    local heroDefeated = false
 
     local function RefreshDamageBoard()
         if build then SurvivorUI.UpdateDamageBoard(build, stage, RunSession.GetElapsed() - stageStarted, rerollsRemaining, selectedDifficulty) end
@@ -84,7 +86,7 @@ do
         Attempt(errors, "combat", SurvivorCombat.Cleanup)
         Attempt(errors, "stage", SurvivorStage.Cleanup)
         hero, build, stats, offers = nil, nil, nil, nil
-        rewardLevel, rerollsRemaining, stageTransition = nil, 0, false
+        rewardLevel, rerollsRemaining, stageTransition, heroDefeated = nil, 0, false, false
     end
     local function QueueLevelRewards()
         if hero == nil or GetUnitTypeId(hero) == 0 then return end
@@ -171,8 +173,9 @@ do
         -- No level reward is consumed and combat stays paused during the redraw.
         ShowChoice()
     end
+    -- Returns whether the click consumed the choice; the UI keeps its cards otherwise.
     local function Choose(index)
-        if RunSession.GetState() ~= "CHOOSING" or offers == nil or offers[index] == nil then return end
+        if RunSession.GetState() ~= "CHOOSING" or offers == nil or offers[index] == nil then return false end
         local selected = offers[index]
         offers, rewardLevel = nil, nil -- Consume once, before callbacks or combat resume.
         SurvivorAugments.Apply(selected, build, hero)
@@ -186,12 +189,13 @@ do
         if queueHead <= #queuedLevels then
             -- Keep units, missiles and gameplay time frozen for all queued choices.
             BeginChoice()
-            return
+            return true
         end
         queuedLevels, queueHead = {}, 1
         SurvivorUI.HidePanel()
         choiceGrace = 0.25
         RunSession.EndChoice()
+        return true
     end
     local function Exclude(index)
         if RunSession.GetState() ~= "CHOOSING" or offers == nil then return end
@@ -212,7 +216,7 @@ do
         end
     end
     local function ChooseGear(index)
-        if RunSession.GetState() ~= "STAGE_CLEAR" or not gearOffers or not gearOffers[index] then return end
+        if RunSession.GetState() ~= "STAGE_CLEAR" or not gearOffers or not gearOffers[index] then return false end
         local id = gearOffers[index]
         gearOffers = nil -- Consume before granting the item; duplicate clicks cannot grant twice.
         assert(SurvivorEquipment.ClaimReward(id), "Boss reward could not be granted")
@@ -220,9 +224,10 @@ do
         local elapsed = RunSession.GetElapsed()
         SurvivorUI.ShowResult("stage_clear", elapsed, kills, stage,
             bossEngagedAt and elapsed - bossEngagedAt or nil, SurvivorCombat.DamageReport(), ResultDetails(true))
+        return true
     end
     local function ChooseEventGear(index)
-        if RunSession.GetState() ~= "CHOOSING" or not eventOffers or not eventOffers[index] then return end
+        if RunSession.GetState() ~= "CHOOSING" or not eventOffers or not eventOffers[index] then return false end
         local id = eventOffers[index]
         eventOffers = nil
         assert(SurvivorEquipment.ClaimReward(id, "봉인 조사 보상"), "Risk reward could not be granted")
@@ -231,6 +236,7 @@ do
         choiceGrace = 0.25
         RunSession.EndChoice()
         RefreshDamageBoard()
+        return true
     end
     local function ExpeditionReward(kind)
         if kind == "search" then
@@ -243,6 +249,7 @@ do
         RefreshDamageBoard()
     end
     local function Step(dt, elapsed)
+        if heroDefeated then RunSession.Finish("defeated"); return end
         if SurvivorCombat.BossDefeated() then
             if stageTransition then return end
             if RunSession.BeginStageClear() then
@@ -386,18 +393,22 @@ do
     local function Start(startingWeapon, startingTrinket)
         runSerial = runSerial + 1
         stageTransition, nextHazard = false, 35
-        gearOffers = nil
+        gearOffers, eventOffers, heroDefeated = nil, nil, false
         RunSession.Finish("restarted")
         SurvivorUI.HidePanel()
         SurvivorUI.BeginRun()
         SurvivorStory.Reset()
         SurvivorExpedition.Reset()
-        ClearProgression()
-        SurvivorInventoryPause.Cleanup()
-        SurvivorNativeLoadout.Cleanup()
-        SurvivorEquipment.Cleanup()
-        SurvivorCombat.Cleanup()
-        SurvivorStage.Cleanup()
+        -- Attempt every subsystem before reporting, as CleanupRun does; one
+        -- failing teardown must not leave the later subsystems still owned.
+        local cleanupErrors = {}
+        Attempt(cleanupErrors, "progression", ClearProgression)
+        Attempt(cleanupErrors, "inventory observer", SurvivorInventoryPause.Cleanup)
+        Attempt(cleanupErrors, "native loadout", SurvivorNativeLoadout.Cleanup)
+        Attempt(cleanupErrors, "equipment", SurvivorEquipment.Cleanup)
+        Attempt(cleanupErrors, "combat", SurvivorCombat.Cleanup)
+        Attempt(cleanupErrors, "stage", SurvivorStage.Cleanup)
+        if #cleanupErrors > 0 then error(table.concat(cleanupErrors, "\n"), 0) end
         local rect = bj_mapInitialPlayableArea -- Borrowed rect: never destroy it.
         local arena = {minX = GetRectMinX(rect) + 128, maxX = GetRectMaxX(rect) - 128,
             minY = GetRectMinY(rect) + 128, maxY = GetRectMaxY(rect) - 128}
@@ -438,7 +449,10 @@ do
                 SurvivorEquipment.OnKill(dead, elite)
             end)
             if not ok then RunSession.Fail(message) end
-        end, function() RunSession.Finish("defeated") end, selectedDifficulty, BonusReward)
+        end, function()
+            -- Defer teardown: the death can fire inside a weapon or enemy callback.
+            if RunSession.IsRunning() then heroDefeated = true else RunSession.Finish("defeated") end
+        end, selectedDifficulty, BonusReward)
         BlzSetHeroProperName(hero, SurvivorConfig.heroes[selectedHero].name)
         SuspendHeroXP(hero, true)
         observedLevel = GetHeroLevel(hero)
@@ -456,7 +470,10 @@ do
         BlzSetUnitMaxHP(hero, SurvivorConfig.heroLife)
         SetWidgetLife(hero, SurvivorConfig.heroLife)
         SetUnitMoveSpeed(hero, stats.moveSpeed)
-        SurvivorEquipment.Init(hero, build)
+        -- Listener order: Combat.Init above created the supply pickup trigger first,
+        -- so EVENT_PLAYER_UNIT_PICKUP_ITEM reaches Combat (bonus items) before
+        -- Equipment (catalog gear). Their item sets are disjoint; keep them so.
+        SurvivorEquipment.Init(hero, build, SurvivorUI.Notify)
         SetWidgetLife(hero, BlzGetUnitMaxHP(hero)) -- Start at full HP, including the chosen vitality trinket.
         SurvivorNativeLoadout.Init(hero, build)
         SurvivorExpedition.BeginStage(hero, 1, 0, ExpeditionReward)
@@ -558,8 +575,13 @@ do
         setupPhase = nil -- Consume setup once before native creation or callbacks.
         local ok, message = pcall(Start, selectedWeapon, selectedTrinket)
         if not ok then
+            -- Once RunSession.Start has acquired the hooks, Fail runs Finish, which already
+            -- cleans every subsystem and shows the detailed result; do not repeat it.
+            local state = RunSession.GetState()
+            local hooked = state ~= "READY" and state ~= "FINISHED"
             RunSession.Fail(message)
-            -- Also covers errors before RunSession.Start has acquired its hooks.
+            if hooked then return ok end
+            -- Errors before RunSession.Start acquired its hooks need explicit cleanup.
             local errors = {}
             Attempt(errors, "expedition", SurvivorExpedition.EndStage)
             CleanupRun(errors)
@@ -574,8 +596,10 @@ do
         -- The solo arena remains fully visible during combat, pauses and stage changes.
         FogMaskEnable(false)
         FogEnable(false)
-        SurvivorUI.Init(Choose, AnyasLongNight.Start, Reroll, AnyasLongNight.NextStage, Exclude)
-        SurvivorSetupUI.Init(AnyasLongNight.OpenSetup, AnyasLongNight.SelectSetup, AnyasLongNight.ResetSetup, AnyasLongNight.BeginRun)
+        SurvivorUI.Init(Choose, AnyasLongNight.Start, Reroll, AnyasLongNight.NextStage, Exclude,
+            AnyasLongNight.RetrySame, AnyasLongNight.CanRetrySame)
+        SurvivorSetupUI.Init(AnyasLongNight.OpenSetup, AnyasLongNight.SelectSetup, AnyasLongNight.ResetSetup, AnyasLongNight.BeginRun,
+            AnyasLongNight.IsStorySummary, AnyasLongNight.ToggleStorySummary)
         if SurvivorConfig.debugCommands then
             debugTrigger = CreateTrigger() -- Map lifetime; registered once across restarts.
             TriggerRegisterPlayerChatEvent(debugTrigger, Player(SurvivorConfig.playerId), "-hs", false)

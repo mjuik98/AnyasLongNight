@@ -9,6 +9,7 @@ do
     local visible, category, hovered = false, "HERO", nil
     local selected = {}
     local openCallback, selectCallback, resetCallback, startCallback
+    local summaryCallback, toggleSummaryCallback
     local previewUnit, previewSkin, previewSpot, previewTimer, savedBounds
     -- Opaque green frame: it sits behind the icon, slightly larger, so only its rim shows.
     local highlight = [[UI\Widgets\Console\Human\CommandButton\human-activebutton.blp]]
@@ -290,15 +291,18 @@ do
         end
         RenderList()
         RenderDescription()
-        BlzFrameSetText(summaryToggle.text, AnyasLongNight.IsStorySummary() and "이미 본 대화: 요약 보기" or "이미 본 대화: 전체 보기")
+        BlzFrameSetText(summaryToggle.text, summaryCallback() and "이미 본 대화: 요약 보기" or "이미 본 대화: 전체 보기")
         startButton.ready = selected.DIFFICULTY ~= nil and selected.WEAPON ~= nil and selected.TRINKET ~= nil
         BlzFrameSetEnable(startButton.button, startButton.ready)
         BlzFrameSetText(startButton.text, startButton.ready and "|cffffcc00게임 시작|r" or "|cff888888게임 시작|r")
         BlzFrameSetText(status, startButton.ready and "준비 완료" or "무기·장신구·난이도를\n모두 선택하세요.")
     end
-    function SurvivorSetupUI.Init(onOpen, onSelect, onReset, onStart)
+    function SurvivorSetupUI.Init(onOpen, onSelect, onReset, onStart, isSummary, onToggleSummary)
         if root then return end
         openCallback, selectCallback, resetCallback, startCallback = onOpen, onSelect, onReset, onStart
+        -- Injected by the run owner; the global lookup only serves isolated UI fixtures.
+        summaryCallback = isSummary or function() return AnyasLongNight.IsStorySummary() end
+        toggleSummaryCallback = onToggleSummary or function() return AnyasLongNight.ToggleStorySummary() end
         local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
         if parent == nil or parent == 0 or GetHandleId(parent) == 0 then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
         -- Layout groups carry no mouse surface; only their actual buttons take input.
@@ -393,7 +397,7 @@ do
         local buttonWidth = (actionWidth - 0.006) / 2
         status = Text(actions, "AnyasLongNightSetupStatus", actionWidth, 0.03, 0, -margin)
         summaryToggle = Button(actions, "HSSummaryToggle", actionWidth, 0.032, 0, -0.064, function()
-            if visible then AnyasLongNight.ToggleStorySummary() end
+            if visible then toggleSummaryCallback() end
         end)
         resetButton = Button(actions, "AnyasLongNightSetupReset", buttonWidth, 0.046, -(buttonWidth + 0.006) / 2, -0.1, function()
             if visible then hovered = nil; resetCallback() end

@@ -603,9 +603,17 @@ do
             build.appliedHero = hero
         end
     end
+    -- SurvivorCombat owns these pause flags on the shared stats table; every
+    -- other key is derived here and must disappear when Calculate omits it.
+    local runtimeStatKeys = {nativeRegenerationPaused = true, combatPaused = true}
     function SurvivorAugments.Recalculate(build, hero)
         local derived = Calculate(build)
         -- Preserve this table's identity: combat holds the same stats reference.
+        local stale = {}
+        for key in pairs(build.stats) do
+            if derived[key] == nil and not runtimeStatKeys[key] then stale[#stale + 1] = key end
+        end
+        for _, key in ipairs(stale) do build.stats[key] = nil end
         for key, value in pairs(derived) do build.stats[key] = value end
         build.revision = (build.revision or 0) + 1
         ApplyHeroStats(build, hero)
