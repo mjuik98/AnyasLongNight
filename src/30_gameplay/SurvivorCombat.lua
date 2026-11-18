@@ -1243,20 +1243,25 @@ do
             return chosen
         end
         inStatusProc = true
-        if stats.sets.apothecary and (record.poison or 0) >= 8 and now < (record.poisonUntil or 0) then
-            for _, target in ipairs(Nearby(300, 3)) do
-                ApplyStatus(target.unit, record.poisonWeapon, {poison = math.floor(record.poison / 2)}, 1)
+        -- Release the reentry guard even when a nested proc fails; a stuck guard
+        -- would silently disable every later status-death set effect.
+        local ok, message = pcall(function()
+            if stats.sets.apothecary and (record.poison or 0) >= 8 and now < (record.poisonUntil or 0) then
+                for _, target in ipairs(Nearby(300, 3)) do
+                    ApplyStatus(target.unit, record.poisonWeapon, {poison = math.floor(record.poison / 2)}, 1)
+                end
             end
-        end
-        if stats.sets.gravewarden and CurseStacks(record) >= config.curseMax and now >= soulReady then
-            soulReady = now + 1
-            ProcVisual(x, y, z, SurvivorConfig.soulBurstModel, 1.2, record.lastWeapon)
-            for _, target in ipairs(Nearby(200)) do
-                Hit(target.unit, (record.lastHit or 0) * 1.5, record.lastWeapon, true)
-                if Enemy(target.unit) then ApplyStatus(target.unit, record.lastWeapon, {curse = 1}, 1) end
+            if stats and stats.sets.gravewarden and CurseStacks(record) >= config.curseMax and now >= soulReady then
+                soulReady = now + 1
+                ProcVisual(x, y, z, SurvivorConfig.soulBurstModel, 1.2, record.lastWeapon)
+                for _, target in ipairs(Nearby(200)) do
+                    Hit(target.unit, (record.lastHit or 0) * 1.5, record.lastWeapon, true)
+                    if Enemy(target.unit) then ApplyStatus(target.unit, record.lastWeapon, {curse = 1}, 1) end
+                end
             end
-        end
+        end)
         inStatusProc = false
+        if not ok then error(message, 0) end
     end
     local function FallMeteor(meteor)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -2725,6 +2730,8 @@ do
         escapeReady, escapeUses, eliteSerial = true, 0, 0
         tagSecondary = false
         ward, wardUntil, damageContext, hitSecondary, shatterReady = 0, 0, nil, false, 0
+        -- Run time restarts at zero, so run-clock cooldowns must not survive a run.
+        soulReady, inStatusProc = 0, false
         recentDamage, stageEscapeUses = {}, {}
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
@@ -2831,7 +2838,10 @@ do
                 if RunSession.IsRunning() and not purging then Shatter(dead, record); StatusDeath(dead, record) end
                 -- Finish is deferred to Step; never tear down combat during a Hit loop.
                 if RunSession.IsRunning() and onKill then onKill(dead, record.elite, record.boss) end
-            elseif onDeath then onDeath() end
+            elseif onDeath then
+                -- The run owner defers this too while running (see AnyasLongNight Step).
+                onDeath()
+            end
         end)
     end
 end

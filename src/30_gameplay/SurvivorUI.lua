@@ -11,6 +11,8 @@ do
     local nativeInventoryVisible = false
     local rerollCounter, rerollPips = nil, {}
     local excludeCallback
+    -- Injected by the run owner; the global lookup only serves isolated UI fixtures.
+    local retryCallback, canRetryCallback
     local gearCallback
     local expeditionRoot, expeditionText
     local actionFeedback, actionTooltip, actionTooltipText = {}, nil, nil
@@ -938,8 +940,10 @@ do
             speechTimerPaused = false
         end
     end
-    function SurvivorUI.Init(onChoose, onRestart, onReroll, onNextStage, onExclude)
+    function SurvivorUI.Init(onChoose, onRestart, onReroll, onNextStage, onExclude, onRetrySame, canRetrySame)
         if initialized then return end
+        retryCallback = onRetrySame or function() return AnyasLongNight.RetrySame() end
+        canRetryCallback = canRetrySame or function() return AnyasLongNight.CanRetrySame() end
         assert(BlzLoadTOCFile("CustomTooltip.toc"), "Missing tooltip panel templates")
         -- Acquire native handles on every client before changing local visibility.
         -- Keep native button enable states: hiding the upper bar leaves F10 usable.
@@ -1183,14 +1187,15 @@ do
                     local callback = gearCallback
                     gearCallback = nil
                     ReleaseFocus(button)
-                    callback(slot)
+                    -- A rejected click leaves the run modal open; keep its cards usable.
+                    if callback(slot) == false and gearCallback == nil then gearCallback = callback end
                     return
                 end
                 if not choosing or not cards[slot].available then return end
                 choosing = false
                 ResetActionFeedback()
                 ReleaseFocus(button)
-                chooseCallback(slot)
+                if chooseCallback(slot) == false then choosing = true end
             end)
             Bind(reroll, FRAMEEVENT_CONTROL_CLICK, function()
                 if not choosing or not cards[slot].rerollAvailable then return end
@@ -1224,7 +1229,7 @@ do
         BlzFrameSetText(retrySame, "같은 설정으로 재도전")
         Bind(retrySame, FRAMEEVENT_CONTROL_CLICK, function()
             ReleaseFocus(retrySame)
-            if RunSession.GetState() == "FINISHED" then AnyasLongNight.RetrySame() end
+            if RunSession.GetState() == "FINISHED" then retryCallback() end
         end)
         BlzFrameSetVisible(retrySame, false)
         BlzFrameSetVisible(panel, false)
@@ -1641,7 +1646,7 @@ do
         BlzFrameClearAllPoints(restartButton)
         BlzFrameSetPoint(restartButton, FRAMEPOINT_TOP, resultBackdrop, FRAMEPOINT_TOP, reason == "stage_clear" and 0 or 0.14, -0.290)
         BlzFrameSetText(restartButton, reason == "stage_clear" and "다음 스테이지" or "설정 변경")
-        BlzFrameSetVisible(retrySame, reason ~= "stage_clear" and AnyasLongNight.CanRetrySame())
+        BlzFrameSetVisible(retrySame, reason ~= "stage_clear" and canRetryCallback ~= nil and canRetryCallback())
         for i = 1, 3 do
             cards[i].available, cards[i].rerollAvailable = false, false
             BlzFrameSetVisible(cards[i].frame, false)

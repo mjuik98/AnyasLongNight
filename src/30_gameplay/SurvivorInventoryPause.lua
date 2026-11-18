@@ -115,10 +115,24 @@ do
     end
     function SurvivorInventoryPause.Cleanup()
         activeGeneration = nil -- Reject callbacks already queued before native teardown.
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then SurvivorUI.SetRestInventoryVisible(false) end
-        SurvivorLootUI.Reset()
-        if timer ~= nil then PauseTimer(timer); DestroyTimer(timer); timer = nil end
-        if syncTrigger ~= nil then DestroyTrigger(syncTrigger); syncTrigger = nil end
+        -- Detach ownership first so a failed native call cannot block the next Init.
+        local oldTimer, oldTrigger = timer, syncTrigger
+        timer, syncTrigger = nil, nil
         frames, lastSentOpen = {}, false
+        local errors = {}
+        local function Attempt(label, action)
+            local ok, message = pcall(action)
+            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
+        end
+        if oldTimer ~= nil then
+            Attempt("pause observer timer", function() PauseTimer(oldTimer) end)
+            Attempt("destroy observer timer", function() DestroyTimer(oldTimer) end)
+        end
+        if oldTrigger ~= nil then Attempt("sync trigger", function() DestroyTrigger(oldTrigger) end) end
+        Attempt("rest inventory", function()
+            if GetLocalPlayer() == Player(SurvivorConfig.playerId) then SurvivorUI.SetRestInventoryVisible(false) end
+        end)
+        Attempt("loot UI", SurvivorLootUI.Reset)
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
 end

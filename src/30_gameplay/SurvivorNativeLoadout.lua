@@ -305,23 +305,11 @@ do
         SurvivorNativeLoadout.Refresh()
     end
     function SurvivorNativeLoadout.Cleanup()
-        for item in pairs(pointItems) do pointItems[item] = nil; if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end
-        for id, item in pairs(items) do items[id] = nil; RemoveItem(item) end
-        if hero ~= nil and GetUnitTypeId(hero) ~= 0 then
-            local talents = SurvivorConfig.talents
-            if ownsTalentController then UnitRemoveAbility(hero, FourCC(talents.controller)) end
-            for _, tier in ipairs(talents.tiers) do
-                for _, entry in ipairs(tier) do UnitRemoveAbility(hero, FourCC(entry.id)) end
-            end
-            if campaignTalentLevel > 0 then
-                UnitAddAbility(hero, FourCC(talents.base))
-                SetUnitAbilityLevel(hero, FourCC(talents.base), campaignTalentLevel)
-            end
-            if ownsStatDetails then UnitRemoveAbility(hero, FourCC("ASde")) end
-            for code in pairs(ownedDisplays) do UnitRemoveAbility(hero, FourCC(code)) end
-            UnitRemoveAbility(hero, FourCC("HsAE"))
-            for _, code in pairs(weapons) do UnitRemoveAbility(hero, FourCC(code)) end
-        end
+        -- Snapshot and detach ownership before any native call, so a failure
+        -- cannot leave hero set and block the next Init's cleanliness assertion.
+        local oldHero, oldItems, oldPoints, oldDisplays = hero, items, pointItems, ownedDisplays
+        local ownedController, ownedDetails, campaignLevel = ownsTalentController, ownsStatDetails, campaignTalentLevel
+        local previous = originalInterfaceText
         hero, build = nil, nil
         ownsStatDetails = false
         ownedDisplays, displayValues = {}, {}
@@ -331,12 +319,40 @@ do
         talentChoices, pointItems = {}, {}
         items, textCache = {}, {}
         descriptions, titles, descriptionRevision = {}, {}, nil
-        local previous = originalInterfaceText
         originalInterfaceText = nil
-        if previous then
-            local okTitle, titleError = pcall(BlzSetAbilityTooltip, FourCC("ASpc"), previous[1], 0)
-            local okText, textError = pcall(BlzSetAbilityExtendedTooltip, FourCC("ASpc"), previous[2], 0)
-            if not okTitle or not okText then error(tostring(titleError or textError)) end
+        local errors = {}
+        local function Attempt(label, action)
+            local ok, message = pcall(action)
+            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
         end
+        for item in pairs(oldPoints) do
+            Attempt("talent point item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
+        end
+        for _, item in pairs(oldItems) do
+            Attempt("indicator item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
+        end
+        if oldHero ~= nil and GetUnitTypeId(oldHero) ~= 0 then
+            local talents = SurvivorConfig.talents
+            local function Remove(code) Attempt("ability " .. code, function() UnitRemoveAbility(oldHero, FourCC(code)) end) end
+            if ownedController then Remove(talents.controller) end
+            for _, tier in ipairs(talents.tiers) do
+                for _, entry in ipairs(tier) do Remove(entry.id) end
+            end
+            if campaignLevel > 0 then
+                Attempt("campaign talent", function()
+                    UnitAddAbility(oldHero, FourCC(talents.base))
+                    SetUnitAbilityLevel(oldHero, FourCC(talents.base), campaignLevel)
+                end)
+            end
+            if ownedDetails then Remove("ASde") end
+            for code in pairs(oldDisplays) do Remove(code) end
+            Remove("HsAE")
+            for _, code in pairs(weapons) do Remove(code) end
+        end
+        if previous then
+            Attempt("interface title", function() BlzSetAbilityTooltip(FourCC("ASpc"), previous[1], 0) end)
+            Attempt("interface text", function() BlzSetAbilityExtendedTooltip(FourCC("ASpc"), previous[2], 0) end)
+        end
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
 end

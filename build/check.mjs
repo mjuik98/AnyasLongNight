@@ -3018,6 +3018,142 @@ for _,trigger in ipairs(triggers)do assert(trigger.destroyed)end
 assert(AnyasLongNight.CanRetrySame() and resultReason=='error')
 `);
 
+suite('hero death defers run teardown to the next step and a post-start failure shows one detailed result', mocks + String.raw`
+OnInit={final=function()end}
+function GetLocalPlayer()return 0 end
+function ResetToGameCamera()end
+bj_mapInitialPlayableArea={minX=-5000,minY=-5000,maxX=5000,maxY=5000}
+function GetRectMinX(rect)return rect.minX end
+function GetRectMaxX(rect)return rect.maxX end
+function GetRectMinY(rect)return rect.minY end
+function GetRectMaxY(rect)return rect.maxY end
+function IsTerrainPathable()return false end
+function BlzSetHeroProperName()end
+function ALICE_CallPeriodic(fn) periodic=fn;return fn end
+function ALICE_DisableCallback() periodic=nil end
+function ALICE_Halt()end
+function ALICE_Resume()end
+function TriggerRegisterPlayerUnitEvent()end
+function SuspendHeroXP()end
+function GetHeroLevel()return 1 end
+function GetHeroSkillPoints()return 0 end
+function UnitModifySkillPoints()end
+function ClearSelection()end
+function SelectUnit()end
+function SetCameraPosition()end
+function SetCameraTargetController()end
+results={}
+local noop=function()end
+SurvivorUI={HidePanel=noop,BeginRun=noop,UpdateDamageBoard=noop,UpdateExpedition=noop,ShowStageIntro=noop,
+    Notify=noop,Alert=noop,Say=noop,Cue=noop,
+    ShowResult=function(reason,_,_,_,_,_,details)results[#results+1]={reason=reason,details=details}end}
+SurvivorStory={Reset=noop,Cleanup=noop,JournalChapters=function()return {}end}
+SurvivorInventoryPause={Cleanup=noop,Init=function()if failObserver then error('injected observer failure')end end}
+SurvivorNativeLoadout={Cleanup=noop,Init=noop,Refresh=noop}
+SurvivorEquipment={Cleanup=noop,Init=noop,Reconcile=noop,Step=noop}
+SurvivorStage={Init=noop,Apply=noop,Cleanup=noop,LineClear=function()return true end}
+SurvivorExpedition={Reset=noop,EndStage=noop,BeginStage=noop,SetPaused=noop,Step=noop,OnKill=noop,
+    RiskActive=function()return false end}
+messages={};print=function(message)messages[#messages+1]=tostring(message)end
+`, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+SetLocal(AnyasLongNight.BeginRun,'initialized',true)
+SetLocal(AnyasLongNight.BeginRun,'setupPhase','MENU')
+SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','normal')
+SetLocal(AnyasLongNight.BeginRun,'selectedWeapon','firebolt')
+SetLocal(AnyasLongNight.BeginRun,'selectedTrinket','power')
+assert(AnyasLongNight.BeginRun() and RunSession.GetState()=='STAGE_CLEAR')
+assert(RunSession.EndStageClear() and RunSession.IsRunning())
+local hero=Local(SurvivorCombat.Init,'hero')
+hero.life=0;GetTriggerUnit=function()return hero end
+for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
+assert(RunSession.IsRunning() and #results==0 and Local(SurvivorCombat.Init,'hero')==hero,
+    'A hero death inside a native event must not tear combat down synchronously')
+periodic()
+assert(RunSession.GetState()=='FINISHED' and #results==1 and results[1].reason=='defeated',
+    'The next gameplay step finishes the run as a defeat')
+assert(Local(SurvivorCombat.Init,'hero')==nil)
+results,failObserver={},true
+assert(not AnyasLongNight.RetrySame())
+failObserver=false
+assert(#results==1 and results[1].reason=='error' and results[1].details~=nil,
+    'A failure after the session hooks exist shows the Finish result once, with its details')
+assert(Local(SurvivorCombat.Init,'hero')==nil and RunSession.GetState()=='FINISHED')
+assert(AnyasLongNight.RetrySame() and RunSession.GetState()=='STAGE_CLEAR','A later retry starts normally')
+RunSession.Finish('test')
+`);
+
+suite('run-clock soul burst cooldown and the status-death guard reset across runs and after proc failures', mocks + String.raw`
+function AddLightningEx()return {}end
+`, [config, metrics, augments, combat], String.raw`
+local cfg=SurvivorConfig.status
+local function Kill(u)
+    u.life=0;GetTriggerUnit=function()return u end
+    for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
+end
+local function Burst(units,build)
+    build.stats.sets.gravewarden=true
+    local apply=Local(SurvivorCombat.UpdateWeapons,'ApplyStatus');local hit=Local(SurvivorCombat.UpdateWeapons,'Hit')
+    local near=EnemyAt(units,100,100,false);near.life=100000
+    local cursed=EnemyAt(units,100,0,false);cursed.life=100000
+    apply(cursed,'plaguedart',{curse=cfg.curseMax},1);hit(cursed,40,'plaguedart',false,false,1,{})
+    hits={};Kill(cursed)
+    for _,h in ipairs(hits)do if h.unit==near then return true end end
+    return false
+end
+local _,build,units=NewCombat('plaguedart');now=600
+assert(Burst(units,build),'The first soul burst fires')
+SurvivorCombat.Cleanup()
+_,build,units=NewCombat('plaguedart');now=5
+assert(Burst(units,build),'A new run restarts at time zero and must not inherit the previous run cooldown')
+now=10
+local procVisual=Local(SurvivorCombat.UpdateWeapons,'ProcVisual')
+SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',function()error('injected proc failure')end)
+assert(not pcall(Burst,units,build),'The injected failure surfaces')
+assert(Local(SurvivorCombat.Cleanup,'inStatusProc')==false,'A failed proc must release the reentry guard')
+SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',procVisual)
+now=20
+assert(Burst(units,build),'Status-death set effects keep working after a failed proc')
+SurvivorCombat.Cleanup()
+`);
+
+suite('stat recalculation keeps combat-owned pause flags and drops derived keys that are no longer produced', mocks,
+    [config, augments], String.raw`
+local build=SurvivorAugments.NewBuild('firebolt')
+local stats=build.stats
+stats.nativeRegenerationPaused,stats.combatPaused,stats.retiredDerivedKey=true,true,42
+SurvivorAugments.Recalculate(build)
+assert(build.stats==stats,'Combat keeps the same stats table')
+assert(stats.nativeRegenerationPaused==true and stats.combatPaused==true,'Combat-owned pause flags survive')
+assert(stats.retiredDerivedKey==nil,'A key Calculate no longer emits must not keep a stale value')
+assert(stats.missileEnabled==true and stats.sets~=nil,'Derived values are still applied')
+`);
+
+suite('inventory observer and native loadout teardown release ownership after native failures', mocks + String.raw`
+function GetLocalPlayer()return 0 end
+function BlzTriggerRegisterPlayerSyncEvent()end
+SurvivorCombat={EscapeStatus=function()return true,0 end,WardStatus=function()return 0,0 end}
+SurvivorUI={SetRestInventoryVisible=function()end}
+SurvivorLootUI={Init=function()end,Reset=function()if failLoot then error('injected loot reset failure')end end}
+`, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua','src/30_gameplay/SurvivorInventoryPause.lua'], String.raw`
+SurvivorInventoryPause.Init()
+local observerTimer,observerTrigger=timers[#timers],triggers[#triggers]
+failLoot=true
+assert(not pcall(SurvivorInventoryPause.Cleanup),'The loot UI failure is reported')
+failLoot=false
+assert(observerTimer.destroyed and observerTrigger.destroyed,'Native handles are still released')
+SurvivorInventoryPause.Init();SurvivorInventoryPause.Cleanup()
+local hero=CreateUnit(0,'hero',0,0,0);local build=SurvivorAugments.NewBuild('firebolt')
+SurvivorNativeLoadout.Init(hero,build)
+local remove=UnitRemoveAbility
+UnitRemoveAbility=function(u,id)if id=='ASde'then error('injected ability failure')end;return remove(u,id)end
+assert(not pcall(SurvivorNativeLoadout.Cleanup),'The ability failure is reported')
+UnitRemoveAbility=remove
+assert(GetUnitAbilityLevel(hero,'HsW1')==0,'Later removals still run after one failure')
+local fresh=CreateUnit(0,'hero',0,0,0)
+SurvivorNativeLoadout.Init(fresh,SurvivorAugments.NewBuild('firebolt'))
+SurvivorNativeLoadout.Cleanup()
+`);
+
 for (const missingFrame of ['nil', '0', '{handle=0}']) {
     suite('native inventory observer retries lazy frames and protects sync generations: ' + missingFrame, mocks + String.raw`
 function ALICE_CallPeriodic(fn) periodic=fn;return fn end
@@ -3467,6 +3603,18 @@ function CatalogIndex(id)
 end
 `;
 const equipment = 'src/20_system/SurvivorEquipment.lua';
+suite('equipment teardown removes every owned item and permits a fresh run after native failures', gearMocks,
+    [config, metrics, augments, equipment], String.raw`
+local hero=NewGear()
+local first=SurvivorEquipment.DropAt(100,0,1);local second=SurvivorEquipment.DropAt(200,0,2)
+local destroy=DestroyTrigger
+DestroyTrigger=function()error('injected trigger failure')end
+assert(not pcall(SurvivorEquipment.Cleanup),'The trigger failure is reported')
+DestroyTrigger=destroy
+assert(first.removed and second.removed,'Owned gear is removed even when trigger teardown fails')
+NewGear();SurvivorEquipment.Cleanup()
+`);
+
 suite('equipment and native trinkets omit redundant text while preserving stats and cleanup mechanics', gearMocks + String.raw`
 function SetPlayerState()error('Equipment must not change player currency')end
 function AdjustPlayerStateBJ()error('Equipment must not award sale income')end
