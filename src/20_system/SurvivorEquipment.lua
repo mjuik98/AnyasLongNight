@@ -898,7 +898,7 @@ do
             EVENT_PLAYER_UNIT_PICKUP_ITEM, EVENT_PLAYER_UNIT_DROP_ITEM}) do
             TriggerRegisterPlayerUnitEvent(eventTrigger, GetOwningPlayer(hero), event, nil)
         end
-        TriggerAddAction(eventTrigger, function()
+        local function OnItemEvent()
             -- Event timing may precede native slot mutation. Read slots after the transaction.
             if GetTriggerUnit() == hero then
                 TouchUI()
@@ -915,6 +915,11 @@ do
                     end
                 end
             end
+        end
+        -- Debug.try would only print a failure here; report it to the run owner instead.
+        TriggerAddAction(eventTrigger, function()
+            local ok, message = pcall(OnItemEvent)
+            if not ok then RunSession.Fail(message) end
         end)
         SurvivorEquipment.Reconcile()
     end

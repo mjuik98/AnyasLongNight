@@ -48,6 +48,14 @@ do
     end
 
     local CleanupCall = RunSession.Attempt
+    -- DebugUtils' Debug.try only prints trigger-action errors. Route them to the
+    -- run owner, as UI, sync and timer callbacks already do.
+    local function RunAction(action)
+        return function()
+            local ok, message = pcall(action)
+            if not ok then RunSession.Fail(message) end
+        end
+    end
     local function HeroYaw() return GetUnitFacing(hero) * bj_DEGTORAD end
 
     local function HurtHero(source, amount, name, hint)
@@ -2871,17 +2879,17 @@ do
         queryGroup = CreateGroup()
         bonusPickupTrigger = CreateTrigger()
         TriggerRegisterAnyUnitEventBJ(bonusPickupTrigger, EVENT_PLAYER_UNIT_PICKUP_ITEM)
-        TriggerAddAction(bonusPickupTrigger, function()
+        TriggerAddAction(bonusPickupTrigger, RunAction(function()
             if GetTriggerUnit() ~= hero or not Alive(hero) then return end
             local item = GetManipulatedItem()
             local record = bonusItems[item]
             if not record then return end
             if RunSession.IsRunning() then CollectBonusItem(item)
             else record.pending = true end
-        end)
+        end))
         damageTrigger = CreateTrigger()
         TriggerRegisterAnyUnitEventBJ(damageTrigger, EVENT_PLAYER_UNIT_DAMAGED)
-        TriggerAddAction(damageTrigger, function()
+        TriggerAddAction(damageTrigger, RunAction(function()
             local target, damage = GetTriggerUnit(), GetEventDamage()
             if damage <= 0 then return end
             local record = units[target]
@@ -2931,10 +2939,10 @@ do
                 and (GetUnitX(target) - GetUnitX(record.shieldSource))^2 + (GetUnitY(target) - GetUnitY(record.shieldSource))^2 <= 400^2 then
                 BlzSetEventDamage(damage * 0.70)
             end
-        end)
+        end))
         deathTrigger = CreateTrigger()
         TriggerRegisterAnyUnitEventBJ(deathTrigger, EVENT_PLAYER_UNIT_DEATH)
-        TriggerAddAction(deathTrigger, function()
+        TriggerAddAction(deathTrigger, RunAction(function()
             local dead = GetTriggerUnit()
             local record = units[dead]
             if not record or not record.alive then return end
@@ -2959,13 +2967,18 @@ do
                 record.removeAt = RunSession.GetElapsed() + 2.0
                 ALICE_RemoveIdentifier(dead, "hsEnemy")
                 if record.boss then bossDefeated = true end
-                if RunSession.IsRunning() and not purging then Shatter(dead, record); StatusDeath(dead, record) end
+                -- A failed death proc must not cancel this kill's reward; report it afterwards.
+                local procOk, procError = true, nil
+                if RunSession.IsRunning() and not purging then
+                    procOk, procError = pcall(function() Shatter(dead, record); StatusDeath(dead, record) end)
+                end
                 -- Finish is deferred to Step; never tear down combat during a Hit loop.
                 if RunSession.IsRunning() and onKill then onKill(dead, record.elite, record.boss) end
+                if not procOk then error(procError, 0) end
             elseif onDeath then
                 -- The run owner defers this too while running (see AnyasLongNight Step).
                 onDeath()
             end
-        end)
+        end))
     end
 end

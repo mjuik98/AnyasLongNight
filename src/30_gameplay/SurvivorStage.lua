@@ -56,6 +56,19 @@ do
         dialogueAudioOwners[owner] = enabled and true or nil
         RefreshAmbienceVolume()
     end
+    -- Teardown attempts every native restore; a failed item is skipped, never replayed.
+    local function AttemptEach(errors, label, list, action)
+        local index = 1
+        while index <= #list do
+            RunSession.Attempt(errors, label, function()
+                while index <= #list do
+                    local item = list[index]
+                    index = index + 1
+                    action(item)
+                end
+            end)
+        end
+    end
     local painted, paintedCells, heightLocation = {}, {}, nil
     local cells, walls, reachable, lava = {}, {}, {}, {}
     -- Stock assets, resolved through the player's graphics mode. No imported model overrides.
@@ -118,12 +131,13 @@ do
         SetTerrainType(x, y, FourCC(tile), variant, 1, 1)
         if blighted ~= nil then SetBlightPoint(Player(SurvivorConfig.playerId), x, y, blighted) end
     end
-    local function RestoreTerrain()
-        for _, cell in ipairs(painted) do
+    local function RestoreTerrain(errors)
+        local restore = painted
+        painted, paintedCells = {}, {} -- Detach before native writes.
+        AttemptEach(errors, "stage terrain", restore, function(cell)
             SetTerrainType(cell.x, cell.y, cell.tile, cell.variation, 1, 1)
             SetBlightPoint(Player(SurvivorConfig.playerId), cell.x, cell.y, cell.blighted)
-        end
-        painted, paintedCells = {}, {}
+        end)
     end
     local function Ground(effect, x, y)
         MoveLocation(heightLocation, x, y)
@@ -352,9 +366,12 @@ do
         -- The outer map already has the editor's town, trees and cliffs. Keep those silhouettes.
     end
     -- Only cells owned by this stage are changed. Restore their original pathing on exit.
-    local function ClearGeometry()
-        for _, cell in ipairs(cells) do SetTerrainPathable(cell.x, cell.y, PATHING_TYPE_WALKABILITY, cell.walkable) end
+    local function ClearGeometry(errors)
+        local restore = cells
         cells, walls, reachable, lava = {}, {}, {}, {}
+        AttemptEach(errors, "stage pathing", restore, function(cell)
+            SetTerrainPathable(cell.x, cell.y, PATHING_TYPE_WALKABILITY, cell.walkable)
+        end)
     end
     function SurvivorStage.LineClear(ax, ay, bx, by)
         for _, wall in ipairs(walls) do
@@ -501,22 +518,32 @@ do
         assert(#reachable >= 40, "Stage paths must connect to the starting clearing")
     end
     function SurvivorStage.Get(index) return assert(themes[index], "Invalid stage theme") end
-    local function ClearPresentation()
-        ClearGeometry()
-        RestoreTerrain()
-        for _, effect in ipairs(effects) do DestroyEffect(effect) end
-        effects, sceneProps, currentTheme = {}, {}, nil
-        if weather then EnableWeatherEffect(weather, false); RemoveWeatherEffect(weather); weather = nil end
-        if sound then StopSound(sound, true, false); sound = nil end
-        soundVolume = nil
+    -- Releases ownership before each native call and records failures in errors.
+    local function ClearPresentation(errors)
+        ClearGeometry(errors)
+        RestoreTerrain(errors)
+        local oldEffects, oldWeather, oldSound = effects, weather, sound
+        effects, sceneProps, currentTheme, weather, sound, soundVolume = {}, {}, nil, nil, nil, nil
+        AttemptEach(errors, "stage effect", oldEffects, DestroyEffect)
+        if oldWeather then
+            RunSession.Attempt(errors, "weather disable", function() EnableWeatherEffect(oldWeather, false) end)
+            RunSession.Attempt(errors, "weather", function() RemoveWeatherEffect(oldWeather) end)
+        end
+        if oldSound then RunSession.Attempt(errors, "ambience sound", function() StopSound(oldSound, true, false) end) end
+    end
+    local function Raise(errors)
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     function SurvivorStage.Cleanup()
+        local errors = {}
+        local oldRect, oldHeight = rect, heightLocation
+        rect, heightLocation, arena, paintBounds = nil, nil, nil, nil
         dialogueAudioOwners = {}
-        RefreshAmbienceVolume()
-        ClearPresentation()
-        if rect then RemoveRect(rect); rect = nil end
-        if heightLocation then RemoveLocation(heightLocation); heightLocation = nil end
-        arena, paintBounds = nil, nil
+        RunSession.Attempt(errors, "ambience volume", RefreshAmbienceVolume)
+        ClearPresentation(errors)
+        if oldRect then RunSession.Attempt(errors, "stage rect", function() RemoveRect(oldRect) end) end
+        if oldHeight then RunSession.Attempt(errors, "stage height location", function() RemoveLocation(oldHeight) end) end
+        Raise(errors)
     end
     function SurvivorStage.Init(bounds)
         SurvivorStage.Cleanup()
@@ -535,7 +562,9 @@ do
         assert(rect ~= nil, "Initialize stage arena first")
         local started, phase = SurvivorMetrics.Begin(), SurvivorMetrics.Begin()
         SurvivorMetrics.Count("stage.calls")
-        ClearPresentation()
+        local errors = {}
+        ClearPresentation(errors)
+        Raise(errors)
         SurvivorMetrics.End("stage.clear", phase)
         local theme = SurvivorStage.Get(index)
         currentTheme = index
