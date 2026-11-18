@@ -355,6 +355,14 @@ function SurvivorConfig.HeroOf(unit)
     end
     return SurvivorConfig.defaultHero, SurvivorConfig.heroes[SurvivorConfig.defaultHero]
 end
+-- Guards local-only presentation; reads GetLocalPlayer on every call rather than caching it.
+function SurvivorConfig.IsLocalPlayer()
+    return GetLocalPlayer() == Player(SurvivorConfig.playerId)
+end
+-- Frame lookups can return nil, 0 or a released handle.
+function SurvivorConfig.ValidFrame(frame)
+    return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
+end
 
 function SurvivorConfig.SpawnRate(difficultyId, stage, stageElapsed)
     local difficulty = SurvivorConfig.difficulties[difficultyId]

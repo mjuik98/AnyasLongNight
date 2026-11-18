@@ -11,9 +11,7 @@ do
     local lastSentOpen = false
     local prefix = "HSInventory"
 
-    local function ValidFrame(frame)
-        return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
-    end
+    local ValidFrame = SurvivorConfig.ValidFrame
     local function ReadLocalPanels()
         local open, found, bagOpen, detailsOpen = false, 0, false, false
         for _, name in ipairs(frameNames) do
@@ -53,7 +51,7 @@ do
         -- Bag observation updates equipment metadata, so it runs on every client.
         -- The local renderer receives this revision instead of observing again.
         if revision == nil and SurvivorEquipment.UIRevision then revision = SurvivorEquipment.UIRevision() end
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if SurvivorConfig.IsLocalPlayer() then
             local open, _, bagOpen, detailsOpen = ReadLocalPanels()
             SurvivorUI.SetRestInventoryVisible(open)
             SurvivorLootUI.SetInventoryVisible(bagOpen and not detailsOpen, revision, detailsOpen)
@@ -108,7 +106,7 @@ do
         end)
     end
     function SurvivorInventoryPause.DebugStatus()
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         local open, found = ReadLocalPanels()
         print(string.format("[AnyasLongNight inventory] native panels=%d / visible=%s / state=%s",
             found, tostring(open), RunSession.GetState()))
@@ -130,7 +128,7 @@ do
         end
         if oldTrigger ~= nil then Attempt("sync trigger", function() DestroyTrigger(oldTrigger) end) end
         Attempt("rest inventory", function()
-            if GetLocalPlayer() == Player(SurvivorConfig.playerId) then SurvivorUI.SetRestInventoryVisible(false) end
+            if SurvivorConfig.IsLocalPlayer() then SurvivorUI.SetRestInventoryVisible(false) end
         end)
         Attempt("loot UI", SurvivorLootUI.Reset)
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end

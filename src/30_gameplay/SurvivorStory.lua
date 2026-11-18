@@ -26,6 +26,8 @@ SurvivorStory = {
 }
 do
     local clues, sceneEffects, hiddenHero, sceneLocation, camera = {}, {}, nil, nil, nil
+    -- Scene centre; sceneLocation is only the terrain-height probe and moves with each actor.
+    local sceneX, sceneY
     local portraitUnits, portraitHero = {}, nil
     local cameraBounds, cameraFocus, cameraGuardTimer = nil, nil, nil
     local actorStates, motion, sceneSounds, sceneSoundCache = {}, nil, {}, {}
@@ -79,7 +81,7 @@ do
     end
     local function GuardCamera(x, y, duration)
         StopCameraTransition()
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) and cameraBounds then
+        if SurvivorConfig.IsLocalPlayer() and cameraBounds then
             -- Read the in-flight target too, so rapid page clicks do not cut an unfinished pan.
             local previous = duration > 0 and {x = GetCameraTargetPositionX(), y = GetCameraTargetPositionY()} or nil
             -- Keep the old and new targets available for the existing smooth pan.
@@ -97,7 +99,7 @@ do
             if cameraGuardTimer ~= timer then return end -- A new page/cleanup cancelled this shot.
             local ok, message = pcall(function()
                 StopCameraTransition()
-                if GetLocalPlayer() == Player(SurvivorConfig.playerId) and cameraBounds then
+                if SurvivorConfig.IsLocalPlayer() and cameraBounds then
                     SetBounds(x - 64, y - 64, x + 64, y + 64)
                 end
             end)
@@ -108,7 +110,7 @@ do
         -- Warcraft's 315 degrees looks down at 45 degrees; +45 looks up from underground.
         -- Aim slightly in front of the actors so they sit above the dialogue panel.
         GuardCamera(x, y - 220, duration)
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         if duration == 0 then SetCameraPosition(x, y - 220)
         else PanCameraToTimed(x, y - 220, duration) end
         SetCameraField(CAMERA_FIELD_TARGET_DISTANCE, distance, duration)
@@ -118,7 +120,7 @@ do
         SetCameraField(CAMERA_FIELD_ROLL, 0, duration)
     end
     local function CaptureCamera()
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not SurvivorConfig.IsLocalPlayer() then return end
         camera = {}
         -- Native bounds already exclude camera margins; do not add those margins again.
         cameraBounds = {minX = GetCameraBoundMinX(), minY = GetCameraBoundMinY(),
@@ -168,17 +170,17 @@ do
         local hero, restoreHero = hiddenHero, hiddenHero or portraitHero
         local units, effects, states, location = portraitUnits, sceneEffects, actorStates, sceneLocation
         local restoreCamera, restoreBounds, hadPortrait = camera, cameraBounds, portraitHero ~= nil
-        portraitUnits, sceneEffects, actorStates, sceneLocation = {}, {}, {}, nil
+        portraitUnits, sceneEffects, actorStates, sceneLocation, sceneX, sceneY = {}, {}, {}, nil, nil, nil
         hiddenHero, portraitHero, camera, cameraBounds, cameraFocus = nil, nil, nil, nil, nil
         if hadPortrait then Attempt(errors, "portrait selection", function()
-            if GetLocalPlayer() == Player(SurvivorConfig.playerId) then ClearSelection() end
+            if SurvivorConfig.IsLocalPlayer() then ClearSelection() end
         end) end
         if hero then Attempt(errors, "hero visibility", function()
             if GetUnitTypeId(hero) ~= 0 then ShowUnit(hero, true) end
         end) end
         if restoreHero then Attempt(errors, "hero selection", function()
             if GetUnitTypeId(restoreHero) ~= 0 and UnitAlive(restoreHero)
-                and GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+                and SurvivorConfig.IsLocalPlayer() then
                 ClearSelection()
                 SelectUnit(restoreHero, true)
             end
@@ -205,7 +207,7 @@ do
             Attempt(errors, "story effect", function() DestroyEffect(effect) end)
         end
         if location then Attempt(errors, "story location", function() RemoveLocation(location) end) end
-        if restoreCamera and GetLocalPlayer() == Player(SurvivorConfig.playerId) then
+        if restoreCamera and SurvivorConfig.IsLocalPlayer() then
             if restoreBounds then Attempt(errors, "camera bounds", function()
                 SetBounds(restoreBounds.minX, restoreBounds.minY, restoreBounds.maxX, restoreBounds.maxY)
             end) end
@@ -232,9 +234,9 @@ do
         local point = SurvivorStage.ScenePoint and SurvivorStage.ScenePoint()
         local x, y = point and point.x or (GetRectMinX(bounds) + GetRectMaxX(bounds)) / 2,
             point and point.y or (GetRectMinY(bounds) + GetRectMaxY(bounds)) / 2
-        sceneLocation = Location(x, y)
+        sceneLocation, sceneX, sceneY = Location(x, y), x, y
         CaptureCamera()
-        if GetLocalPlayer() == Player(SurvivorConfig.playerId) then ResetToGameCamera(0) end
+        if SurvivorConfig.IsLocalPlayer() then ResetToGameCamera(0) end
         FrameScene(x, y, 1350, 0)
         return x, y
     end
@@ -244,15 +246,14 @@ do
         portraitHero = hero
         if not camera then CaptureCamera() end
         -- Text-only compatibility callers retain their current shot.
-        if not sceneLocation then
+        if not sceneX then
             GuardCamera(cameraFocus and cameraFocus.x or GetUnitX(hero), cameraFocus and cameraFocus.y or GetUnitY(hero), 0)
         end
         if not createUnits then return end
         -- ALICE hooks CreateUnit itself; exclude these types before its automatic registration.
         if ALICE_ExcludeTypes then ALICE_ExcludeTypes(SurvivorStory.portraitIds.anya, SurvivorStory.portraitIds.putress) end
         local bounds = bj_mapInitialPlayableArea
-        local focusX, focusY = sceneLocation and GetLocationX(sceneLocation) or GetUnitX(hero),
-            sceneLocation and GetLocationY(sceneLocation) or GetUnitY(hero)
+        local focusX, focusY = sceneX or GetUnitX(hero), sceneY or GetUnitY(hero)
         local minX, maxX, minY, maxY = GetRectMinX(bounds) + 128, GetRectMaxX(bounds) - 128,
             GetRectMinY(bounds) + 128, GetRectMaxY(bounds) - 128
         local corner, distance = nil, -1
@@ -282,7 +283,7 @@ do
         end
     end
     local function SelectSpeaker(speaker)
-        if not portraitHero or GetLocalPlayer() ~= Player(SurvivorConfig.playerId) then return end
+        if not portraitHero or not SurvivorConfig.IsLocalPlayer() then return end
         ClearSelection()
         local unit = portraitUnits[speaker]
         if unit and GetUnitTypeId(unit) ~= 0 then SelectUnit(unit, true) end
@@ -326,7 +327,7 @@ do
         inspect = [[Sound\Interface\PickUpItem.wav]],
     }
     local function Cue(kind)
-        if GetLocalPlayer() ~= Player(SurvivorConfig.playerId) or type(CreateSound) ~= "function" then return end
+        if not SurvivorConfig.IsLocalPlayer() or type(CreateSound) ~= "function" then return end
         local sound = sceneSoundCache[kind]
         local ok = pcall(function()
             if not sound then
