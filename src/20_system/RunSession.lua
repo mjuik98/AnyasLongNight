@@ -10,6 +10,12 @@ do
     function RunSession.GetElapsed() return elapsed end
     function RunSession.IsRunning() return state == "RUNNING" end
     function RunSession.IsInventoryOpen() return inventoryOpen end
+    -- Cleanup steps keep running after a failure; each failure is recorded as "label: message".
+    function RunSession.Attempt(errors, label, action)
+        local ok, result = pcall(action)
+        if not ok then errors[#errors + 1] = label .. ": " .. tostring(result) end
+        return ok, result
+    end
 
     function RunSession.Finish(reason)
         if state == "FINISHED" or state == "READY" then return false end
@@ -20,10 +26,7 @@ do
         local oldCaller, oldHooks, wasHalted = caller, hooks, haltedBySession
         caller, hooks, haltedBySession = nil, nil, false
         local errors = {}
-        local function Attempt(label, action)
-            local ok, message = pcall(action)
-            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
-        end
+        local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldCaller ~= nil then Attempt("disable callback", function() ALICE_DisableCallback(oldCaller) end) end
         if oldHooks and oldHooks.finish then Attempt("finish", function() oldHooks.finish(reason or "stopped") end) end
         -- Clean up while frozen, including when ending during a choice.

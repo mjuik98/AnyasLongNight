@@ -68,11 +68,7 @@ do
         queuedLevels, queueHead = {}, 1
         if oldTrigger ~= nil then DestroyTrigger(oldTrigger) end
     end
-    local function Attempt(errors, label, action)
-        local ok, result = pcall(action)
-        if not ok then errors[#errors + 1] = label .. ": " .. tostring(result) end
-        return ok, result
-    end
+    local Attempt = RunSession.Attempt
     local function CleanupRun(errors)
         runSerial = runSerial + 1 -- Invalidate preparation callbacks before native cleanup.
         Attempt(errors, "progression", ClearProgression)

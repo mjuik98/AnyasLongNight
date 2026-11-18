@@ -34,10 +34,7 @@ do
     local currentStage, dialogue, remembered = 1, {}, {}
     -- These preferences survive a retry; the current run's transcript does not.
     local summaryMode, seenScenes = false, {}
-    local function Attempt(errors, label, action)
-        local ok, message = pcall(action)
-        if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
-    end
+    local Attempt = RunSession.Attempt
     local function CancelTimer(timer, errors, label)
         if not timer then return end
         Attempt(errors, label .. " pause", function() PauseTimer(timer) end)
