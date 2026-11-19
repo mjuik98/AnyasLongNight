@@ -618,7 +618,7 @@ do
             local offset = (shot - (stats.missileCount + 1) / 2) * 18
             local missile = {identifier = "hsMissile", weapon = stats.weaponId or "firebolt", statusScale = stats.statusScale,
                 x = x - math.sin(yaw) * offset, y = y + math.cos(yaw) * offset, z = z, yaw = yaw,
-                owner = GetOwningPlayer(hero), target = target, life = stats.missileLifetime, damage = stats.missileDamage, tagExtra = extra,
+                owner = SurvivorConfig.Owner(), target = target, life = stats.missileLifetime, damage = stats.missileDamage, tagExtra = extra,
                 speed = stats.missileSpeed, hitRadius = stats.missileHitRadius, remaining = stats.missileRange, evolution = stats.fireEvolution,
                 selfInteractions = MoveMissile, isAnonymous = true}
             CreateObject(missile, stats.model or SurvivorConfig.missileModel, stats.missileScale)
@@ -639,7 +639,7 @@ do
         local x, y = GetUnitX(hero), GetUnitY(hero)
         x, y = SpreadPoint(x, y, stats.zoneRadius * 0.8, shot)
         CreateObject({identifier = "hsZone", weapon = stats.weaponId or "flamefield", statusScale = stats.statusScale, x = x, y = y, z = Height(x, y),
-            owner = GetOwningPlayer(hero), radius = stats.zoneRadius, isStationary = true,
+            owner = SurvivorConfig.Owner(), radius = stats.zoneRadius, isStationary = true,
             life = stats.zoneDuration, damage = stats.zoneDamage, pulse = stats.zonePulse, tagExtra = shot and shot.index ~= nil,
             selfInteractions = ZoneLifetime, interactions = {hsEnemy = ZoneDamage}},
             stats.model or SurvivorConfig.zoneModel, stats.zoneRadius / 230)
@@ -2684,8 +2684,7 @@ do
         clearTimer = nil
         if timer then
             local errors = {}
-            CleanupCall(errors, "pause cleanup timer", function() PauseTimer(timer) end)
-            CleanupCall(errors, "destroy cleanup timer", function() DestroyTimer(timer) end)
+            RunSession.CancelTimer(errors, "cleanup timer", timer)
             if #errors > 0 then error(table.concat(errors, "\n"), 0) end
         end
     end

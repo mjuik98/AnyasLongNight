@@ -97,7 +97,7 @@ do
         if points > 0 then UnitModifySkillPoints(hero, -points) end
     end
     local function AwardXP(amount)
-        if not RunSession.IsRunning() or hero == nil or not UnitAlive(hero) then return end
+        if not RunSession.IsRunning() or not SurvivorConfig.UnitLive(hero) then return end
         assert(type(amount) == "number" and amount >= 0, "Invalid XP reward")
         amount = math.floor(amount)
         if amount == 0 then return end
@@ -112,7 +112,7 @@ do
     end
     local function BonusReward(kind)
         local ok, message = pcall(function()
-            if not RunSession.IsRunning() or hero == nil or not UnitAlive(hero) then return end
+            if not RunSession.IsRunning() or not SurvivorConfig.UnitLive(hero) then return end
             local config = SurvivorConfig.bonusProps
             if kind == "recovery" then
                 local maximum, before = BlzGetUnitMaxHP(hero), GetWidgetLife(hero)

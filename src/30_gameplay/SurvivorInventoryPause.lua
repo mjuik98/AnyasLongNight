@@ -121,10 +121,7 @@ do
         frames, lastSentOpen = {}, false
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
-        if oldTimer ~= nil then
-            Attempt("pause observer timer", function() PauseTimer(oldTimer) end)
-            Attempt("destroy observer timer", function() DestroyTimer(oldTimer) end)
-        end
+        RunSession.CancelTimer(errors, "observer timer", oldTimer)
         if oldTrigger ~= nil then Attempt("sync trigger", function() DestroyTrigger(oldTrigger) end) end
         Attempt("rest inventory", function()
             if SurvivorConfig.IsLocalPlayer() then SurvivorUI.SetRestInventoryVisible(false) end

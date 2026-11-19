@@ -36,11 +36,6 @@ do
     -- These preferences survive a retry; the current run's transcript does not.
     local summaryMode, seenScenes = false, {}
     local Attempt = RunSession.Attempt
-    local function CancelTimer(timer, errors, label)
-        if not timer then return end
-        Attempt(errors, label .. " pause", function() PauseTimer(timer) end)
-        Attempt(errors, label .. " destroy", function() DestroyTimer(timer) end)
-    end
     local function StopAudio(release)
         local sounds = sceneSounds
         if release then sceneSounds, sceneSoundCache = {}, {} end
@@ -75,7 +70,7 @@ do
         cameraGuardTimer = nil
         local ownErrors = errors == nil
         errors = errors or {}
-        CancelTimer(timer, errors, "story camera timer")
+        RunSession.CancelTimer(errors, "story camera timer", timer)
         if ownErrors and #errors > 0 then error(table.concat(errors, "\n")) end
     end
     local function GuardCamera(x, y, duration)
@@ -353,7 +348,7 @@ do
         if not previous then return end
         local ownErrors = errors == nil
         errors = errors or {}
-        CancelTimer(previous.timer, errors, "story motion timer")
+        RunSession.CancelTimer(errors, "story motion timer", previous.timer)
         if snap then Attempt(errors, "story final pose", previous.finish) end
         if ownErrors and #errors > 0 then error(table.concat(errors, "\n")) end
     end
@@ -407,7 +402,7 @@ do
                 if current.elapsed >= duration then
                     motion = nil
                     local errors = {}
-                    CancelTimer(timer, errors, "story motion timer")
+                    RunSession.CancelTimer(errors, "story motion timer", timer)
                     Finish()
                     if #errors > 0 then error(table.concat(errors, "\n")) end
                 end

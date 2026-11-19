@@ -23,6 +23,12 @@ do
         if not ok then errors[#errors + 1] = label .. ": " .. tostring(result) end
         return ok, result
     end
+    -- Attempts both timer natives; failures are recorded as "<label> pause/destroy: message".
+    function RunSession.CancelTimer(errors, label, timer)
+        if not timer then return end
+        RunSession.Attempt(errors, label .. " pause", function() PauseTimer(timer) end)
+        RunSession.Attempt(errors, label .. " destroy", function() DestroyTimer(timer) end)
+    end
 
     function RunSession.Finish(reason)
         if state == "FINISHED" or state == "READY" then return false end
@@ -36,10 +42,7 @@ do
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldCaller ~= nil then Attempt("disable callback", function() ALICE_DisableCallback(oldCaller) end) end
-        if oldWatchdog ~= nil then
-            Attempt("pause watchdog", function() PauseTimer(oldWatchdog) end)
-            Attempt("destroy watchdog", function() DestroyTimer(oldWatchdog) end)
-        end
+        RunSession.CancelTimer(errors, "watchdog", oldWatchdog)
         if oldHooks and oldHooks.finish then Attempt("finish", function() oldHooks.finish(reason or "stopped") end) end
         -- Clean up while frozen, including when ending during a choice.
         if wasHalted then Attempt("resume ALICE", ALICE_Resume) end

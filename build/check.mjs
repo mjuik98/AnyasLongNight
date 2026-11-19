@@ -180,6 +180,11 @@ RunSession = {GetElapsed=function() return now end, IsRunning=function() return 
         local ok,result=pcall(action)
         if not ok then errors[#errors+1]=label..": "..tostring(result) end
         return ok,result
+    end,
+    CancelTimer=function(errors,label,timer)
+        if not timer then return end
+        RunSession.Attempt(errors,label.." pause",function() PauseTimer(timer) end)
+        RunSession.Attempt(errors,label.." destroy",function() DestroyTimer(timer) end)
     end}
 SurvivorStage = {LineClear=function() return true end}
 SurvivorExpedition = {RiskActive=function() return false end}
