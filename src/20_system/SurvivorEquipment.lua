@@ -822,6 +822,8 @@ do
             if allowed[item] and SurvivorConfig.ItemExists(item) then
                 allowed[item], owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil, nil
                 RemoveItem(item)
+                -- Removing a carried item can raise a drop event that re-records the dead handle.
+                owned[item], tooltipDirty[item] = nil, nil
                 removed = removed + 1
             end
         end

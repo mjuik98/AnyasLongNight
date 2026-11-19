@@ -510,6 +510,9 @@ do
         return RunSession.IsRunning() and not nativeInventoryVisible and not choosing and not SurvivorUI.IsNarrativeVisible()
             and not (SurvivorLootUI and SurvivorLootUI.IsExpanded())
     end
+    local function SpeechClockRunning()
+        return RunSession.IsRunning() and not choosing and not SurvivorUI.IsNarrativeVisible()
+    end
     local function DisplayDamageBoard(visible, quiet)
         if essentialRoot and not (visible and CombatHUDVisible()) then SetVisible(essentialRoot, false) end
         if damageBoard and SurvivorConfig.IsLocalPlayer() then
@@ -691,7 +694,9 @@ do
         local dt = math.max(0, elapsed - speechClock)
         speechClock = elapsed
         local active = CombatHUDVisible()
-        if active then
+        -- Reading time and queues advance only from synchronized state; local native
+        -- panel visibility decides only what is drawn (an open bag is a synced pause).
+        if SpeechClockRunning() then
             local oldAlertCount = #alerts
             for i = #alerts, 1, -1 do if alerts[i].expires <= elapsed then table.remove(alerts, i) end end
             if #alerts > 0 and #alerts ~= oldAlertCount then RenderAlerts()

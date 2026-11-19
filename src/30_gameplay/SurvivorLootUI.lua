@@ -50,9 +50,11 @@ do
             local state = RunSession.GetState()
             if SharedModalVisible() then return end
             if state ~= "RUNNING" and state ~= "INVENTORY" and state ~= "STAGE_CLEAR" then return end
-            local ok, message = pcall(action)
+            local ok, message = pcall(function()
+                action()
+                SurvivorLootUI.Refresh()
+            end)
             if not ok then RunSession.Fail(message) end
-            SurvivorLootUI.Refresh()
         end)
         return frame
     end
