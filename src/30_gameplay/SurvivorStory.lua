@@ -134,9 +134,12 @@ do
         end
     end
     function SurvivorStory.Reset()
-        SurvivorStory.Cleanup()
+        -- The transcript resets even when scene cleanup fails; report afterwards.
+        local ok, message = pcall(SurvivorStory.Cleanup)
         clues, dialogue, remembered, currentStage = {}, {}, {}, 1
-        SurvivorUI.ClearSpeech()
+        local cleared, failure = pcall(SurvivorUI.ClearSpeech)
+        if not ok then error(message, 0) end
+        if not cleared then error(failure, 0) end
     end
     function SurvivorStory.Record(index)
         local entry = assert(SurvivorStory.stages[index], "Unknown story stage")

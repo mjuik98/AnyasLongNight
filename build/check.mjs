@@ -172,15 +172,23 @@ function UnitAddItem(u,item)
     for i=1,6 do if not u.inventory[i] or u.inventory[i].removed then u.inventory[i]=item; return true end end
     return false
 end
-RunSession = {GetElapsed=function() return now end, IsRunning=function() return state=="RUNNING" end,
+-- Like the real session, a request is deferred and stops IsRunning until the
+-- session callback consumes it; FlushRunSession() plays that callback.
+RunSession = {GetElapsed=function() return now end,
+    IsRunning=function() return state=="RUNNING" and pendingFailure==nil end,
     GetState=function() return state end, Fail=function(message) error(message) end,
-    RequestFail=function(message) RunSession.Fail(message) end,
+    RequestFail=function(message) if pendingFailure==nil then pendingFailure=tostring(message) end end,
     IsInventoryOpen=function() return state=="INVENTORY" end,
     Attempt=function(errors,label,action)
         local ok,result=pcall(action)
         if not ok then errors[#errors+1]=label..": "..tostring(result) end
         return ok,result
     end}
+function FlushRunSession()
+    local message=pendingFailure
+    pendingFailure=nil
+    if message~=nil then RunSession.Fail(message) end
+end
 SurvivorStage = {LineClear=function() return true end}
 SurvivorExpedition = {RiskActive=function() return false end}
 SurvivorUI = {Notify=function(text) lastMessage=text end, Alert=function(seconds,text) lastMessage=text end,
@@ -2611,6 +2619,24 @@ for stage=1,5 do
     else assert(finished and restCalls==0 and inventoryStops==1) end
     SurvivorCombat.Cleanup()
 end
+-- An observer teardown failure at the final clear must not turn the victory into an error,
+-- and a bag left open at that moment must not keep its pause reason through the ending.
+print=function()end
+SurvivorInventoryPause.Cleanup=function() inventoryStops=inventoryStops+1;error('injected observer failure') end
+local hero,build,units=NewCombat("orbitblade")
+story,storyStage,rewards,restCalls,inventoryStops=nil,nil,0,0,0
+SetLocal(step,"stage",5);SetLocal(step,"stageTransition",false)
+SetLocal(step,"hero",hero);SetLocal(step,"build",build);SetLocal(step,"stats",build.stats)
+SetLocal(SurvivorCombat.BossDefeated,"bossDefeated",true)
+local reason
+assert(RunSession.Start(step,{pause=function(r) SurvivorCombat.SetPaused(true,r) end,
+    resume=function() SurvivorCombat.SetPaused(false) end,finish=function(r) reason=r end}))
+periodic();assert(RunSession.SetInventoryOpen(true) and RunSession.IsInventoryOpen())
+for i=1,20 do TickTimers() end
+assert(storyStage==5 and inventoryStops==1 and reason==nil,'The ending still starts after an observer failure')
+assert(not RunSession.IsInventoryOpen() and RunSession.GetState()=="STAGE_CLEAR")
+story();assert(reason=="boss_defeated")
+SurvivorCombat.Cleanup()
 `);
 
 suite('boss HUD reports live health and half-health state without separate monster popups', mocks,
@@ -2881,7 +2907,10 @@ local rewards={}
 local function Begin(index,start)
     now=start;state='RUNNING'
     SurvivorExpedition.BeginStage(hero,index,start,
-        function(kind)rewards[#rewards+1]=kind end)
+        function(kind)rewards[#rewards+1]=kind end,
+        {grantRecovery=function()return SurvivorCombat.GrantSearchRecovery()end,
+            spawnCourier=function(points)return SurvivorCombat.SpawnCourier(points)end,
+            releaseCourier=function(unit)return SurvivorCombat.ReleaseCourier(unit)end})
 end
 Begin(1,1000)
 now=1030;SurvivorExpedition.Step(0.02,now)
@@ -3048,13 +3077,13 @@ function Mark(label)
     if failAt==label then error('injected '..label..' failure')end
 end
 SurvivorUI={HidePanel=function()Mark('panel')end,ShowResult=function(reason)Mark('result');shownReason=reason end}
-SurvivorStory={Cleanup=function()Mark('story')end}
+SurvivorStory={Cleanup=function()Mark('story')end,Reset=function()Mark('storyReset')end}
 SurvivorInventoryPause={Cleanup=function()Mark('inventory')end}
 SurvivorNativeLoadout={Cleanup=function()Mark('loadout')end}
 SurvivorEquipment={Cleanup=function()Mark('equipment')end}
 SurvivorCombat={DamageReport=function()Mark('report');return ''end,Cleanup=function()Mark('combat')end}
 SurvivorStage={Cleanup=function()Mark('stage')end}
-SurvivorExpedition={EndStage=function()Mark('expedition')end}
+SurvivorExpedition={EndStage=function()Mark('expedition')end,Reset=function()Mark('expeditionReset')end}
 messages={};print=function(message)messages[#messages+1]=tostring(message)end
 `, [config,metrics,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
 local finish=Local(AnyasLongNight.BeginRun,'Finish')
@@ -3076,6 +3105,19 @@ for _,label in ipairs({'expedition','board','details','report','panel','story','
     assert(log:find('original failure') and log:find('injected '..label..' failure'),'Preserve both original and cleanup errors')
     assert(not RunSession.Finish('again') and resumes==1,'Repeated finish never cleans or resumes twice')
     if label~='result' then assert(shownReason=='error')end
+end
+-- A restart attempts the same subsystem list (plus per-run resets) before reporting.
+local start=Local(AnyasLongNight.BeginRun,'Start')
+local restartSteps={'panel','storyReset','expeditionReset','inventory','camera','loadout','equipment','combat','stage'}
+for _,label in ipairs(restartSteps)do
+    attempts,failAt={},label
+    local levelTrigger=CreateTrigger();SetLocal(finish,'levelTrigger',levelTrigger)
+    local ok,message=pcall(start,'firebolt','power')
+    assert(not ok and tostring(message):find('injected '..label..' failure'),'Restart reports the cleanup failure')
+    for _,cleanup in ipairs(restartSteps)do
+        assert(attempts[cleanup]==1,'Restart after a '..label..' failure skipped '..cleanup)
+    end
+    assert(levelTrigger.destroyed,'Restart releases the level trigger')
 end
 `);
 
@@ -3214,7 +3256,8 @@ assert(Burst(units,build),'A new run restarts at time zero and must not inherit 
 now=10
 local procVisual=Local(SurvivorCombat.UpdateWeapons,'ProcVisual')
 SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',function()error('injected proc failure')end)
-assert(not pcall(Burst,units,build),'The injected failure surfaces')
+Burst(units,build)
+assert(not pcall(FlushRunSession),'The injected failure surfaces once the deferred request is consumed')
 assert(Local(SurvivorCombat.Cleanup,'inStatusProc')==false,'A failed proc must release the reentry guard')
 SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',procVisual)
 now=20
@@ -3222,8 +3265,9 @@ assert(Burst(units,build),'Status-death set effects keep working after a failed 
 SurvivorCombat.Cleanup()
 `);
 
-suite('deferred run teardown waits for the session callback and a stalled gameplay clock fails the run', mocks + String.raw`
+suite('deferred run teardown waits for the session callback or paused watchdog and contained actor crashes fail the run', mocks + String.raw`
 function ALICE_CallPeriodic(fn) periodic=fn;return fn end
+function ALICE_SetCrashObserver(fn) crashObserver=fn end
 function ALICE_DisableCallback() periodic=nil end
 function ALICE_Halt() halted=true end
 function ALICE_Resume() halted=false end
@@ -3242,12 +3286,23 @@ assert(not RunSession.BeginChoice() and not RunSession.BeginStageClear(),'A pend
 periodic()
 assert(finished=='error' and steps==0 and RunSession.GetState()=='FINISHED','The session callback consumes the request before another step')
 assert(table.concat(messages,'\n'):find('injected kill failure'),'An error request replaces a pending finish')
--- While paused no hit loop is on the stack, so the request is handled immediately.
+-- Paused states still run native item/loadout loops; the watchdog tick handles the request.
 Begin();assert(RunSession.BeginChoice() and halted)
-RunSession.RequestFinish('defeated');assert(finished=='defeated' and not halted)
+RunSession.RequestFinish('defeated');assert(finished==nil and halted,'A paused request never tears down under its caller')
+assert(not RunSession.EndChoice() and RunSession.GetState()=='CHOOSING','A pending teardown blocks resuming')
+TickTimers();assert(finished=='defeated' and not halted)
+-- PROTECTED_MODE ALICE contains an actor error and keeps cycling; its observer fails the run.
+Begin();assert(type(crashObserver)=='function')
+local staleObserver=crashObserver
+crashObserver('injected actor failure')
+assert(finished==nil and not RunSession.IsRunning(),'An actor crash never tears down inside the ALICE cycle')
+periodic();assert(finished=='error' and table.concat(messages,'\n'):find('injected actor failure'))
+assert(crashObserver==nil,'Finish releases the crash observer')
+Begin();staleObserver('stale failure');assert(RunSession.IsRunning(),'An old run observer cannot fail a new run')
+RunSession.Finish('test')
 -- A step that requests teardown is finished by the same session callback after it returns.
 Begin(function()RunSession.RequestFinish('defeated')end);periodic();assert(finished=='defeated')
--- ALICE halts its whole cycle after an uncaught actor error; the run must not stay RUNNING.
+-- Without PROTECTED_MODE ALICE halts its whole cycle after an actor error; the run must not stay RUNNING.
 Begin();periodic();messages={}
 for _=1,6 do TickTimers() end
 assert(RunSession.GetState()=='RUNNING' and finished==nil,'Short stalls are tolerated')
@@ -3325,6 +3380,8 @@ cursed.life=0;GetTriggerUnit=function()return cursed end
 for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
 SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',procVisual)
 assert(kills==1,'A failed death proc must not cancel the kill reward')
+assert(#failures==0 and not RunSession.IsRunning(),'A death-event failure is deferred, never raised inside the hit loop')
+FlushRunSession()
 assert(#failures==1 and failures[1]:find('injected proc failure'),'The proc failure reaches RunSession.Fail')
 assert(Local(SurvivorCombat.Cleanup,'inStatusProc')==false,'The status-death guard is released')
 -- Hero damage: Debug.try would only print; the run owner must hear about it.
@@ -3337,6 +3394,7 @@ GetEventDamageSource=function()return near end
 BlzSetEventDamage=function()end
 for _,t in ipairs(triggers)do if t.event=='damage' and not t.destroyed then t.action()end end
 SurvivorExpedition.RiskActive=risk
+FlushRunSession()
 assert(#failures==2 and failures[2]:find('injected damage failure'),'Damage trigger failures reach RunSession.Fail')
 SurvivorCombat.Cleanup()
 `);
@@ -3652,6 +3710,49 @@ hero,build,units=NewCombat('firebolt');ALICE_Resume();for i=1,30 do main()end;as
 SurvivorCombat.Cleanup()
 `);
 
+suite('actual protected ALICE reports every contained actor failure to its crash observer and keeps cycling', mocks + String.raw`
+ALICE_Config=nil
+OnInit={final=function(_,initializer)aliceFixtureInitializer=initializer end}
+for _,name in ipairs({'HERO','STRUCTURE','MECHANICAL','UNDEAD','TAUREN','ANCIENT','SAPPER','PEON','FLYING','GIANT','SUMMONED','TOWNHALL'})do
+    _G['UNIT_TYPE_'..name]=name
+end
+`, ['src/05_vendor/ALICE.lua',config,metrics,augments,combat], String.raw`
+assert(ALICE_Config.PROTECTED_MODE,'The map configuration contains actor failures')
+local unusedTables=Local(aliceFixtureInitializer,'unusedTables')
+SetLocal(ALICE_CallDelayed,'GetTable',function()
+    local n=#unusedTables;if n==0 then return {} end
+    local t=unusedTables[n];unusedTables[n]=nil;return t
+end)
+local main=Local(ALICE_Resume,'Main');SetLocal(main,'CYCLE_LENGTH',17);SetLocal(main,'MAX_STEPS',16);ALICE_Config.MAX_INTERVAL=.32
+local pc,cc,s,c={},{},{},{};for i=0,17 do pc[i]=0;cc[i]=0;s[i]={};c[i]={}end
+SetLocal(main,'numPairs',pc);SetLocal(main,'numCellChecks',cc);SetLocal(main,'whichPairs',s);SetLocal(main,'cellCheckedActors',c)
+Local(ALICE_Resume,'timers').MASTER=CreateTimer()
+local acquire=Local(ALICE_Create,'GetUnusedActor');local makePair=Local(ALICE_Create,'CreatePair')
+local registry=Local(ALICE_Destroy,'actorOf');local serial=0
+local function actor(host)
+    local a=acquire();serial=serial+1;a.unique=serial;host=host or {x=0,y=0,z=0}
+    a.host,a.anchor,a.originalAnchor=host,host,host;a.x,a.y,a.z={},{},{}
+    a.isGlobal,a.isAnonymous=true,true;a.alreadyDestroyed=nil;a.references[host]=true;registry[host]=a;return a
+end
+local selfActor=actor();SetLocal(makePair,'SELF_INTERACTION_ACTOR',selfActor)
+local reports={};ALICE_SetCrashObserver(function(message)reports[#reports+1]=tostring(message)end)
+local function failing()
+    local host={x=0,y=0,z=0};local a=actor(host)
+    local broken=function()error('injected actor failure',0)end
+    a.selfInteractions[broken]=makePair(a,selfActor,broken)
+end
+failing()
+local tick=ALICE_Tick
+local ok,message=pcall(main)
+assert(not ok and tostring(message):find('injected actor failure'),'ALICE still raises the first failure for DebugUtils')
+assert(#reports==1 and reports[1]:find('injected actor failure'),'The observer hears the contained failure')
+assert(not Local(main,'cycle').isHalted,'Protected ALICE keeps cycling; a gameplay-clock watchdog never sees this')
+for i=1,3 do pcall(main) end
+assert(ALICE_Tick>tick+1 and #reports==1,'The failed pair is disabled after its failure')
+failing();assert(pcall(main) and #reports==2,'A repeated message is printed once but still reported every time')
+ALICE_SetCrashObserver(nil);failing();assert(pcall(main) and #reports==2)
+`);
+
 suite('actual ALICE paused drain unlinks scheduled, paused and every-step pairs within budget before recycling', mocks + String.raw`
 ALICE_Config=nil
 OnInit={final=function()end}
@@ -3816,10 +3917,12 @@ function BlzSetItemExtendedTooltip(item,text) gearTooltipWrites=gearTooltipWrite
 rarityRoll=100
 function GetRandomInt(a,b) if b==100 then return rarityRoll end;return a end
 function GetRandomReal(a,b) return b end
+-- The run owner injects the notifier; fixtures forward to their SurvivorUI mock.
+function GearNotify(text) if SurvivorUI and SurvivorUI.Notify then SurvivorUI.Notify(text) end end
 function NewGear(weapon,capacity)
     local hero=CreateUnit(0,"hero",0,0,0);hero.bag,hero.equipped,hero.capacity={},{},capacity or 6
     local build=SurvivorAugments.NewBuild(weapon or "firebolt",nil,SurvivorConfig.weapons[weapon or "firebolt"].hero)
-    SurvivorEquipment.Init(hero,build)
+    SurvivorEquipment.Init(hero,build,GearNotify)
     return hero,build
 end
 function CatalogIndex(id)
@@ -3850,8 +3953,34 @@ GetTriggerUnit=function()return hero end
 GetManipulatedItem=function()error('injected item event failure')end
 trigger.action()
 GetManipulatedItem=manipulated
+assert(#failures==0 and Local(SurvivorEquipment.Init,'hero')==hero,'Item events fire inside equipment scans; teardown is deferred')
+FlushRunSession()
 assert(#failures==1 and failures[1]:find('injected item event failure'),'Item-event failures reach RunSession.Fail')
 SurvivorEquipment.Cleanup()
+`);
+
+suite('a paused rest pickup failure waits until the native item loop returns before the run is torn down', gearMocks + String.raw`
+function ALICE_CallPeriodic(fn) periodic=fn;return fn end
+function ALICE_DisableCallback() periodic=nil end
+function ALICE_Halt() end
+function ALICE_Resume() end
+messages={};print=function(message)messages[#messages+1]=tostring(message)end
+`, [config, metrics, 'src/20_system/RunSession.lua', augments, equipment], String.raw`
+local hero=NewGear()
+local finished
+assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
+    finish=function(reason)finished=reason;SurvivorEquipment.Cleanup()end}))
+assert(RunSession.BeginStageClear() and RunSession.GetState()=='STAGE_CLEAR')
+local reward=SurvivorEquipment.DropAt(hero.x,hero.y,CatalogIndex("Hs01"),true)
+local manipulated=GetManipulatedItem
+GetManipulatedItem=function()error('injected pickup failure')end
+SurvivorEquipment.CollectRest() -- UnitAddItem raises the pickup event inside this scan.
+GetManipulatedItem=manipulated
+assert(finished==nil and Local(SurvivorEquipment.Init,'hero')==hero,'The scan finishes on owned state; no teardown under its native call')
+assert(hero.bag[1]==reward)
+TickTimers()
+assert(finished=='error' and Local(SurvivorEquipment.Init,'hero')==nil,'The paused watchdog tick consumes the request')
+assert(table.concat(messages,'\n'):find('injected pickup failure'))
 `);
 
 suite('equipment and native trinkets omit redundant text while preserving stats and cleanup mechanics', gearMocks + String.raw`
@@ -4045,7 +4174,7 @@ SurvivorEquipment.Cleanup()
 hero=CreateUnit(0,"hero",0,0,0);hero.bag,hero.equipped,hero.capacity={},{},1
 build=SurvivorAugments.NewBuild("firebolt","vitality")
 local maximum=hero.maxLife;revision=build.revision
-SurvivorEquipment.Init(hero,build)
+SurvivorEquipment.Init(hero,build,GearNotify)
 assert(build.revision==revision and hero.maxLife==maximum+build.stats.equipmentLife,
     'Initial hero stats apply even when the initial equipment snapshot is empty')
 local _,storm=SurvivorEquipment.Summary("Ht02")

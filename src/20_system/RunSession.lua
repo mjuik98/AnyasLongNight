@@ -6,11 +6,14 @@ do
     local generation = 0
     local haltedBySession = false
     local choosing, inventoryOpen, stageClear = false, false, false
-    -- A teardown requested from inside a hit, death or pickup callback waits for
-    -- the session's own callback, so combat is never cleaned under its own loop.
+    -- A teardown requested from inside a hit, death or item callback waits for the
+    -- session's own callback (running) or the watchdog tick (paused). Paused states
+    -- still run native item/loadout loops (rest pickup, bag cleanup), so a request is
+    -- never handled under the callback that raised it.
     local pendingReason, pendingMessage = nil, nil
-    -- ALICE stops its whole cycle after an uncaught actor error and only prints it.
-    -- A native timer notices that the gameplay clock stopped while still RUNNING.
+    -- PROTECTED_MODE ALICE disables a failed pair and keeps cycling; its crash observer
+    -- reports that failure here. Without protection ALICE halts its whole cycle after
+    -- an actor error; a native timer notices that the gameplay clock stopped.
     local watchdog, watchedElapsed, stalledFor = nil, 0.0, 0.0
     local WATCHDOG_INTERVAL, WATCHDOG_LIMIT = 0.5, 3.0
     function RunSession.GetState() return state end
@@ -36,6 +39,9 @@ do
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldCaller ~= nil then Attempt("disable callback", function() ALICE_DisableCallback(oldCaller) end) end
+        if type(ALICE_SetCrashObserver) == "function" then
+            Attempt("crash observer", function() ALICE_SetCrashObserver(nil) end)
+        end
         if oldWatchdog ~= nil then
             Attempt("pause watchdog", function() PauseTimer(oldWatchdog) end)
             Attempt("destroy watchdog", function() DestroyTimer(oldWatchdog) end)
@@ -51,14 +57,10 @@ do
         if state == "READY" then state = "FINISHED" end
         print("[AnyasLongNight] " .. tostring(message))
     end
-    -- For callbacks that can run inside a hit/death loop. While paused no such loop
-    -- runs, so the request is handled at once; an error replaces a pending finish.
+    -- For callbacks that can run inside a hit, death or item loop. The request is
+    -- always deferred; an error replaces a pending finish.
     function RunSession.RequestFinish(reason, message)
         if state == "READY" or state == "FINISHED" then return false end
-        if state ~= "RUNNING" then
-            if message ~= nil then RunSession.Fail(message) else RunSession.Finish(reason) end
-            return true
-        end
         if pendingReason == nil or (message ~= nil and pendingMessage == nil) then
             pendingReason, pendingMessage = reason, message
         end
@@ -76,6 +78,8 @@ do
     end
     local function Watch(runGeneration)
         if generation ~= runGeneration then return end
+        -- A paused session runs no gameplay callback; this tick consumes its request.
+        if pendingReason ~= nil and state ~= "RUNNING" then ConsumePending(); return end
         if state ~= "RUNNING" or elapsed ~= watchedElapsed then
             watchedElapsed, stalledFor = elapsed, 0.0
             return
@@ -110,6 +114,11 @@ do
             end
             return dt
         end, dt)
+        if type(ALICE_SetCrashObserver) == "function" then
+            ALICE_SetCrashObserver(function(message)
+                if generation == runGeneration then RunSession.RequestFail("ALICE actor error: " .. tostring(message)) end
+            end)
+        end
         local timer = CreateTimer()
         watchdog = timer
         TimerStart(timer, WATCHDOG_INTERVAL, true, function()

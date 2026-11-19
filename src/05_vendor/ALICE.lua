@@ -3537,6 +3537,9 @@ if not ALICE_Config then
 
         cycle.finishResumeSample()
         if crashingPairOrCallback then
+            -- PROTECTED_MODE disables the failed pair/callback and keeps cycling. Report every
+            -- failure (not only the first of each message) to the optional owner.
+            if cycle.crashObserver then pcall(cycle.crashObserver, err) end
             if not debug.errors[err] then
                 debug.errors[err] = true
                 error(err, 0)
@@ -6595,6 +6598,13 @@ if not ALICE_Config then
         cycle.resumeObserver = before and {before = before, after = after} or nil
         cycle.resumePending = nil
         cycle.resumeSample = nil
+    end
+
+    ---Observe failures that PROTECTED_MODE contains: the failed pair or callback is
+    ---disabled and the cycle continues. The observer is protected and optional.
+    function ALICE_SetCrashObserver(observer)
+        assert(observer == nil or type(observer) == "function", "Invalid crash observer")
+        cycle.crashObserver = observer
     end
 
     ---Resume the entire cycle.

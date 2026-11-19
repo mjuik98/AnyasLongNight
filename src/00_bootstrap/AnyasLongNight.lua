@@ -70,11 +70,13 @@ do
         if oldTrigger ~= nil then DestroyTrigger(oldTrigger) end
     end
     local Attempt = RunSession.Attempt
-    local function CleanupRun(errors)
-        runSerial = runSerial + 1 -- Invalidate preparation callbacks before native cleanup.
+    -- The one subsystem teardown list for finish, failed startup and restart. Every
+    -- step is attempted; a restart also clears the per-run story and expedition records.
+    local function TeardownSubsystems(errors, restart)
         Attempt(errors, "progression", ClearProgression)
         Attempt(errors, "hide UI", SurvivorUI.HidePanel)
-        Attempt(errors, "story", SurvivorStory.Cleanup)
+        Attempt(errors, "story", restart and SurvivorStory.Reset or SurvivorStory.Cleanup)
+        if restart then Attempt(errors, "expedition", SurvivorExpedition.Reset) end
         Attempt(errors, "inventory observer", SurvivorInventoryPause.Cleanup)
         -- Detach the camera before removing its target, even if scene cleanup failed.
         Attempt(errors, "camera", function()
@@ -84,6 +86,10 @@ do
         Attempt(errors, "equipment", SurvivorEquipment.Cleanup)
         Attempt(errors, "combat", SurvivorCombat.Cleanup)
         Attempt(errors, "stage", SurvivorStage.Cleanup)
+    end
+    local function CleanupRun(errors)
+        runSerial = runSerial + 1 -- Invalidate preparation callbacks before native cleanup.
+        TeardownSubsystems(errors, false)
         hero, build, stats, offers = nil, nil, nil, nil
         rewardLevel, rerollsRemaining, stageTransition = nil, 0, false
     end
@@ -248,6 +254,12 @@ do
         end
         RefreshDamageBoard()
     end
+    -- Expedition reaches combat only through this port; combat already queries it.
+    local expeditionCombat = {
+        grantRecovery = function() return SurvivorCombat.GrantSearchRecovery() end,
+        spawnCourier = function(points) return SurvivorCombat.SpawnCourier(points) end,
+        releaseCourier = function(unit) return SurvivorCombat.ReleaseCourier(unit) end,
+    }
     local function Step(dt, elapsed)
         if SurvivorCombat.BossDefeated() then
             if stageTransition then return end
@@ -262,7 +274,12 @@ do
                 SurvivorCombat.ClearBattlefieldAsync(function()
                     if not SameClear() then return end
                     if stage == SurvivorConfig.stages then
-                        SurvivorInventoryPause.Cleanup()
+                        -- Stop observing the bag for the ending. CleanupRun still owns the
+                        -- teardown; an observer failure must not turn the victory into an error.
+                        local errors = {}
+                        Attempt(errors, "inventory observer", SurvivorInventoryPause.Cleanup)
+                        Attempt(errors, "inventory pause", function() RunSession.SetInventoryOpen(false) end)
+                        for _, message in ipairs(errors) do print("[AnyasLongNight cleanup] " .. message) end
                         SurvivorStory.ShowEnding(hero, function()
                             if SameClear() then RunSession.Finish("boss_defeated") end
                         end)
@@ -402,7 +419,7 @@ do
         SurvivorNativeLoadout.Refresh()
         SurvivorCombat.BeginStage(stage, stageStarted)
         SurvivorStage.Apply(stage)
-        SurvivorExpedition.BeginStage(hero, stage, stageStarted, ExpeditionReward)
+        SurvivorExpedition.BeginStage(hero, stage, stageStarted, ExpeditionReward, expeditionCombat)
         SurvivorEquipment.CarryGroundToStage()
         nextElite, bossStarted = SurvivorConfig.eliteInterval, false
         weaponClocks, spawnBudget, enemyClock, hudClock = {}, 0, 0, 0
@@ -414,18 +431,10 @@ do
         stageTransition, nextHazard, nextRush = false, 35, SurvivorConfig.swarmRush.firstAt
         gearOffers, eventOffers = nil, nil
         RunSession.Finish("restarted")
-        -- Attempt every subsystem before reporting, as CleanupRun does; one
-        -- failing teardown must not leave the later subsystems still owned.
+        kills = 0 -- A failed startup must not report the previous run's kills.
+        -- One failing teardown must not leave the later subsystems still owned.
         local cleanupErrors = {}
-        Attempt(cleanupErrors, "hide UI", SurvivorUI.HidePanel)
-        Attempt(cleanupErrors, "story", SurvivorStory.Reset)
-        Attempt(cleanupErrors, "expedition", SurvivorExpedition.Reset)
-        Attempt(cleanupErrors, "progression", ClearProgression)
-        Attempt(cleanupErrors, "inventory observer", SurvivorInventoryPause.Cleanup)
-        Attempt(cleanupErrors, "native loadout", SurvivorNativeLoadout.Cleanup)
-        Attempt(cleanupErrors, "equipment", SurvivorEquipment.Cleanup)
-        Attempt(cleanupErrors, "combat", SurvivorCombat.Cleanup)
-        Attempt(cleanupErrors, "stage", SurvivorStage.Cleanup)
+        TeardownSubsystems(cleanupErrors, true)
         if #cleanupErrors > 0 then error(table.concat(cleanupErrors, "\n"), 0) end
         SurvivorUI.BeginRun()
         local rect = bj_mapInitialPlayableArea -- Borrowed rect: never destroy it.
@@ -497,7 +506,7 @@ do
         SurvivorEquipment.Init(hero, build, SurvivorUI.Notify)
         SetWidgetLife(hero, BlzGetUnitMaxHP(hero)) -- Start at full HP, including the chosen vitality trinket.
         SurvivorNativeLoadout.Init(hero, build)
-        SurvivorExpedition.BeginStage(hero, 1, 0, ExpeditionReward)
+        SurvivorExpedition.BeginStage(hero, 1, 0, ExpeditionReward, expeditionCombat)
         assert(RunSession.Start(Step, {
             pause = function(reason)
                 SurvivorCombat.SetPaused(true, reason)

@@ -92,12 +92,20 @@ do
         timeStopFilterTimer = timer
         TimerStart(timer, 0.02, true, function()
             if generation ~= timeStopFilterGeneration or timeStopFilterTimer ~= timer then return end
-            elapsed = elapsed + 0.02
-            local fraction = math.min(1, (elapsed + 0.000001) / duration)
-            Paint(start + (target - start) * fraction)
-            if fraction == 1 then
-                timeStopFilterOwned = active
-                CancelTimeStopFilterFade()
+            -- Debug.try would only print a timer failure; report it to the run owner.
+            local ok, message = pcall(function()
+                elapsed = elapsed + 0.02
+                local fraction = math.min(1, (elapsed + 0.000001) / duration)
+                Paint(start + (target - start) * fraction)
+                if fraction == 1 then
+                    timeStopFilterOwned = active
+                    CancelTimeStopFilterFade()
+                end
+            end)
+            if not ok then
+                local cancelled, failure = pcall(CancelTimeStopFilterFade)
+                if not cancelled then message = tostring(message) .. "\nUI cleanup: " .. tostring(failure) end
+                RunSession.Fail(message)
             end
         end)
     end
@@ -143,9 +151,16 @@ do
         hitTimer = hitTimer or CreateTimer()
         hitTimerRunning = true
         TimerStart(hitTimer, 0.02, true, function()
-            hitHold = math.max(0, hitHold - 0.02)
-            if hitAlpha > 0 then PaintHitVignette(math.max(0, hitAlpha - hitRate * 0.02)) end
-            if hitAlpha == 0 and hitHold == 0 then StopHitVignette() end
+            local ok, message = pcall(function()
+                hitHold = math.max(0, hitHold - 0.02)
+                if hitAlpha > 0 then PaintHitVignette(math.max(0, hitAlpha - hitRate * 0.02)) end
+                if hitAlpha == 0 and hitHold == 0 then StopHitVignette() end
+            end)
+            if not ok then
+                local stopped, failure = pcall(StopHitVignette)
+                if not stopped then message = tostring(message) .. "\nUI cleanup: " .. tostring(failure) end
+                RunSession.Fail(message)
+            end
         end)
     end
     local function SetText(frame, text)
@@ -494,6 +509,9 @@ do
         return RunSession.IsRunning() and not nativeInventoryVisible and not choosing and not SurvivorUI.IsNarrativeVisible()
             and not (SurvivorLootUI and SurvivorLootUI.IsExpanded())
     end
+    local function SpeechClockRunning()
+        return RunSession.IsRunning() and not choosing and not SurvivorUI.IsNarrativeVisible()
+    end
     local function DisplayDamageBoard(visible, quiet)
         if essentialRoot and not (visible and CombatHUDVisible()) then SetVisible(essentialRoot, false) end
         if damageBoard and SurvivorConfig.IsLocalPlayer() then
@@ -675,7 +693,9 @@ do
         local dt = math.max(0, elapsed - speechClock)
         speechClock = elapsed
         local active = CombatHUDVisible()
-        if active then
+        -- Reading time and queues advance only from synchronized state; local native
+        -- panel visibility decides only what is drawn (an open bag is a synced pause).
+        if SpeechClockRunning() then
             local oldAlertCount = #alerts
             for i = #alerts, 1, -1 do if alerts[i].expires <= elapsed then table.remove(alerts, i) end end
             if #alerts > 0 and #alerts ~= oldAlertCount then RenderAlerts()

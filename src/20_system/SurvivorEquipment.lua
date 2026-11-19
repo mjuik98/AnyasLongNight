@@ -822,6 +822,8 @@ do
             if allowed[item] and GetItemTypeId(item) ~= 0 then
                 allowed[item], owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil, nil
                 RemoveItem(item)
+                -- Removing a carried item can raise a drop event that re-records the dead handle.
+                owned[item], tooltipDirty[item] = nil, nil
                 removed = removed + 1
             end
         end
@@ -883,8 +885,8 @@ do
             and EVENT_PLAYER_UNIT_EQUIP_ITEM ~= nil and EVENT_PLAYER_UNIT_UNEQUIP_ITEM ~= nil,
             "장비 시스템은 Warcraft III 3.0 이상이 필요합니다.")
         hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = unit, runBuild, 0, true, true, 1
-        -- Isolated fixtures omit the notifier; the global lookup keeps them working.
-        notify = onNotify or function(text) if SurvivorUI and SurvivorUI.Notify then SurvivorUI.Notify(text) end end
+        -- The run owner injects its notifier; the system layer never looks up gameplay UI.
+        notify = onNotify or function() end
         pickupMode, locked = 1, {}
         -- AInv holds level-up trinket indicators; AIni/AEqu hold physical dropped gear.
         for _, code in ipairs({"AInv", "AIni", "AEqu"}) do

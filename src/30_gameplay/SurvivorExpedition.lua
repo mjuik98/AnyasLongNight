@@ -54,7 +54,9 @@ do
     }
     -- Lines outside a chapter, per hero; a hero without an entry speaks the Anya text.
     local heroLines = {anya = {riskDone = "챙겼어. 이제 빠지자."}, putress = {riskDone = "회수했다. 이제 물러나지."}}
-    local hero, stage, started, rewardCallback
+    -- combat is the run owner's port {grantRecovery, spawnCourier, releaseCourier};
+    -- this module never reaches into SurvivorCombat, which already queries it.
+    local hero, stage, started, rewardCallback, combat
     local objective, risk, records = nil, nil, {}
     local pulse = 0
     local function Near(unit, point, radius)
@@ -154,9 +156,10 @@ do
             .. (record.finding and ("\n공략 정보: " .. chapters[index].advantage .. (record.used and " · 활용" or " · 확보")) or "")
             .. "\n봉인 조사: " .. (record.risk or "미참여")
     end
-    function SurvivorExpedition.BeginStage(unit, index, elapsed, callback)
+    function SurvivorExpedition.BeginStage(unit, index, elapsed, callback, combatPort)
         SurvivorExpedition.EndStage()
-        hero, stage, started, rewardCallback = unit, index, elapsed, callback
+        assert(type(combatPort) == "table", "Expedition needs the combat port")
+        hero, stage, started, rewardCallback, combat = unit, index, elapsed, callback, combatPort
         pulse = 0
         records[stage] = {risk = "미참여"}
         local chapter = chapters[stage]
@@ -180,7 +183,7 @@ do
         RemoveMarker(objective)
         local chapter = chapters[stage]
         records[stage].finding, records[stage].reply = chapter.finding, chapter.reply
-        local healthReward = SurvivorCombat.GrantSearchRecovery()
+        local healthReward = combat.grantRecovery()
         rewardCallback("search")
         SurvivorUI.Cue("clue")
         Say("|cff70e6cc수색 완료 · 리롤 보충|r\n" .. healthReward)
@@ -215,7 +218,7 @@ do
         if age >= SurvivorConfig.StageTiming(stage).bossStart then
             if objective and objective.state ~= "complete" then
                 objective.state = "closed"; RemoveMarker(objective)
-                if objective.courier then SurvivorCombat.ReleaseCourier(objective.courier); objective.courier = nil end
+                if objective.courier then combat.releaseCourier(objective.courier); objective.courier = nil end
             end
             if risk and risk.state ~= "complete" then risk.state = "closed"; RemoveMarker(risk) end
             return
@@ -223,7 +226,7 @@ do
         pulse = pulse + dt
         if objective and objective.state == "waiting" and age >= 20 and elapsed >= (objective.retry or 0) then
             if chapter.mode == "courier" then
-                objective.courier = SurvivorCombat.SpawnCourier(objective.points)
+                objective.courier = combat.spawnCourier(objective.points)
                 objective.retry = elapsed + 0.5
             end
             if chapter.mode ~= "courier" or objective.courier then
@@ -296,8 +299,8 @@ do
         if risk and risk.state == "active" and records[stage] then records[stage].risk = "중단 · 보상 없음" end
         -- Detach ownership before native calls; a failed removal must not keep
         -- the old markers or block the next BeginStage/Reset.
-        local oldObjective, oldRisk = objective, risk
-        objective, risk, hero, rewardCallback = nil, nil, nil, nil
+        local oldObjective, oldRisk, oldCombat = objective, risk, combat
+        objective, risk, hero, rewardCallback, combat = nil, nil, nil, nil, nil
         local errors = {}
         local function Release(label, point)
             if not point then return end
@@ -309,9 +312,9 @@ do
         Release("objective", oldObjective)
         Release("risk", oldRisk)
         local courier = oldObjective and oldObjective.courier
-        if courier then
+        if courier and oldCombat then
             oldObjective.courier = nil
-            RunSession.Attempt(errors, "courier", function() SurvivorCombat.ReleaseCourier(courier) end)
+            RunSession.Attempt(errors, "courier", function() oldCombat.releaseCourier(courier) end)
         end
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
