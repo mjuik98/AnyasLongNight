@@ -4,8 +4,8 @@
     "source": "https://www.hiveworkshop.com/threads/alice-2-13-missiles-physics-more.353126/",
     "version": "2.13",
     "sha256": "271792dda075f0e7ae3041ebccd8e8c66d0913b1928256e4918a921f1a9b00c7",
-    "localSha256": "21b0fc789efd63080f3576a86eb15d4a989164f725e76995258dd11bb37b8250",
-    "localChanges": "Project modifications: optional performance observer; bounded halted destruction; safe removal of unscheduled paused pairs; generation guards for delayed callbacks."
+    "localSha256": "debe6c92f248b48145a7f5561918658796cbfda686d6ea085a4235aaf7bf7ffa",
+    "localChanges": "Project modifications: optional performance observer; bounded halted destruction; safe removal of unscheduled paused pairs; generation guards for delayed callbacks; protected-mode error observer and halted-state query."
   },
   {
     "file": "vendor/ALICE-API.lua",

@@ -380,15 +380,17 @@ function SurvivorConfig.TerrainZ(x, y)
     if terrainProbe == nil then terrainProbe = Location(x, y) else MoveLocation(terrainProbe, x, y) end
     return GetLocationZ(terrainProbe)
 end
--- Owner-only frame event whose failures end the run through RunSession.
-function SurvivorConfig.BindFrameEvent(triggers, frame, event, callback)
+-- Owner-only frame event. Bootstrap loads before the run owner, so the caller
+-- passes the failure handler (gameplay modules pass RunSession.Fail).
+function SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, onError)
+    assert(type(onError) == "function", "Frame events need a failure handler")
     local trigger = CreateTrigger()
     triggers[#triggers + 1] = trigger
     BlzTriggerRegisterFrameEvent(trigger, frame, event)
     TriggerAddAction(trigger, function()
         if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
         local ok, message = pcall(callback)
-        if not ok then RunSession.Fail(message) end
+        if not ok then onError(message) end
     end)
 end
 

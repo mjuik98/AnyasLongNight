@@ -3191,6 +3191,15 @@ assert(#results==1 and results[1].reason=='error' and results[1].details~=nil,
 assert(Local(SurvivorCombat.Init,'hero')==nil and RunSession.GetState()=='FINISHED')
 assert(AnyasLongNight.RetrySame() and RunSession.GetState()=='STAGE_CLEAR','A later retry starts normally')
 RunSession.Finish('test')
+-- A cleanup step that fails every time (a presentation refresh, not owned state)
+-- is reported but must not block every later run.
+SurvivorStage.Cleanup=function()error('injected ambience failure',0)end
+results,messages={},{}
+assert(AnyasLongNight.RetrySame() and RunSession.GetState()=='STAGE_CLEAR',
+    'A repeated presentation cleanup failure does not prevent a new run')
+assert(table.concat(messages,'\n'):find('injected ambience failure'),'The cleanup failure is still reported')
+SurvivorStage.Cleanup=function()end
+RunSession.Finish('test')
 `);
 
 suite('run-clock soul burst cooldown and the status-death guard reset across runs and after proc failures', mocks + String.raw`
@@ -3232,6 +3241,8 @@ function ALICE_CallPeriodic(fn) periodic=fn;return fn end
 function ALICE_DisableCallback() periodic=nil end
 function ALICE_Halt() halted=true end
 function ALICE_Resume() halted=false end
+function ALICE_IsHalted() return halted==true end
+function ALICE_SetErrorObserver(fn) errorObserver=fn end
 messages={};print=function(message)messages[#messages+1]=tostring(message)end
 `, [metrics,'src/20_system/RunSession.lua'], String.raw`
 local finished,steps
@@ -3247,9 +3258,13 @@ assert(not RunSession.BeginChoice() and not RunSession.BeginStageClear(),'A pend
 periodic()
 assert(finished=='error' and steps==0 and RunSession.GetState()=='FINISHED','The session callback consumes the request before another step')
 assert(table.concat(messages,'\n'):find('injected kill failure'),'An error request replaces a pending finish')
--- While paused no hit loop is on the stack, so the request is handled immediately.
+-- While paused the caller (a click or item event) may still use module state, so
+-- the watchdog consumes the request on its next tick instead.
 Begin();assert(RunSession.BeginChoice() and halted)
-RunSession.RequestFinish('defeated');assert(finished=='defeated' and not halted)
+RunSession.RequestFinish('defeated')
+assert(finished==nil and RunSession.GetState()=='CHOOSING' and halted,'A paused request never tears down under its caller')
+assert(not RunSession.EndChoice() and RunSession.GetState()=='CHOOSING','A pending teardown cannot resume combat')
+TickTimers();assert(finished=='defeated' and not halted and RunSession.GetState()=='FINISHED')
 -- A step that requests teardown is finished by the same session callback after it returns.
 Begin(function()RunSession.RequestFinish('defeated')end);periodic();assert(finished=='defeated')
 -- ALICE halts its whole cycle after an uncaught actor error; the run must not stay RUNNING.
@@ -3263,6 +3278,89 @@ for _,t in ipairs(timers)do assert(not t.running,'The watchdog timer is released
 Begin();assert(RunSession.BeginChoice());for _=1,20 do TickTimers() end;assert(finished==nil)
 assert(RunSession.EndChoice());for _=1,20 do periodic();TickTimers() end;assert(finished==nil)
 RunSession.Finish('test')
+-- Protected ALICE keeps cycling after an actor error; its observer reports the error,
+-- and teardown waits until the actor loop has returned.
+Begin();assert(type(errorObserver)=='function','A running session observes ALICE actor errors')
+errorObserver('injected actor error')
+assert(finished==nil and not RunSession.IsRunning(),'An actor error defers teardown')
+periodic()
+assert(finished=='error' and table.concat(messages,'\n'):find('ALICE actor error: injected actor error'))
+assert(errorObserver==nil,'Finish releases the error observer')
+-- A cycle that halted itself after an unprotected crash is resumed when the run ends.
+Begin();halted=true;RunSession.Finish('test')
+assert(not halted,'Finish resumes a self-halted ALICE cycle so released actors drain')
+`);
+
+suite('kills and weapon damage in the tick of a pending teardown still count, without new procs', mocks + String.raw`
+function ALICE_CallPeriodic(fn) periodic=fn;return fn end
+function ALICE_DisableCallback() periodic=nil end
+function ALICE_Halt() end
+function ALICE_Resume() end
+messages={};print=function(message)messages[#messages+1]=tostring(message)end
+`, [config, metrics, augments, combat, 'src/20_system/RunSession.lua'], String.raw`
+local finished,killed=nil,0
+local _,_,units=NewCombat('plaguedart')
+assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
+    finish=function(reason)finished=reason;SurvivorCombat.Cleanup()end}))
+SetLocal(SurvivorCombat.Init,'onKill',function()killed=killed+1 end)
+local hit=Local(SurvivorCombat.UpdateWeapons,'Hit')
+local enemy=EnemyAt(units,100,0,false);enemy.life=10
+onDamage=function(u)
+    if u.life>0 then return end
+    -- The same damage event also ends the run (e.g. the hero dies in this tick).
+    RunSession.RequestFinish('defeated')
+    GetTriggerUnit=function()return u end
+    for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
+end
+hit(enemy,50,'plaguedart')
+onDamage=nil
+local totals=Local(SurvivorCombat.Init,'damageTotals')
+assert(killed==1,'A kill in the defeat tick is still reported to the run owner')
+assert(totals.plaguedart.damage>0,'Damage dealt in the defeat tick stays attributed to its weapon')
+assert(not RunSession.IsRunning() and finished==nil)
+periodic();assert(finished=='defeated')
+`);
+
+suite('actual protected ALICE reports actor errors to its observer, disables only that pair and keeps cycling', mocks + String.raw`
+ALICE_Config=nil
+OnInit={final=function(_,initializer)aliceFixtureInitializer=initializer end}
+for _,name in ipairs({'HERO','STRUCTURE','MECHANICAL','UNDEAD','TAUREN','ANCIENT','SAPPER','PEON','FLYING','GIANT','SUMMONED','TOWNHALL'})do
+    _G['UNIT_TYPE_'..name]=name
+end
+`, ['src/05_vendor/ALICE.lua',config], String.raw`
+local unusedTables=Local(aliceFixtureInitializer,'unusedTables')
+SetLocal(ALICE_CallDelayed,'GetTable',function()
+    local n=#unusedTables;if n==0 then return {} end
+    local t=unusedTables[n];unusedTables[n]=nil;return t
+end)
+local main=Local(ALICE_Resume,'Main');SetLocal(main,'CYCLE_LENGTH',17);SetLocal(main,'MAX_STEPS',16)
+local pc,cc,s,c={},{},{},{};for i=0,17 do pc[i]=0;cc[i]=0;s[i]={};c[i]={}end
+SetLocal(main,'numPairs',pc);SetLocal(main,'numCellChecks',cc);SetLocal(main,'whichPairs',s);SetLocal(main,'cellCheckedActors',c)
+Local(ALICE_Resume,'timers').MASTER=CreateTimer()
+local acquire=Local(ALICE_Create,'GetUnusedActor');local makePair=Local(ALICE_Create,'CreatePair')
+local registry=Local(ALICE_Destroy,'actorOf');local serial=0
+local function actor(host)
+    local a=acquire();serial=serial+1;a.unique=serial;host=host or {x=0,y=0,z=0}
+    a.host,a.anchor,a.originalAnchor=host,host,host;a.x,a.y,a.z={},{},{}
+    a.isGlobal,a.isAnonymous=true,true;a.alreadyDestroyed=nil;a.references[host]=true;registry[host]=a;return a
+end
+local selfActor=actor();SetLocal(makePair,'SELF_INTERACTION_ACTOR',selfActor)
+assert(ALICE_Config.PROTECTED_MODE,'The map runs ALICE in protected mode')
+local observed={}
+ALICE_SetErrorObserver(function(message)observed[#observed+1]=tostring(message)end)
+local failing,healthy=0,0
+local bad=function()failing=failing+1;error('injected actor error',0)end
+local good=function()healthy=healthy+1;return .02 end
+local a,b=actor(),actor()
+a.selfInteractions[bad]=makePair(a,selfActor,bad)
+b.selfInteractions[good]=makePair(b,selfActor,good)
+for _=1,3 do pcall(main) end
+local seen=healthy
+assert(#observed==1 and observed[1]=='injected actor error','Every caught actor error reaches the observer')
+for _=1,5 do pcall(main) end
+assert(failing==1,'Protected mode disables only the failing pair')
+assert(healthy>seen and not ALICE_IsHalted(),'The cycle keeps running, so a stalled clock cannot reveal this error')
+ALICE_SetErrorObserver(nil)
 `);
 
 suite('a kill-reward failure inside a weapon hit defers teardown until the hit returns', mocks + String.raw`
@@ -3824,7 +3922,7 @@ function GetRandomReal(a,b) return b end
 function NewGear(weapon,capacity)
     local hero=CreateUnit(0,"hero",0,0,0);hero.bag,hero.equipped,hero.capacity={},{},capacity or 6
     local build=SurvivorAugments.NewBuild(weapon or "firebolt",nil,SurvivorConfig.weapons[weapon or "firebolt"].hero)
-    SurvivorEquipment.Init(hero,build)
+    SurvivorEquipment.Init(hero,build,function(text)SurvivorUI.Notify(text)end)
     return hero,build
 end
 function CatalogIndex(id)
@@ -4050,7 +4148,7 @@ SurvivorEquipment.Cleanup()
 hero=CreateUnit(0,"hero",0,0,0);hero.bag,hero.equipped,hero.capacity={},{},1
 build=SurvivorAugments.NewBuild("firebolt","vitality")
 local maximum=hero.maxLife;revision=build.revision
-SurvivorEquipment.Init(hero,build)
+SurvivorEquipment.Init(hero,build,function(text)SurvivorUI.Notify(text)end)
 assert(build.revision==revision and hero.maxLife==maximum+build.stats.equipmentLife,
     'Initial hero stats apply even when the initial equipment snapshot is empty')
 local _,storm=SurvivorEquipment.Summary("Ht02")
@@ -5421,6 +5519,30 @@ assert(not SurvivorUI.IsNarrativeVisible()and frames.CommandBarFrame.visible and
 SurvivorUI.HidePanel();SurvivorUI.SkipConversation();assert(closes==1)
 SurvivorUI.ShowConversation('retry',pages,Done,nil,function()closes=closes+1 end)
 SurvivorUI.AdvanceNarrative();assert(closes==2 and completed==2 and #unsafeFrameCalls==0)
+`);
+
+suite('panel and story teardown release their run state before native steps that can fail', presentationMocks,
+    [config,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua'], String.raw`
+SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
+state='STAGE_CLEAR'
+SetLocal(SurvivorUI.HidePanel,'gearCallback',function()end);SetLocal(SurvivorUI.HidePanel,'choosing',true)
+assert(SurvivorUI.IsChoiceVisible())
+local stopIntro=Local(SurvivorUI.HidePanel,'StopIntro')
+SetLocal(SurvivorUI.HidePanel,'StopIntro',function()error('injected intro failure',0)end)
+local ok,message=pcall(SurvivorUI.HidePanel)
+SetLocal(SurvivorUI.HidePanel,'StopIntro',stopIntro)
+assert(not ok and tostring(message):find('injected intro failure'),'The failure still surfaces')
+assert(not SurvivorUI.IsChoiceVisible() and Local(SurvivorUI.HidePanel,'restVisible')==false,
+    'A failed intro stop must not leave the choice reported as visible (hidden HUD, blocked loot controls)')
+SurvivorUI.HidePanel()
+SurvivorStory.Record(1);assert(next(Local(SurvivorStory.Record,'clues'))~=nil)
+local cleanup=SurvivorStory.Cleanup
+SurvivorStory.Cleanup=function()error('injected scene failure',0)end
+ok,message=pcall(SurvivorStory.Reset)
+SurvivorStory.Cleanup=cleanup
+assert(not ok and tostring(message):find('injected scene failure'))
+assert(next(Local(SurvivorStory.Record,'clues'))==nil,'A failed scene cleanup still resets the run story record')
+SurvivorStory.Reset()
 `);
 
 suite('gameplay return fades reveal restored views once and cancel on replacement, failure and cleanup', presentationMocks,

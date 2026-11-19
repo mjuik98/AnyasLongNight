@@ -92,12 +92,19 @@ do
         timeStopFilterTimer = timer
         TimerStart(timer, 0.02, true, function()
             if generation ~= timeStopFilterGeneration or timeStopFilterTimer ~= timer then return end
-            elapsed = elapsed + 0.02
-            local fraction = math.min(1, (elapsed + 0.000001) / duration)
-            Paint(start + (target - start) * fraction)
-            if fraction == 1 then
-                timeStopFilterOwned = active
-                CancelTimeStopFilterFade()
+            -- Debug.try would only print here, every tick; stop the fade and report once.
+            local ok, message = pcall(function()
+                elapsed = elapsed + 0.02
+                local fraction = math.min(1, (elapsed + 0.000001) / duration)
+                Paint(start + (target - start) * fraction)
+                if fraction == 1 then
+                    timeStopFilterOwned = active
+                    CancelTimeStopFilterFade()
+                end
+            end)
+            if not ok then
+                pcall(CancelTimeStopFilterFade)
+                RunSession.RequestFail(message)
             end
         end)
     end
@@ -128,8 +135,9 @@ do
         BlzFrameSetVisible(hitVignette, opacity > 0)
     end
     local function StopHitVignette()
-        if hitTimer and hitTimerRunning then PauseTimer(hitTimer) end
+        local running = hitTimerRunning
         hitTimerRunning, hitPeak, hitHold, hitRate = false, 0, 0, 0
+        if hitTimer and running then PauseTimer(hitTimer) end
         PaintHitVignette(0)
     end
     function SurvivorUI.HitFlash(fraction)
@@ -143,9 +151,17 @@ do
         hitTimer = hitTimer or CreateTimer()
         hitTimerRunning = true
         TimerStart(hitTimer, 0.02, true, function()
-            hitHold = math.max(0, hitHold - 0.02)
-            if hitAlpha > 0 then PaintHitVignette(math.max(0, hitAlpha - hitRate * 0.02)) end
-            if hitAlpha == 0 and hitHold == 0 then StopHitVignette() end
+            -- Debug.try would only print here, every tick; stop the fade and report once.
+            local ok, message = pcall(function()
+                hitHold = math.max(0, hitHold - 0.02)
+                if hitAlpha > 0 then PaintHitVignette(math.max(0, hitAlpha - hitRate * 0.02)) end
+                if hitAlpha == 0 and hitHold == 0 then StopHitVignette() end
+            end)
+            if not ok then
+                hitAlpha = 0
+                pcall(StopHitVignette)
+                RunSession.RequestFail(message)
+            end
         end)
     end
     local function SetText(frame, text)
@@ -748,7 +764,7 @@ do
         return frame
     end
     local function Bind(frame, event, callback)
-        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback)
+        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, function(message) RunSession.Fail(message) end)
     end
     local function ReleaseFocus(frame)
         BlzFrameSetEnable(frame, false)
@@ -950,8 +966,12 @@ do
         end
     end
     function SurvivorUI.BeginRun()
-        SurvivorUI.SetTimeStopFilter(false, true)
-        StopHitVignette()
+        -- Screen effects are local presentation; a failed reset is reported, not fatal to the run.
+        for _, reset in ipairs({{"time stop filter", function() SurvivorUI.SetTimeStopFilter(false, true) end},
+            {"hit vignette", StopHitVignette}}) do
+            local ok, message = pcall(reset[2])
+            if not ok then print("[AnyasLongNight cleanup] " .. reset[1] .. ": " .. tostring(message)) end
+        end
         if not initialized then return end
         -- Reuse the one map-lifetime handle after a failed run; never duplicate it.
         if speechTimer == nil then speechTimer = CreateTimer(); speechTimerPaused = true end
@@ -1469,17 +1489,25 @@ do
         if SurvivorLootUI then SurvivorLootUI.Refresh() end
     end
     function SurvivorUI.HidePanel()
-        ResetActionFeedback()
-        if expeditionRoot then SetVisible(expeditionRoot, false); SetVisible(expeditionText, false) end
-        if SurvivorSetupUI then SurvivorSetupUI.Hide() end
-        StopIntro()
+        -- Release the modal state first: a failed native step must not leave the
+        -- choice reported as visible, which hides the HUD and blocks loot controls.
         gearCallback = nil
         choosing, restVisible = false, false
-        if initialized then
-            BlzFrameSetVisible(panel, false)
-            BlzFrameSetVisible(shade, false)
+        local failures = {}
+        local function Attempt(action, ...)
+            local ok, message = pcall(action, ...)
+            if not ok then failures[#failures + 1] = tostring(message) end
         end
-        DisplayDamageBoard(true)
+        Attempt(ResetActionFeedback)
+        if expeditionRoot then Attempt(function() SetVisible(expeditionRoot, false); SetVisible(expeditionText, false) end) end
+        if SurvivorSetupUI then Attempt(SurvivorSetupUI.Hide) end
+        Attempt(StopIntro)
+        if initialized then
+            Attempt(BlzFrameSetVisible, panel, false)
+            Attempt(BlzFrameSetVisible, shade, false)
+        end
+        Attempt(DisplayDamageBoard, true)
+        if #failures > 0 then error(table.concat(failures, "\n"), 0) end
     end
     local function SetRerollsVisible(visible)
         BlzFrameSetVisible(rerollCounter, visible)
