@@ -917,9 +917,10 @@ do
             end
         end
         -- Debug.try would only print a failure here; report it to the run owner instead.
+        -- Pickups also fire inside Step's equipment scan, so teardown is deferred.
         TriggerAddAction(eventTrigger, function()
             local ok, message = pcall(OnItemEvent)
-            if not ok then RunSession.Fail(message) end
+            if not ok then RunSession.RequestFail(message) end
         end)
         SurvivorEquipment.Reconcile()
     end
@@ -1058,10 +1059,7 @@ do
         local oldTrigger, oldOwned = eventTrigger, owned
         eventTrigger = nil
         local errors = {}
-        local function Attempt(label, action)
-            local ok, message = pcall(action)
-            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
-        end
+        local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldTrigger ~= nil then Attempt("equipment trigger", function() DestroyTrigger(oldTrigger) end) end
         for item in pairs(oldOwned) do
             Attempt("equipment item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)

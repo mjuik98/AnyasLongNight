@@ -49,11 +49,12 @@ do
 
     local CleanupCall = RunSession.Attempt
     -- DebugUtils' Debug.try only prints trigger-action errors. Route them to the
-    -- run owner, as UI, sync and timer callbacks already do.
+    -- run owner, as UI, sync and timer callbacks already do. These events fire
+    -- inside UnitDamageTarget hit loops, so teardown waits for the session callback.
     local function RunAction(action)
         return function()
             local ok, message = pcall(action)
-            if not ok then RunSession.Fail(message) end
+            if not ok then RunSession.RequestFail(message) end
         end
     end
     local function HeroYaw() return GetUnitFacing(hero) * bj_DEGTORAD end
@@ -413,6 +414,8 @@ do
             tagSecondary = setProc == "tag"
             UnitDamageTarget(hero, target, amount, false, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC, WEAPON_TYPE_WHOKNOWS)
             hitSecondary, tagSecondary = previous, previousTag
+            -- The damage/death events may have ended the run or released this unit.
+            if not RunSession.IsRunning() or not units[target] then return end
             local after = Alive(target) and math.max(0, GetWidgetLife(target)) or 0
             local actual = math.max(0, before - after)
             local data = weapon and damageTotals[weapon]

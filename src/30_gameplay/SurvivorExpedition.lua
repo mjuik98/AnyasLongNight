@@ -288,13 +288,36 @@ do
         return table.concat(lines, "\n")
     end
     function SurvivorExpedition.SetPaused(paused)
-        for _, point in pairs({objective, risk}) do if point.effect then BlzSetSpecialEffectTimeScale(point.effect, paused and 0 or 1) end end
+        for _, point in ipairs({objective or false, risk or false}) do
+            if point and point.effect then BlzSetSpecialEffectTimeScale(point.effect, paused and 0 or 1) end
+        end
     end
     function SurvivorExpedition.EndStage()
         if risk and risk.state == "active" and records[stage] then records[stage].risk = "중단 · 보상 없음" end
-        RemoveMarker(objective); RemoveMarker(risk)
-        if objective and objective.courier then SurvivorCombat.ReleaseCourier(objective.courier) end
+        -- Detach ownership before native calls; a failed removal must not keep
+        -- the old markers or block the next BeginStage/Reset.
+        local oldObjective, oldRisk = objective, risk
         objective, risk, hero, rewardCallback = nil, nil, nil, nil
+        local errors = {}
+        local function Release(label, point)
+            if not point then return end
+            local effect, tag = point.effect, point.tag
+            point.effect, point.tag = nil, nil
+            if effect then RunSession.Attempt(errors, label .. " effect", function() DestroyEffect(effect) end) end
+            if tag then RunSession.Attempt(errors, label .. " text", function() DestroyTextTag(tag) end) end
+        end
+        Release("objective", oldObjective)
+        Release("risk", oldRisk)
+        local courier = oldObjective and oldObjective.courier
+        if courier then
+            oldObjective.courier = nil
+            RunSession.Attempt(errors, "courier", function() SurvivorCombat.ReleaseCourier(courier) end)
+        end
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
-    function SurvivorExpedition.Reset() SurvivorExpedition.EndStage(); records = {} end
+    function SurvivorExpedition.Reset()
+        local ok, message = pcall(SurvivorExpedition.EndStage)
+        records = {}
+        if not ok then error(message, 0) end
+    end
 end

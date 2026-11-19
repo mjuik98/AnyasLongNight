@@ -174,6 +174,8 @@ function UnitAddItem(u,item)
 end
 RunSession = {GetElapsed=function() return now end, IsRunning=function() return state=="RUNNING" end,
     GetState=function() return state end, Fail=function(message) error(message) end,
+    RequestFail=function(message) RunSession.Fail(message) end,
+    IsInventoryOpen=function() return state=="INVENTORY" end,
     Attempt=function(errors,label,action)
         local ok,result=pcall(action)
         if not ok then errors[#errors+1]=label..": "..tostring(result) end
@@ -2599,6 +2601,9 @@ for stage=1,5 do
     assert(story and storyStage==stage and RunSession.GetElapsed()==elapsed)
     assert(not finished and rewards==0,"Story continued without player input")
     assert(not AnyasLongNight.NextStage(),"Next stage bypassed story")
+    local serial=Local(step,"runSerial");SetLocal(step,"runSerial",serial+1)
+    story();assert(not finished and rewards==0,"A story callback from an older run must not act on the current run")
+    SetLocal(step,"runSerial",serial)
     story()
     if stage<5 then
         assert(rewards==1 and restCalls==1 and inventoryStops==0 and not finished)
@@ -3161,8 +3166,10 @@ assert(RunSession.EndStageClear() and RunSession.IsRunning())
 local hero=Local(SurvivorCombat.Init,'hero')
 hero.life=0;GetTriggerUnit=function()return hero end
 for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
-assert(RunSession.IsRunning() and #results==0 and Local(SurvivorCombat.Init,'hero')==hero,
+assert(RunSession.GetState()=='RUNNING' and not RunSession.IsRunning() and #results==0 and Local(SurvivorCombat.Init,'hero')==hero,
     'A hero death inside a native event must not tear combat down synchronously')
+assert(not RunSession.BeginChoice() and not RunSession.SetInventoryOpen(true) and RunSession.GetState()=='RUNNING',
+    'A pending defeat cannot be postponed by a choice or a synchronized inventory pause')
 periodic()
 assert(RunSession.GetState()=='FINISHED' and #results==1 and results[1].reason=='defeated',
     'The next gameplay step finishes the run as a defeat')
@@ -3209,6 +3216,89 @@ SetLocal(SurvivorCombat.UpdateWeapons,'ProcVisual',procVisual)
 now=20
 assert(Burst(units,build),'Status-death set effects keep working after a failed proc')
 SurvivorCombat.Cleanup()
+`);
+
+suite('deferred run teardown waits for the session callback and a stalled gameplay clock fails the run', mocks + String.raw`
+function ALICE_CallPeriodic(fn) periodic=fn;return fn end
+function ALICE_DisableCallback() periodic=nil end
+function ALICE_Halt() halted=true end
+function ALICE_Resume() halted=false end
+messages={};print=function(message)messages[#messages+1]=tostring(message)end
+`, [metrics,'src/20_system/RunSession.lua'], String.raw`
+local finished,steps
+local function Begin(step)
+    finished,steps=nil,0
+    assert(RunSession.Start(step or function()steps=steps+1 end,
+        {pause=function()end,resume=function()end,finish=function(reason)finished=reason end}))
+end
+Begin()
+RunSession.RequestFinish('defeated');RunSession.RequestFail('injected kill failure')
+assert(RunSession.GetState()=='RUNNING' and not RunSession.IsRunning() and finished==nil,'Requests never tear down synchronously')
+assert(not RunSession.BeginChoice() and not RunSession.BeginStageClear(),'A pending teardown cannot open a modal pause')
+periodic()
+assert(finished=='error' and steps==0 and RunSession.GetState()=='FINISHED','The session callback consumes the request before another step')
+assert(table.concat(messages,'\n'):find('injected kill failure'),'An error request replaces a pending finish')
+-- While paused no hit loop is on the stack, so the request is handled immediately.
+Begin();assert(RunSession.BeginChoice() and halted)
+RunSession.RequestFinish('defeated');assert(finished=='defeated' and not halted)
+-- A step that requests teardown is finished by the same session callback after it returns.
+Begin(function()RunSession.RequestFinish('defeated')end);periodic();assert(finished=='defeated')
+-- ALICE halts its whole cycle after an uncaught actor error; the run must not stay RUNNING.
+Begin();periodic();messages={}
+for _=1,6 do TickTimers() end
+assert(RunSession.GetState()=='RUNNING' and finished==nil,'Short stalls are tolerated')
+for _=1,2 do TickTimers() end
+assert(finished=='error' and table.concat(messages,'\n'):find('Gameplay clock stopped'),'A stopped gameplay clock fails the run')
+for _,t in ipairs(timers)do assert(not t.running,'The watchdog timer is released on finish')end
+-- Paused sessions and an advancing clock never trip the watchdog.
+Begin();assert(RunSession.BeginChoice());for _=1,20 do TickTimers() end;assert(finished==nil)
+assert(RunSession.EndChoice());for _=1,20 do periodic();TickTimers() end;assert(finished==nil)
+RunSession.Finish('test')
+`);
+
+suite('a kill-reward failure inside a weapon hit defers teardown until the hit returns', mocks + String.raw`
+function ALICE_CallPeriodic(fn) periodic=fn;return fn end
+function ALICE_DisableCallback() periodic=nil end
+function ALICE_Halt() end
+function ALICE_Resume() end
+messages={};print=function(message)messages[#messages+1]=tostring(message)end
+`, [config, metrics, augments, combat, 'src/20_system/RunSession.lua'], String.raw`
+local finished
+local _,_,units=NewCombat('plaguedart')
+assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
+    finish=function(reason)finished=reason;SurvivorCombat.Cleanup()end}))
+SetLocal(SurvivorCombat.Init,'onKill',function()error('injected kill reward failure')end)
+local hit=Local(SurvivorCombat.UpdateWeapons,'Hit')
+local enemy=EnemyAt(units,100,0,false);enemy.life=10
+onDamage=function(u)
+    if u.life>0 then return end
+    GetTriggerUnit=function()return u end
+    for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
+end
+hit(enemy,50,'plaguedart') -- Previously Fail cleaned combat here and the rest of Hit touched released state.
+onDamage=nil
+assert(finished==nil and RunSession.GetState()=='RUNNING' and not RunSession.IsRunning(),'Teardown waits outside the hit loop')
+assert(Local(SurvivorCombat.Init,'hero')~=nil,'Combat state stays owned while the hit unwinds')
+periodic()
+assert(finished=='error' and Local(SurvivorCombat.Init,'hero')==nil)
+assert(table.concat(messages,'\n'):find('injected kill reward failure'))
+`);
+
+suite('expedition teardown detaches markers before native calls and a failure cannot block the next reset', mocks + String.raw`
+function DestroyTextTag(tag)assert(not tag.destroyed);tag.destroyed=true end
+`, [config,'src/30_gameplay/SurvivorExpedition.lua'], String.raw`
+local failing,other,tag={},{},{}
+SetLocal(SurvivorExpedition.EndStage,'objective',{effect=failing,tag=tag})
+SetLocal(SurvivorExpedition.EndStage,'risk',{effect=other})
+local destroy=DestroyEffect
+DestroyEffect=function(e)if e==failing then error('injected marker failure')end;destroy(e)end
+local ok,message=pcall(SurvivorExpedition.EndStage)
+DestroyEffect=destroy
+assert(not ok and tostring(message):find('injected marker failure'))
+assert(tag.destroyed and other.destroyed,'A failed marker removal still releases the remaining handles')
+assert(Local(SurvivorExpedition.EndStage,'objective')==nil and Local(SurvivorExpedition.EndStage,'risk')==nil,
+    'Ownership is detached before native calls')
+SurvivorExpedition.Reset() -- Must not retry the failed handle.
 `);
 
 suite('combat trigger failures reach the run owner and a failed death proc keeps its kill reward', mocks + String.raw`
@@ -6506,11 +6596,23 @@ for i=1,100 do SurvivorLootUI.SetInventoryVisible(true)end
 assert(lootWrites==0 and bagReads==1 and pendingReads==reads and expeditionUpdates==updates,
     'Unchanged native visibility and equipment revisions do not redraw or reread the bag')
 ClickFrame(frames.ScriptDialogButton821)
-assert(frames.ScriptDialogButton821.text:find('잠금') and bagReads==2,'Lock changes update the cached row')
-ChangePending(2);SurvivorLootUI.Refresh();assert(frames.HSPendingRewards.text:find('2개') and bagReads==3)
+-- The synchronized click resolves its row from the shared bag, then the render rereads once.
+assert(frames.ScriptDialogButton821.text:find('잠금') and bagReads==3,'Lock changes update the cached row')
+ChangePending(2);SurvivorLootUI.Refresh();assert(frames.HSPendingRewards.text:find('2개') and bagReads==4)
 ClickFrame(frames.ScriptDialogButton810);assert(frames.ScriptDialogButton810.text=='줍기: 끔')
 narrative=true;SurvivorLootUI.Refresh();assert(not frames.HSLootRoot.visible)
 narrative=false;SurvivorLootUI.Refresh();assert(frames.HSLootRoot.visible and SurvivorLootUI.IsExpanded())
+-- Clicks run on every client: they follow the synchronized inventory state, never the local panel flags.
+local toggles,toggleLock=0,SurvivorEquipment.ToggleLock
+SurvivorEquipment.ToggleLock=function(item)toggles=toggles+1;return toggleLock(item)end
+SurvivorLootUI.SetInventoryVisible(false,nil,true);ClickFrame(frames.ScriptDialogButton821)
+assert(toggles==1,'A locally hidden panel does not change a synchronized lock click')
+state='RUNNING';SurvivorLootUI.SetInventoryVisible(true);ClickFrame(frames.ScriptDialogButton821)
+assert(toggles==1,'A locally visible panel cannot act while the shared inventory is closed')
+state='INVENTORY';SurvivorLootUI.SetInventoryOpen(false);ClickFrame(frames.ScriptDialogButton821)
+assert(toggles==1,'The synchronized close collapses shared management on every client')
+SurvivorEquipment.ToggleLock=toggleLock
+ClickFrame(frames.ScriptDialogButton811);assert(SurvivorLootUI.IsExpanded())
 SurvivorLootUI.SetInventoryVisible(false)
 assert(not SurvivorLootUI.IsExpanded() and not frames.ScriptDialogButton811.visible and not frames.QuestButtonBaseTemplate812.visible)
 SurvivorLootUI.Reset();assert(not frames.HSLootRoot.visible)
