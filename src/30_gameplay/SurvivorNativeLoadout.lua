@@ -321,10 +321,7 @@ do
         descriptions, titles, descriptionRevision = {}, {}, nil
         originalInterfaceText = nil
         local errors = {}
-        local function Attempt(label, action)
-            local ok, message = pcall(action)
-            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
-        end
+        local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         for item in pairs(oldPoints) do
             Attempt("talent point item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
         end

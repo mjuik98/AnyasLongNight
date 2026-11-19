@@ -6,9 +6,16 @@ do
     local generation = 0
     local haltedBySession = false
     local choosing, inventoryOpen, stageClear = false, false, false
+    -- A teardown requested from inside a hit, death or pickup callback waits for
+    -- the session's own callback, so combat is never cleaned under its own loop.
+    local pendingReason, pendingMessage = nil, nil
+    -- ALICE stops its whole cycle after an uncaught actor error and only prints it.
+    -- A native timer notices that the gameplay clock stopped while still RUNNING.
+    local watchdog, watchedElapsed, stalledFor = nil, 0.0, 0.0
+    local WATCHDOG_INTERVAL, WATCHDOG_LIMIT = 0.5, 3.0
     function RunSession.GetState() return state end
     function RunSession.GetElapsed() return elapsed end
-    function RunSession.IsRunning() return state == "RUNNING" end
+    function RunSession.IsRunning() return state == "RUNNING" and pendingReason == nil end
     function RunSession.IsInventoryOpen() return inventoryOpen end
     -- Cleanup steps keep running after a failure; each failure is recorded as "label: message".
     function RunSession.Attempt(errors, label, action)
@@ -22,12 +29,17 @@ do
         state = "FINISHED"
         generation = generation + 1
         choosing, inventoryOpen, stageClear = false, false, false
+        pendingReason, pendingMessage = nil, nil
         -- Detach ownership before any native/callback can fail or re-enter Finish.
-        local oldCaller, oldHooks, wasHalted = caller, hooks, haltedBySession
-        caller, hooks, haltedBySession = nil, nil, false
+        local oldCaller, oldHooks, wasHalted, oldWatchdog = caller, hooks, haltedBySession, watchdog
+        caller, hooks, haltedBySession, watchdog = nil, nil, false, nil
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldCaller ~= nil then Attempt("disable callback", function() ALICE_DisableCallback(oldCaller) end) end
+        if oldWatchdog ~= nil then
+            Attempt("pause watchdog", function() PauseTimer(oldWatchdog) end)
+            Attempt("destroy watchdog", function() DestroyTimer(oldWatchdog) end)
+        end
         if oldHooks and oldHooks.finish then Attempt("finish", function() oldHooks.finish(reason or "stopped") end) end
         -- Clean up while frozen, including when ending during a choice.
         if wasHalted then Attempt("resume ALICE", ALICE_Resume) end
@@ -39,6 +51,41 @@ do
         if state == "READY" then state = "FINISHED" end
         print("[AnyasLongNight] " .. tostring(message))
     end
+    -- For callbacks that can run inside a hit/death loop. While paused no such loop
+    -- runs, so the request is handled at once; an error replaces a pending finish.
+    function RunSession.RequestFinish(reason, message)
+        if state == "READY" or state == "FINISHED" then return false end
+        if state ~= "RUNNING" then
+            if message ~= nil then RunSession.Fail(message) else RunSession.Finish(reason) end
+            return true
+        end
+        if pendingReason == nil or (message ~= nil and pendingMessage == nil) then
+            pendingReason, pendingMessage = reason, message
+        end
+        return true
+    end
+    function RunSession.RequestFail(message)
+        if not RunSession.RequestFinish("error", tostring(message)) then RunSession.Fail(message) end
+    end
+    local function ConsumePending()
+        if pendingReason == nil then return false end
+        local reason, message = pendingReason, pendingMessage
+        pendingReason, pendingMessage = nil, nil
+        if message ~= nil then RunSession.Fail(message) else RunSession.Finish(reason) end
+        return true
+    end
+    local function Watch(runGeneration)
+        if generation ~= runGeneration then return end
+        if state ~= "RUNNING" or elapsed ~= watchedElapsed then
+            watchedElapsed, stalledFor = elapsed, 0.0
+            return
+        end
+        stalledFor = stalledFor + WATCHDOG_INTERVAL
+        if pendingReason ~= nil then ConsumePending()
+        elseif stalledFor >= WATCHDOG_LIMIT then
+            RunSession.Fail("Gameplay clock stopped while running (ALICE cycle halted after an actor error)")
+        end
+    end
     function RunSession.Start(stepCallback, lifecycle)
         if state ~= "READY" and state ~= "FINISHED" then return false end
         assert(ALICE_Initialized, "Start after ALICE initialization")
@@ -49,21 +96,32 @@ do
         generation = generation + 1
         local runGeneration = generation
         choosing, inventoryOpen, stageClear = false, false, false
+        pendingReason, pendingMessage = nil, nil
+        watchedElapsed, stalledFor = 0.0, 0.0
         local dt = ALICE_Config.MIN_INTERVAL
         caller = ALICE_CallPeriodic(function()
-            if generation == runGeneration and state == "RUNNING" then
+            if generation == runGeneration and state == "RUNNING" and not ConsumePending() then
                 elapsed = elapsed + dt
                 local started = SurvivorMetrics.Begin()
                 local ok, message = pcall(stepCallback, dt, elapsed)
                 SurvivorMetrics.End("gameplay.step", started)
-                if not ok then RunSession.Fail(message) end
+                if not ok then RunSession.Fail(message)
+                elseif generation == runGeneration then ConsumePending() end
             end
             return dt
         end, dt)
+        local timer = CreateTimer()
+        watchdog = timer
+        TimerStart(timer, WATCHDOG_INTERVAL, true, function()
+            local ok, message = pcall(Watch, runGeneration)
+            if not ok then RunSession.Fail(message) end
+        end)
         return true
     end
     local function ApplyPauseReasons()
         if state == "READY" or state == "FINISHED" then return false end
+        -- A requested finish wins over a new pause; the next callback consumes it.
+        if pendingReason ~= nil then return false end
         local nextState = stageClear and "STAGE_CLEAR" or choosing and "CHOOSING" or inventoryOpen and "INVENTORY" or "RUNNING"
         if nextState == state then return true end
         state = nextState
@@ -80,7 +138,7 @@ do
         return true
     end
     function RunSession.BeginChoice()
-        if state ~= "RUNNING" then return false end
+        if not RunSession.IsRunning() then return false end
         choosing = true
         return ApplyPauseReasons()
     end
@@ -90,7 +148,7 @@ do
         return ApplyPauseReasons()
     end
     function RunSession.BeginStageClear()
-        if state ~= "RUNNING" then return false end
+        if not RunSession.IsRunning() then return false end
         stageClear = true
         return ApplyPauseReasons()
     end

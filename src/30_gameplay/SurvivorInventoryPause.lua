@@ -89,6 +89,8 @@ do
                 SurvivorEquipment.Reconcile()
                 SurvivorNativeLoadout.Refresh() -- Apply the last native talent selection before resuming combat.
                 RunSession.SetInventoryOpen(value == "1")
+                -- Shared loot-management state collapses on the synchronized close.
+                if SurvivorLootUI.SetInventoryOpen then SurvivorLootUI.SetInventoryOpen(value == "1") end
                 -- Interrupt on the synchronized open event even if the bag closes
                 -- again before the preparation countdown's next timer tick.
                 if value == "1" and SurvivorUI.InterruptCombatPreparation then
@@ -118,10 +120,7 @@ do
         timer, syncTrigger = nil, nil
         frames, lastSentOpen = {}, false
         local errors = {}
-        local function Attempt(label, action)
-            local ok, message = pcall(action)
-            if not ok then errors[#errors + 1] = label .. ": " .. tostring(message) end
-        end
+        local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldTimer ~= nil then
             Attempt("pause observer timer", function() PauseTimer(oldTimer) end)
             Attempt("destroy observer timer", function() DestroyTimer(oldTimer) end)

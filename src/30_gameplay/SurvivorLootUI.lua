@@ -9,7 +9,8 @@ do
     local nativeDetailsVisible = false
     local rendered, lastRevision, bagList, bagCount, bagCapacity = {}, nil, {}, 0, 0
     local expeditionView
-    function SurvivorLootUI.IsExpanded() return expanded end
+    -- Local rendering only: the native panels are observed on the local client.
+    function SurvivorLootUI.IsExpanded() return expanded and inventoryOpen end
     local ValidFrame = SurvivorConfig.ValidFrame
     local function Set(frame, property, value)
         local cached = rendered[frame]
@@ -28,10 +29,12 @@ do
         BlzFrameSetEnable(frame, false)
         return frame
     end
-    local function ModalVisible()
-        return nativeDetailsVisible or SurvivorUI.IsNarrativeVisible()
-            or (SurvivorUI.IsChoiceVisible and SurvivorUI.IsChoiceVisible())
+    -- Click handlers run on every client, so they decide only from synchronized
+    -- state; the local panel flags only choose what is drawn.
+    local function SharedModalVisible()
+        return SurvivorUI.IsNarrativeVisible() or (SurvivorUI.IsChoiceVisible and SurvivorUI.IsChoiceVisible())
     end
+    local function ModalVisible() return nativeDetailsVisible or SharedModalVisible() end
     local function Button(parent, context, width, x, y, text, action)
         local frame = BlzCreateFrame("ScriptDialogButton", parent, 0, context)
         BlzFrameSetSize(frame, width, 0.026)
@@ -45,7 +48,7 @@ do
             BlzFrameSetEnable(frame, false); BlzFrameSetEnable(frame, true)
             if rendered[frame] then rendered[frame].enabled = nil end
             local state = RunSession.GetState()
-            if ModalVisible() then return end
+            if SharedModalVisible() then return end
             if state ~= "RUNNING" and state ~= "INVENTORY" and state ~= "STAGE_CLEAR" then return end
             local ok, message = pcall(action)
             if not ok then RunSession.Fail(message) end
@@ -55,7 +58,13 @@ do
     end
     local function CanManage()
         local state = RunSession.GetState()
-        return not ModalVisible() and inventoryOpen and (state == "INVENTORY" or state == "STAGE_CLEAR")
+        return not SharedModalVisible() and RunSession.IsInventoryOpen() and (state == "INVENTORY" or state == "STAGE_CLEAR")
+    end
+    local function ShowsManage() return inventoryOpen and not nativeDetailsVisible and CanManage() end
+    -- Resolve bag rows and page bounds from the shared bag, not the locally rendered list.
+    local function SharedPage()
+        local list = SurvivorEquipment.BagEntries()
+        return list, math.min(page, math.max(1, math.ceil(#list / 6)))
     end
     function SurvivorLootUI.Init()
         if root then return end
@@ -86,16 +95,20 @@ do
             local row = {}
             rows[i] = row
             row.frame = Button(panel, 820 + i, 0.252, 0.014, -0.05 - (i - 1) * 0.025, "", function()
-                if CanManage() and expanded and row.item then
-                    SurvivorEquipment.ToggleLock(row.item); preview = nil
-                end
+                if not CanManage() or not expanded then return end
+                local list, shown = SharedPage()
+                local entry = list[(shown - 1) * 6 + i]
+                if entry then SurvivorEquipment.ToggleLock(entry.item); preview = nil end
             end)
         end
         previous = Button(panel, 840, 0.055, 0.014, -0.203, "이전", function()
-            if CanManage() then page, preview = math.max(1, page - 1), nil end
+            if CanManage() then local _, shown = SharedPage(); page, preview = math.max(1, shown - 1), nil end
         end)
         following = Button(panel, 841, 0.055, 0.211, -0.203, "다음", function()
-            if CanManage() then page, preview = page + 1, nil end
+            if CanManage() then
+                local list, shown = SharedPage()
+                page, preview = math.min(shown + 1, math.max(1, math.ceil(#list / 6))), nil
+            end
         end)
         status = Text(panel, "HSLootStatus", 0.14, 0.025, 0.07, -0.203)
         Button(panel, 842, 0.126, 0.014, -0.230, "일반 정리", function()
@@ -125,7 +138,7 @@ do
         if not root then return end
         local state = RunSession.GetState()
         local active = not ModalVisible() and (state == "RUNNING" or state == "INVENTORY" or state == "STAGE_CLEAR")
-        local manage = CanManage()
+        local manage = ShowsManage()
         local view = tostring(active) .. ":" .. tostring(manage) .. ":" .. tostring(expanded) .. ":" .. tostring(inventoryOpen)
         if expeditionView ~= view then
             expeditionView = view
@@ -159,13 +172,12 @@ do
         end
         local list = bagList
         local pages = math.max(1, math.ceil(#list / 6))
-        page = math.min(page, pages)
-        Set(status, "text", string.format("%d/%d쪽 · %d/%d칸", page, pages, bagCount, bagCapacity))
-        Set(previous, "enabled", page > 1)
-        Set(following, "enabled", page < pages)
+        local shown = math.min(page, pages) -- Display clamp only; clicks own the shared page.
+        Set(status, "text", string.format("%d/%d쪽 · %d/%d칸", shown, pages, bagCount, bagCapacity))
+        Set(previous, "enabled", shown > 1)
+        Set(following, "enabled", shown < pages)
         for i, row in ipairs(rows) do
-            local entry = list[(page - 1) * 6 + i]
-            row.item = entry and entry.item or nil
+            local entry = list[(shown - 1) * 6 + i]
             Set(row.frame, "visible", entry ~= nil)
             if entry then Set(row.frame, "text", (entry.locked and "[잠금] " or "[보관] ") .. SurvivorEquipment.Name(entry.id)) end
         end
@@ -179,8 +191,11 @@ do
     function SurvivorLootUI.SetInventoryVisible(open, observedRevision, detailsOpen)
         inventoryOpen = open
         nativeDetailsVisible = detailsOpen == true
-        if not open then expanded, preview = false, nil end
         SurvivorLootUI.Refresh(observedRevision)
+    end
+    -- Synchronized close: the shared management state collapses on every client.
+    function SurvivorLootUI.SetInventoryOpen(open)
+        if not open then expanded, preview = false, nil end
     end
     function SurvivorLootUI.Reset()
         page, expanded, inventoryOpen, preview = 1, false, false, nil
@@ -188,7 +203,6 @@ do
         familyIndex = 1
         lastPending = nil
         rendered, lastRevision, bagList, expeditionView = {}, nil, nil, nil
-        for _, row in ipairs(rows) do row.item = nil end
         if root then Set(root, "visible", false) end
     end
 end

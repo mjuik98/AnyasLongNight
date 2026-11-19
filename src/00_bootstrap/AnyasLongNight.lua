@@ -25,8 +25,6 @@ do
     local nextRush = SurvivorConfig.swarmRush.firstAt
     local runSerial = 0
     local firstEvolution, peakEnemies, peakVisuals = nil, 0, 0
-    -- Set from the native death event; Step finishes the run outside any hit loop.
-    local heroDefeated = false
 
     local function RefreshDamageBoard()
         if build then SurvivorUI.UpdateDamageBoard(build, stage, RunSession.GetElapsed() - stageStarted, rerollsRemaining, selectedDifficulty) end
@@ -87,7 +85,7 @@ do
         Attempt(errors, "combat", SurvivorCombat.Cleanup)
         Attempt(errors, "stage", SurvivorStage.Cleanup)
         hero, build, stats, offers = nil, nil, nil, nil
-        rewardLevel, rerollsRemaining, stageTransition, heroDefeated = nil, 0, false, false
+        rewardLevel, rerollsRemaining, stageTransition = nil, 0, false
     end
     local function QueueLevelRewards()
         if not SurvivorConfig.UnitExists(hero) then return end
@@ -133,7 +131,8 @@ do
                 SurvivorUI.Notify("|cff88ddff정지의 룬 · 적과 적 투사체 8초 정지|r")
             end
         end)
-        if not ok then RunSession.Fail(message) end
+        -- Purge kills run inside this pickup event; teardown waits for the session callback.
+        if not ok then RunSession.RequestFail(message) end
     end
     local function Finish(reason)
         stageTransition = false
@@ -250,21 +249,29 @@ do
         RefreshDamageBoard()
     end
     local function Step(dt, elapsed)
-        if heroDefeated then RunSession.Finish("defeated"); return end
         if SurvivorCombat.BossDefeated() then
             if stageTransition then return end
             if RunSession.BeginStageClear() then
                 stageTransition = true
                 SurvivorExpedition.EndStage()
+                -- Deferred cleanup/story callbacks act only on the run and stage that started them.
+                local expectedRun, expectedStage = runSerial, stage
+                local function SameClear()
+                    return runSerial == expectedRun and stage == expectedStage and RunSession.GetState() == "STAGE_CLEAR"
+                end
                 SurvivorCombat.ClearBattlefieldAsync(function()
+                    if not SameClear() then return end
                     if stage == SurvivorConfig.stages then
                         SurvivorInventoryPause.Cleanup()
-                        SurvivorStory.ShowEnding(hero, function() RunSession.Finish("boss_defeated") end)
+                        SurvivorStory.ShowEnding(hero, function()
+                            if SameClear() then RunSession.Finish("boss_defeated") end
+                        end)
                     else
                         rerollsRemaining = math.min(SurvivorConfig.rerollCapacity, rerollsRemaining + SurvivorConfig.rerollsPerStage)
                         SurvivorEquipment.PrepareRest()
                         RefreshDamageBoard()
                         SurvivorStory.ShowInterlude(stage, hero, function()
+                            if not SameClear() then return end
                             stageTransition = false
                             gearOffers = SurvivorEquipment.RollBossReward()
                             SurvivorUI.ShowGearRewards(gearOffers, stage, ChooseGear)
@@ -329,14 +336,19 @@ do
                 if (engine.profile or engine.volley or false) == early then SurvivorCombat.CastWeapon(id) end
             end
         end
+        -- A kill/death callback can request teardown mid-tick; stop advancing this tick.
         Fire(true)
+        if not RunSession.IsRunning() then return end
         SurvivorCombat.UpdateWeapons(dt)
+        if not RunSession.IsRunning() then return end
         enemyClock, hudClock = enemyClock + dt, hudClock + dt
         SpawnWave(dt, stageElapsed)
         Fire(false)
+        if not RunSession.IsRunning() then return end
         if enemyClock >= 0.5 then
             enemyClock = 0
             SurvivorCombat.UpdateEnemies(elapsed)
+            if not RunSession.IsRunning() then return end
             if not bossStarted and stageElapsed < timing.bossStart and stageElapsed >= nextElite then
                 nextElite = (math.floor(stageElapsed / SurvivorConfig.eliteInterval) + 1) * SurvivorConfig.eliteInterval
                 SurvivorCombat.Spawn(true)
@@ -400,15 +412,14 @@ do
     local function Start(startingWeapon, startingTrinket)
         runSerial = runSerial + 1
         stageTransition, nextHazard, nextRush = false, 35, SurvivorConfig.swarmRush.firstAt
-        gearOffers, eventOffers, heroDefeated = nil, nil, false
+        gearOffers, eventOffers = nil, nil
         RunSession.Finish("restarted")
-        SurvivorUI.HidePanel()
-        SurvivorUI.BeginRun()
-        SurvivorStory.Reset()
-        SurvivorExpedition.Reset()
         -- Attempt every subsystem before reporting, as CleanupRun does; one
         -- failing teardown must not leave the later subsystems still owned.
         local cleanupErrors = {}
+        Attempt(cleanupErrors, "hide UI", SurvivorUI.HidePanel)
+        Attempt(cleanupErrors, "story", SurvivorStory.Reset)
+        Attempt(cleanupErrors, "expedition", SurvivorExpedition.Reset)
         Attempt(cleanupErrors, "progression", ClearProgression)
         Attempt(cleanupErrors, "inventory observer", SurvivorInventoryPause.Cleanup)
         Attempt(cleanupErrors, "native loadout", SurvivorNativeLoadout.Cleanup)
@@ -416,6 +427,7 @@ do
         Attempt(cleanupErrors, "combat", SurvivorCombat.Cleanup)
         Attempt(cleanupErrors, "stage", SurvivorStage.Cleanup)
         if #cleanupErrors > 0 then error(table.concat(cleanupErrors, "\n"), 0) end
+        SurvivorUI.BeginRun()
         local rect = bj_mapInitialPlayableArea -- Borrowed rect: never destroy it.
         local arena = {minX = GetRectMinX(rect) + 128, maxX = GetRectMaxX(rect) - 128,
             minY = GetRectMinY(rect) + 128, maxY = GetRectMaxY(rect) - 128}
@@ -455,10 +467,11 @@ do
                     or SurvivorConfig.enemyExperienceByType[GetUnitTypeId(dead)] or SurvivorConfig.enemyExperience) * SurvivorConfig.stageXP[stage])
                 SurvivorEquipment.OnKill(dead, elite)
             end)
-            if not ok then RunSession.Fail(message) end
+            -- Kills fire inside weapon hit loops; RunSession tears down after the loop.
+            if not ok then RunSession.RequestFail(message) end
         end, function()
             -- Defer teardown: the death can fire inside a weapon or enemy callback.
-            if RunSession.IsRunning() then heroDefeated = true else RunSession.Finish("defeated") end
+            RunSession.RequestFinish("defeated")
         end, selectedDifficulty, BonusReward)
         BlzSetHeroProperName(hero, SurvivorConfig.heroes[selectedHero].name)
         SuspendHeroXP(hero, true)
@@ -470,7 +483,8 @@ do
             if GetTriggerUnit() ~= hero then return end
             -- Defer the modal UI to Step, outside Warcraft's level-up/death event.
             local ok, message = pcall(QueueLevelRewards)
-            if not ok then RunSession.Fail(message) end
+            -- AddHeroXP from a kill reward raises this event inside the same hit loop.
+            if not ok then RunSession.RequestFail(message) end
         end)
         BlzUnitDisableAbility(hero, FourCC("Aatk"), true, true)
         BlzUnitDisableAbility(hero, FourCC("AHer"), true, true)
