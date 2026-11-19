@@ -3313,6 +3313,7 @@ if not ALICE_Config then
                     if not crashingPairOrCallback then
                         crashingPairOrCallback = userCallbacks.first
                     end
+                    if cycle.errorObserver then pcall(cycle.errorObserver, err) end
                     RemoveUserCallbackFromList(userCallbacks.first)
                 end
             end
@@ -3377,6 +3378,7 @@ if not ALICE_Config then
                         if not crashingPairOrCallback then
                             crashingPairOrCallback = currentPair
                         end
+                        if cycle.errorObserver then pcall(cycle.errorObserver, err) end
                         pairsToRemove = pairsToRemove or {}
                         pairsToRemove[#pairsToRemove + 1] = currentPair
                     end
@@ -3442,6 +3444,7 @@ if not ALICE_Config then
                         if not crashingPairOrCallback then
                             crashingPairOrCallback = currentPair
                         end
+                        if cycle.errorObserver then pcall(cycle.errorObserver, err) end
                         currentPair[0x5] = DO_NOT_EVALUATE
                     elseif returnValue then
                         numSteps = (returnValue*INV_MIN_INTERVAL + 1) // 1 --convert seconds to steps, then ceil.
@@ -6595,6 +6598,19 @@ if not ALICE_Config then
         cycle.resumeObserver = before and {before = before, after = after} or nil
         cycle.resumePending = nil
         cycle.resumeSample = nil
+    end
+
+    ---Observe every error that protected mode catches in a callback or interaction.
+    ---Protected mode keeps the cycle running and only disables the failing pair, so
+    ---the owner of gameplay state needs this to notice. The observer is protected.
+    function ALICE_SetErrorObserver(observer)
+        assert(observer == nil or type(observer) == "function", "Invalid error observer")
+        cycle.errorObserver = observer
+    end
+
+    ---Whether the cycle is halted, by ALICE_Halt or after an unprotected crash.
+    function ALICE_IsHalted()
+        return cycle.isHalted == true
     end
 
     ---Resume the entire cycle.

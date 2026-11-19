@@ -203,6 +203,10 @@ do
         -- Excluding replaces only this card; no reroll or queued level is consumed.
         ShowChoice()
     end
+    local function StartBoss(elapsed)
+        bossStarted = SurvivorCombat.SpawnBoss()
+        if bossStarted then bossEngagedAt = elapsed end
+    end
     local function SpawnWave(dt, stageElapsed)
         local rate = SurvivorConfig.SpawnRate(selectedDifficulty, stage, stageElapsed)
         if SurvivorExpedition.RiskActive() then rate = rate * 1.35 end
@@ -309,10 +313,7 @@ do
             BeginChoice()
             return
         end
-        if not bossStarted and stageElapsed >= timing.bossStart then
-            bossStarted = SurvivorCombat.SpawnBoss()
-            if bossStarted then bossEngagedAt = elapsed end
-        end
+        if not bossStarted and stageElapsed >= timing.bossStart then StartBoss(elapsed) end
         -- An unowned weapon has no cooldown accumulation and cannot fire.
         local due = {}
         for _, id in ipairs(SurvivorConfig.weaponOrder) do
@@ -426,7 +427,10 @@ do
         Attempt(cleanupErrors, "equipment", SurvivorEquipment.Cleanup)
         Attempt(cleanupErrors, "combat", SurvivorCombat.Cleanup)
         Attempt(cleanupErrors, "stage", SurvivorStage.Cleanup)
-        if #cleanupErrors > 0 then error(table.concat(cleanupErrors, "\n"), 0) end
+        -- Every cleanup detaches ownership before its native calls, and each Init
+        -- asserts that its module was released. A failed presentation refresh
+        -- (panel, speech, ambience) is reported but must not block every new run.
+        for _, failure in ipairs(cleanupErrors) do print("[AnyasLongNight cleanup] " .. failure) end
         SurvivorUI.BeginRun()
         local rect = bj_mapInitialPlayableArea -- Borrowed rect: never destroy it.
         local arena = {minX = GetRectMinX(rect) + 128, maxX = GetRectMaxX(rect) - 128,
@@ -462,6 +466,8 @@ do
             local ok, message = pcall(function()
                 kills = kills + 1
                 if isBoss then return end -- Victory is handled by the next gameplay step.
+                -- A kill in the same tick as a pending defeat still counts, without rewards.
+                if not RunSession.IsRunning() then return end
                 SurvivorExpedition.OnKill(dead, isBoss)
                 AwardXP((elite and SurvivorConfig.eliteExperience
                     or SurvivorConfig.enemyExperienceByType[GetUnitTypeId(dead)] or SurvivorConfig.enemyExperience) * SurvivorConfig.stageXP[stage])
@@ -638,8 +644,7 @@ do
                     elseif text == "-hs ranged" and RunSession.IsRunning() then SurvivorCombat.Spawn(false, "ranged")
                     elseif text == "-hs flying" and RunSession.IsRunning() then SurvivorCombat.Spawn(false, "flying")
                     elseif text == "-hs boss" and RunSession.IsRunning() and not bossStarted then
-                        bossStarted = SurvivorCombat.SpawnBoss()
-                        if bossStarted then bossEngagedAt = RunSession.GetElapsed() end
+                        StartBoss(RunSession.GetElapsed())
                     elseif (text == "-hs weapons" or text == "-hs newweapons" or text == "-hs ice" or text == "-hs additions") and RunSession.IsRunning() then
                         local list = text == "-hs newweapons" and {"monsoon", "frontslash", "frostshard"}
                             or text == "-hs ice" and {"frostshard", "frostnova", "blizzard"}

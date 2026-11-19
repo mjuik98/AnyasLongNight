@@ -410,7 +410,8 @@ do
             UnitDamageTarget(hero, target, amount, false, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC, WEAPON_TYPE_WHOKNOWS)
             hitSecondary, tagSecondary = previous, previousTag
             -- The damage/death events may have ended the run or released this unit.
-            if not RunSession.IsRunning() or not units[target] then return end
+            -- A pending teardown keeps combat owned, so the dealt damage still counts.
+            if RunSession.GetState() ~= "RUNNING" or not units[target] then return end
             local after = Alive(target) and math.max(0, GetWidgetLife(target)) or 0
             local actual = math.max(0, before - after)
             local data = weapon and damageTotals[weapon]
@@ -418,6 +419,7 @@ do
                 data.damage, data.stageDamage = data.damage + actual, data.stageDamage + actual
                 if isBoss then data.bossDamage = data.bossDamage + actual end
             end
+            if not RunSession.IsRunning() then return end -- No new procs once teardown is pending.
             if not setProc and not secondary and actual > 0 then SetHit(target, amount, weapon, baseAmount) end
             if status and not setProc and not secondary then ApplyStatus(target, weapon, status, statusScale or 1) end
         end
@@ -2969,7 +2971,8 @@ do
                     procOk, procError = pcall(function() Shatter(dead, record); StatusDeath(dead, record) end)
                 end
                 -- Finish is deferred to Step; never tear down combat during a Hit loop.
-                if RunSession.IsRunning() and onKill then onKill(dead, record.elite, record.boss) end
+                -- Report kills while a teardown is pending too; the owner withholds rewards.
+                if RunSession.GetState() == "RUNNING" and onKill then onKill(dead, record.elite, record.boss) end
                 if not procOk then error(procError, 0) end
             elseif onDeath then
                 -- The run owner defers this too while running (see AnyasLongNight Step).

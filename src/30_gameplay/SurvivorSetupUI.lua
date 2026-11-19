@@ -61,7 +61,7 @@ do
         return image
     end
     local function Listen(frame, event, callback)
-        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback)
+        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, function(message) RunSession.Fail(message) end)
     end
     local function Button(parent, name, width, height, x, y, callback)
         -- Native button artwork on a glue control, without command-button focus.

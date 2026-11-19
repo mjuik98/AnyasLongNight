@@ -134,9 +134,14 @@ do
         end
     end
     function SurvivorStory.Reset()
-        SurvivorStory.Cleanup()
+        -- Reset the run's story record even when scene cleanup fails, as Expedition.Reset does.
+        local cleaned, cleanupError = pcall(SurvivorStory.Cleanup)
         clues, dialogue, remembered, currentStage = {}, {}, {}, 1
-        SurvivorUI.ClearSpeech()
+        local cleared, clearError = pcall(SurvivorUI.ClearSpeech)
+        local errors = {}
+        if not cleaned then errors[#errors + 1] = tostring(cleanupError) end
+        if not cleared then errors[#errors + 1] = "speech: " .. tostring(clearError) end
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     function SurvivorStory.Record(index)
         local entry = assert(SurvivorStory.stages[index], "Unknown story stage")

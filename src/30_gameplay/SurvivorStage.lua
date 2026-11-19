@@ -544,7 +544,9 @@ do
         Raise(errors)
     end
     function SurvivorStage.Init(bounds)
-        SurvivorStage.Cleanup()
+        -- Presentation exists only with an arena rect, and Cleanup detaches the rect
+        -- first. Re-cleaning a released stage would only repeat its ambience refresh.
+        if rect ~= nil then SurvivorStage.Cleanup() end
         arena = bounds
         -- GetWorldBounds returns a new rectangle. Snapshot and release it immediately.
         local world = GetWorldBounds()
