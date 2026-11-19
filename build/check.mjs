@@ -105,6 +105,7 @@ function BlzGroupGetSize(g) return #g end
 function BlzGroupUnitAt(g,i) return g[i+1] end
 function CreateTrigger() local t={}; triggers[#triggers+1]=t; return t end
 function TriggerRegisterAnyUnitEventBJ(t,e) t.event=e end
+function TriggerRegisterPlayerUnitEvent(t,p,e) t.event=e;t.player=p end
 function TriggerAddAction(t,f) t.action=f end
 function DestroyTrigger(t) t.destroyed=true end
 function RemoveUnit(u) assert(not u.removed); u.removed=true; removed=removed+1 end

@@ -467,7 +467,7 @@ do
     local function ObservePendingRewards(bag, capacity, slots)
         local bagged, equipped, pending = nil, nil, 0
         for item, record in pairs(owned) do
-            if record.pendingReward and GetItemTypeId(item) ~= 0 then
+            if record.pendingReward and SurvivorConfig.ItemExists(item) then
                 if not bagged then
                     bagged = {}
                     for i = 1, capacity do if bag[i] then bagged[bag[i]] = true end end
@@ -703,7 +703,7 @@ do
         local count = 0
         if not hero then return count end
         for item, record in pairs(owned) do
-            if record.pendingReward and GetItemTypeId(item) ~= 0
+            if record.pendingReward and SurvivorConfig.ItemExists(item)
                 and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then count = count + 1 end
         end
         return count
@@ -733,7 +733,7 @@ do
         if not hero then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
         for item, record in pairs(owned) do
-            if record.pendingReward and GetItemTypeId(item) ~= 0 then
+            if record.pendingReward and SurvivorConfig.ItemExists(item) then
                 if inventory.bagged[item] or inventory.equipped[item] then Received(item, record)
                 elseif inventory.count < inventory.capacity and (not nearOnly or elapsed >= (record.retry or 0)) then
                     local dx, dy = GetItemX(item) - x, GetItemY(item) - y
@@ -819,7 +819,7 @@ do
         for _, item in ipairs(SurvivorEquipment.PreviewCleanup(preview.kind, preview.keepFamily).items) do allowed[item] = true end
         -- Never delete newly arrived items or items equipped/locked since the preview.
         for _, item in ipairs(preview.items) do
-            if allowed[item] and GetItemTypeId(item) ~= 0 then
+            if allowed[item] and SurvivorConfig.ItemExists(item) then
                 allowed[item], owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil, nil
                 RemoveItem(item)
                 removed = removed + 1
@@ -857,7 +857,7 @@ do
         local function Refresh(item)
             if item and not seen[item] then
                 seen[item] = true
-                if GetItemTypeId(item) ~= 0 then RefreshTooltip(item, equippedIds) end
+                if SurvivorConfig.ItemExists(item) then RefreshTooltip(item, equippedIds) end
                 tooltipDirty[item] = nil
             end
         end
@@ -928,7 +928,7 @@ do
         if hero == nil then return nil end
         local ground, oldest, oldestTime = 0, nil, math.huge
         for item, record in pairs(owned) do
-            if GetItemTypeId(item) ~= 0 and not record.pendingReward
+            if SurvivorConfig.ItemExists(item) and not record.pendingReward
                 and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
                 ground = ground + 1
                 if record.expires < oldestTime then oldest, oldestTime = item, record.expires end
@@ -978,7 +978,7 @@ do
         local x, y = GetUnitX(hero), GetUnitY(hero)
         local radius = SurvivorConfig.equipmentPickupRadius
         for item, record in pairs(owned) do
-            if GetItemTypeId(item) == 0 then
+            if not SurvivorConfig.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
                 owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
             elseif inventory.bagged[item] or inventory.equipped[item] then Received(item, record)
@@ -1010,7 +1010,7 @@ do
     -- Regression fixtures exercise ordinary-floor cleanup and protected rewards.
     function SurvivorEquipment.ClearGround()
         for item, record in pairs(owned) do
-            if GetItemTypeId(item) == 0 then
+            if not SurvivorConfig.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
                 owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
             elseif not record.pendingReward and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
@@ -1022,7 +1022,7 @@ do
     function SurvivorEquipment.PrepareRest()
         if not hero then return end
         for item, record in pairs(owned) do
-            if GetItemTypeId(item) ~= 0 and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
+            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
                 record.restPickup = not record.noAuto
                 SetItemPosition(item, GetUnitX(hero), GetUnitY(hero))
             end
@@ -1034,7 +1034,7 @@ do
         local inventory = ReadInventory()
         CollectPendingRewards(false, RunSession.GetElapsed(), inventory)
         for item, record in pairs(owned) do
-            if GetItemTypeId(item) == 0 then
+            if not SurvivorConfig.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
                 owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
             elseif inventory.bagged[item] or inventory.equipped[item] then
@@ -1047,7 +1047,7 @@ do
     end
     function SurvivorEquipment.CarryGroundToStage()
         for item, record in pairs(owned) do
-            if GetItemTypeId(item) ~= 0 and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
+            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
                 SetItemPosition(item, GetUnitX(hero), GetUnitY(hero))
                 record.expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime
                 record.carried, record.restPickup, record.retry = false, false, RunSession.GetElapsed() + 3
@@ -1062,7 +1062,7 @@ do
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         if oldTrigger ~= nil then Attempt("equipment trigger", function() DestroyTrigger(oldTrigger) end) end
         for item in pairs(oldOwned) do
-            Attempt("equipment item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
+            Attempt("equipment item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
         end
         owned, lastSlots, lastBag = {}, {}, {}
         equippedIds, descriptionCache, tooltipDirty = {}, {}, {}

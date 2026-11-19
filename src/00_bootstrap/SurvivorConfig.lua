@@ -374,6 +374,14 @@ end
 function SurvivorConfig.UnitLive(unit)
     return unit ~= nil and GetUnitTypeId(unit) ~= 0 and UnitAlive(unit)
 end
+-- An item handle that still refers to an item (removed items report type 0).
+function SurvivorConfig.ItemExists(item)
+    return item ~= nil and GetItemTypeId(item) ~= 0
+end
+-- Callers that collect cleanup errors keep their own existence check outside or inside the attempt.
+function SurvivorConfig.RemoveItemIfPresent(item)
+    if SurvivorConfig.ItemExists(item) then RemoveItem(item) end
+end
 -- Terrain height at a point. One map-lifetime probe serves every module; never remove it.
 local terrainProbe = nil
 function SurvivorConfig.TerrainZ(x, y)

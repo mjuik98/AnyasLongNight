@@ -28,6 +28,9 @@ do
     local clues, sceneEffects, hiddenHero, camera = {}, {}, nil, nil
     local sceneX, sceneY -- Scene centre.
     local portraitUnits, portraitHero = {}, nil
+    -- Portrait units and speaker actors share red team colour, independent of the run owner.
+    -- A function, not a root-level handle: natives are only called once the scene runs.
+    local function PortraitRed() return Player(0) end
     local cameraBounds, cameraFocus, cameraGuardTimer = nil, nil, nil
     local actorStates, motion, sceneSounds, sceneSoundCache = {}, nil, {}, {}
     local sceneGeneration = 0
@@ -265,7 +268,7 @@ do
             -- Kept visible at a far map corner: hiding/scaling the proxy can also hide its portrait.
             -- Red player ownership matches the actors; pause and stripped abilities prevent orders.
             local x, y = corner.x + (i - 1) * 64 * corner.inward, corner.y
-            local unit = CreateUnit(Player(0), entry.id, x, y, 270)
+            local unit = CreateUnit(PortraitRed(), entry.id, x, y, 270)
             if unit then portraitUnits[entry.speaker] = unit end
             assert(unit and GetUnitTypeId(unit) == entry.id, "Missing story portrait unit " .. entry.speaker)
             SetUnitColor(unit, PLAYER_COLOR_RED)
@@ -465,8 +468,8 @@ do
             local render
             if hero then
                 local x, y = BeginScene(hero)
-                local anya = Actor(SurvivorStory.heroModel, x - 160, y + 95, 1, Player(0))
-                local putress = Actor(SurvivorStory.putressModel, x + 125, y + 165, 0.95, Player(0))
+                local anya = Actor(SurvivorStory.heroModel, x - 160, y + 95, 1, PortraitRed())
+                local putress = Actor(SurvivorStory.putressModel, x + 125, y + 165, 0.95, PortraitRed())
                 Yaw(anya, Atan2(70, 285)); Yaw(putress, Atan2(100, 190))
                 Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
                 Scenery("briefing-grave", [[Doodads\Cityscape\Props\CityGrave\CityGrave0.mdl]], x - 285, y + 315, 0.6)
@@ -546,8 +549,8 @@ do
         -- Every discovery branch closes on the same concrete route and shared task.
         CreateScene(function()
             local x, y = BeginScene(hero)
-            local anya = Actor(SurvivorStory.heroModel, x - 180, y + 80, 1, Player(0))
-            local putress = Actor(SurvivorStory.putressModel, x + 150, y + 130, 0.95, Player(0))
+            local anya = Actor(SurvivorStory.heroModel, x - 180, y + 80, 1, PortraitRed())
+            local putress = Actor(SurvivorStory.putressModel, x + 150, y + 130, 0.95, PortraitRed())
             Yaw(anya, 0); Yaw(putress, math.pi)
             Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
             local gate, evidence, sample
@@ -656,9 +659,9 @@ do
                 local x, y = BeginScene(hero)
                 -- Both arrive together, except in the sewer where Putress already waits with the cart.
                 local waiting = index == 5
-                local anya = Actor(SurvivorStory.heroModel, x - 430, y - 60, 1, Player(0))
+                local anya = Actor(SurvivorStory.heroModel, x - 430, y - 60, 1, PortraitRed())
                 local putress = Actor(SurvivorStory.putressModel, waiting and x + 150 or x - 330,
-                    waiting and y + 175 or y - 120, 0.95, Player(0))
+                    waiting and y + 175 or y - 120, 0.95, PortraitRed())
                 Yaw(anya, Atan2(300, 520)); Yaw(putress, waiting and Atan2(-235, -580) or Atan2(380, 520))
                 Animation(anya, ANIM_TYPE_STAND); Animation(putress, ANIM_TYPE_STAND)
                 -- Scene-only props: the stage keeps its own landmarks once combat begins.
@@ -711,8 +714,8 @@ do
         currentStage = 5
         CreateScene(function()
             local x, y = BeginScene(hero)
-            local anya = Actor(SurvivorStory.heroModel, x - 180, y + 80, 1, Player(0))
-            local putress = Actor(SurvivorStory.putressModel, x + 190, y + 130, 0.95, Player(0))
+            local anya = Actor(SurvivorStory.heroModel, x - 180, y + 80, 1, PortraitRed())
+            local putress = Actor(SurvivorStory.putressModel, x + 190, y + 130, 0.95, PortraitRed())
             local figure = Actor(SurvivorStory.figureModel, x + 40, y + 280)
             local cart = Actor(SurvivorStory.transportModel, x - 230, y + 350, 0.75)
             BlzSetSpecialEffectAlpha(cart, 0)
