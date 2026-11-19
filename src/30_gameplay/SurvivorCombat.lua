@@ -2419,7 +2419,7 @@ do
     end
     local function RemoveBonusItem(item)
         bonusItems[item] = nil
-        if GetItemTypeId(item) ~= 0 then RemoveItem(item) end
+        SurvivorConfig.RemoveItemIfPresent(item)
     end
     local function ClearBonusItems()
         while next(bonusItems) ~= nil do RemoveBonusItem(next(bonusItems)) end
@@ -2444,7 +2444,7 @@ do
             -- An automatically consumed powerup may already have no native handle.
             -- A paused pickup retains its reward until the next running update.
             if record.pending then CollectBonusItem(item)
-            elseif GetItemTypeId(item) == 0 or elapsed >= record.expires then RemoveBonusItem(item)
+            elseif not SurvivorConfig.ItemExists(item) or elapsed >= record.expires then RemoveBonusItem(item)
             else
                 local x, y = GetItemX(item), GetItemY(item)
                 if (x - hx)^2 + (y - hy)^2 <= config.pickupRadius^2 and SurvivorStage.LineClear(hx, hy, x, y) then
@@ -2823,7 +2823,7 @@ do
         CleanupCall(errors, "time stop filter", function() RefreshTimeStopFilter(true) end)
         timeStopUnits, hostileObjects = {}, {}
         for item in pairs(pendingItems) do
-            if GetItemTypeId(item) ~= 0 then CleanupCall(errors, "bonus item", function() RemoveItem(item) end) end
+            if SurvivorConfig.ItemExists(item) then CleanupCall(errors, "bonus item", function() RemoveItem(item) end) end
         end
         local pendingObjects, pendingUnits = objects, units
         objects, units, statusUnits, frostStackUnits, poisonUnits = {}, {}, {}, {}, {}
@@ -2875,7 +2875,8 @@ do
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
         queryGroup = CreateGroup()
         bonusPickupTrigger = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(bonusPickupTrigger, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+        -- Only the hero collects bonus items, and the hero always belongs to the run owner.
+        TriggerRegisterPlayerUnitEvent(bonusPickupTrigger, SurvivorConfig.Owner(), EVENT_PLAYER_UNIT_PICKUP_ITEM, nil)
         TriggerAddAction(bonusPickupTrigger, RunAction(function()
             if GetTriggerUnit() ~= hero or not Alive(hero) then return end
             local item = GetManipulatedItem()

@@ -42,7 +42,7 @@ do
         return talentGranted - talentSpent, talentEarned, talentEarned - talentGranted
     end
     local function DeliverTalentPoint()
-        for item in pairs(pointItems) do if GetItemTypeId(item) == 0 then pointItems[item] = nil end end
+        for item in pairs(pointItems) do if not SurvivorConfig.ItemExists(item) then pointItems[item] = nil end end
         if deliveringTalent or talentGranted >= talentEarned or refreshSerial < talentRetry or IsUnitPaused(hero) then return end
         talentRetry = refreshSerial + 20 -- Retry rejected pickups without a new timer or a busy item loop.
         local item = CreateItem(FourCC(SurvivorConfig.talents.pointItem), GetUnitX(hero), GetUnitY(hero))
@@ -56,7 +56,7 @@ do
         if hero ~= owner then return end
         if accepted then
             talentGranted = talentGranted + 1
-            if GetItemTypeId(item) == 0 then pointItems[item] = nil end
+            if not SurvivorConfig.ItemExists(item) then pointItems[item] = nil end
         else pointItems[item] = nil; RemoveItem(item) end
     end
     local function ReconcileTalents()
@@ -132,7 +132,7 @@ do
     end
     local function EnsureTrinket(id, main)
         local item = items[id]
-        if item ~= nil and GetItemTypeId(item) ~= 0 and main.positions[item] ~= nil then return item, false end
+        if SurvivorConfig.ItemExists(item) and main.positions[item] ~= nil then return item, false end
         -- The native inventory can reject additions while the hero is paused for
         -- a level-up choice. Keep the learned level and create its indicator later.
         if IsUnitPaused(hero) or not SurvivorConfig.UnitLive(hero) then return nil, false end
@@ -323,10 +323,10 @@ do
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         for item in pairs(oldPoints) do
-            Attempt("talent point item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
+            Attempt("talent point item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
         end
         for _, item in pairs(oldItems) do
-            Attempt("indicator item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
+            Attempt("indicator item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
         end
         if SurvivorConfig.UnitExists(oldHero) then
             local talents = SurvivorConfig.talents
