@@ -25,9 +25,8 @@ SurvivorStory = {
     },
 }
 do
-    local clues, sceneEffects, hiddenHero, sceneLocation, camera = {}, {}, nil, nil, nil
-    -- Scene centre; sceneLocation is only the terrain-height probe and moves with each actor.
-    local sceneX, sceneY
+    local clues, sceneEffects, hiddenHero, camera = {}, {}, nil, nil
+    local sceneX, sceneY -- Scene centre.
     local portraitUnits, portraitHero = {}, nil
     local cameraBounds, cameraFocus, cameraGuardTimer = nil, nil, nil
     local actorStates, motion, sceneSounds, sceneSoundCache = {}, nil, {}, {}
@@ -168,18 +167,18 @@ do
         StopAudio(true)
         if SurvivorStage.SetDialogueAmbience then pcall(SurvivorStage.SetDialogueAmbience, false) end
         local hero, restoreHero = hiddenHero, hiddenHero or portraitHero
-        local units, effects, states, location = portraitUnits, sceneEffects, actorStates, sceneLocation
+        local units, effects, states = portraitUnits, sceneEffects, actorStates
         local restoreCamera, restoreBounds, hadPortrait = camera, cameraBounds, portraitHero ~= nil
-        portraitUnits, sceneEffects, actorStates, sceneLocation, sceneX, sceneY = {}, {}, {}, nil, nil, nil
+        portraitUnits, sceneEffects, actorStates, sceneX, sceneY = {}, {}, {}, nil, nil
         hiddenHero, portraitHero, camera, cameraBounds, cameraFocus = nil, nil, nil, nil, nil
         if hadPortrait then Attempt(errors, "portrait selection", function()
             if SurvivorConfig.IsLocalPlayer() then ClearSelection() end
         end) end
         if hero then Attempt(errors, "hero visibility", function()
-            if GetUnitTypeId(hero) ~= 0 then ShowUnit(hero, true) end
+            if SurvivorConfig.UnitExists(hero) then ShowUnit(hero, true) end
         end) end
         if restoreHero then Attempt(errors, "hero selection", function()
-            if GetUnitTypeId(restoreHero) ~= 0 and UnitAlive(restoreHero)
+            if SurvivorConfig.UnitLive(restoreHero)
                 and SurvivorConfig.IsLocalPlayer() then
                 ClearSelection()
                 SelectUnit(restoreHero, true)
@@ -189,10 +188,10 @@ do
         -- SurvivorUI restores its HUD containers only after this cleanup returns.
         for _, unit in pairs(units) do
             Attempt(errors, "portrait visibility", function()
-                if GetUnitTypeId(unit) ~= 0 then ShowUnit(unit, false) end
+                if SurvivorConfig.UnitExists(unit) then ShowUnit(unit, false) end
             end)
             Attempt(errors, "portrait unit", function()
-                if GetUnitTypeId(unit) ~= 0 then RemoveUnit(unit) end
+                if SurvivorConfig.UnitExists(unit) then RemoveUnit(unit) end
             end)
         end
         for _, effect in ipairs(effects) do
@@ -206,7 +205,6 @@ do
             -- Each operation is independent: a failed hide must not prevent removal.
             Attempt(errors, "story effect", function() DestroyEffect(effect) end)
         end
-        if location then Attempt(errors, "story location", function() RemoveLocation(location) end) end
         if restoreCamera and SurvivorConfig.IsLocalPlayer() then
             if restoreBounds then Attempt(errors, "camera bounds", function()
                 SetBounds(restoreBounds.minX, restoreBounds.minY, restoreBounds.maxX, restoreBounds.maxY)
@@ -216,7 +214,7 @@ do
                 SetCameraField(field, value, 0)
             end) end
             Attempt(errors, "hero camera", function()
-                if restoreHero and GetUnitTypeId(restoreHero) ~= 0 and UnitAlive(restoreHero) then
+                if SurvivorConfig.UnitLive(restoreHero) then
                     SetCameraPosition(GetUnitX(restoreHero), GetUnitY(restoreHero))
                     SetCameraTargetController(restoreHero, 0, 0, false)
                 end
@@ -226,15 +224,15 @@ do
     end
     local function BeginScene(hero)
         SurvivorStory.Cleanup()
-        assert(hero and GetUnitTypeId(hero) ~= 0 and UnitAlive(hero), "Story scene needs the live gameplay hero")
+        assert(SurvivorConfig.UnitLive(hero), "Story scene needs the live gameplay hero")
         hiddenHero = hero
         ShowUnit(hero, false)
         if SurvivorStage.SetDialogueAmbience then pcall(SurvivorStage.SetDialogueAmbience, true) end
         local bounds = bj_mapInitialPlayableArea
         local point = SurvivorStage.ScenePoint and SurvivorStage.ScenePoint()
-        local x, y = point and point.x or (GetRectMinX(bounds) + GetRectMaxX(bounds)) / 2,
-            point and point.y or (GetRectMinY(bounds) + GetRectMaxY(bounds)) / 2
-        sceneLocation, sceneX, sceneY = Location(x, y), x, y
+        local x, y = point and point.x or GetRectCenterX(bounds),
+            point and point.y or GetRectCenterY(bounds)
+        sceneX, sceneY = x, y
         CaptureCamera()
         if SurvivorConfig.IsLocalPlayer() then ResetToGameCamera(0) end
         FrameScene(x, y, 1350, 0)
@@ -242,7 +240,7 @@ do
     end
     local function BeginPortraits(hero, createUnits)
         if not hero then return end -- Compatibility for old text-only briefing callers.
-        assert(GetUnitTypeId(hero) ~= 0 and UnitAlive(hero), "Story portraits need the live gameplay hero")
+        assert(SurvivorConfig.UnitLive(hero), "Story portraits need the live gameplay hero")
         portraitHero = hero
         if not camera then CaptureCamera() end
         -- Text-only compatibility callers retain their current shot.
@@ -286,7 +284,7 @@ do
         if not portraitHero or not SurvivorConfig.IsLocalPlayer() then return end
         ClearSelection()
         local unit = portraitUnits[speaker]
-        if unit and GetUnitTypeId(unit) ~= 0 then SelectUnit(unit, true) end
+        if SurvivorConfig.UnitExists(unit) then SelectUnit(unit, true) end
         -- "수색 기록" and summary pages deliberately have a neutral, unselected portrait.
     end
     local function Actor(model, x, y, scale, colorPlayer)
@@ -304,9 +302,8 @@ do
         if SurvivorStage.SceneProp then return SurvivorStage.SceneProp(key, model, x, y, scale, angle, tint) end
     end
     local function Move(effect, x, y, height)
-        MoveLocation(sceneLocation, x, y)
-        BlzSetSpecialEffectPosition(effect, x, y, GetLocationZ(sceneLocation) + (height or 0))
         local state = assert(actorStates[effect], "Missing story actor state")
+        BlzSetSpecialEffectPosition(effect, x, y, SurvivorConfig.TerrainZ(x, y) + (height or 0))
         state.x, state.y, state.height = x, y, height or 0
     end
     local function Yaw(effect, angle)

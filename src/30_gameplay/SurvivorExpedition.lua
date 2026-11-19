@@ -108,7 +108,7 @@ do
         return math.min(95, closes - 60), closes
     end
     function SurvivorExpedition.RiskOffer()
-        if not hero or GetUnitTypeId(hero) == 0 or not UnitAlive(hero) or not RunSession.IsRunning()
+        if not SurvivorConfig.UnitLive(hero) or not RunSession.IsRunning()
             or not risk or risk.state ~= "offered" then return nil end
         local age = RunSession.GetElapsed() - started
         local opens, closes = RiskWindow()

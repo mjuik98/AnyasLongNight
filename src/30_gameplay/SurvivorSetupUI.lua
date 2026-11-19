@@ -61,14 +61,7 @@ do
         return image
     end
     local function Listen(frame, event, callback)
-        local trigger = CreateTrigger()
-        triggers[#triggers + 1] = trigger
-        BlzTriggerRegisterFrameEvent(trigger, frame, event)
-        TriggerAddAction(trigger, function()
-            if GetTriggerPlayer() ~= Player(SurvivorConfig.playerId) then return end
-            local ok, message = pcall(callback)
-            if not ok then RunSession.Fail(message) end
-        end)
+        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback)
     end
     local function Button(parent, name, width, height, x, y, callback)
         -- Native button artwork on a glue control, without command-button focus.
@@ -82,7 +75,7 @@ do
         Listen(button, FRAMEEVENT_CONTROL_CLICK, function()
             -- A clicked glue button keeps focus, and hovering another button then flickers
             -- between the two highlights. Toggling enable on the clicker drops that focus.
-            if GetLocalPlayer() == GetTriggerPlayer() and BlzFrameGetEnable(button) then
+            if SurvivorConfig.IsLocalPlayer() and BlzFrameGetEnable(button) then
                 BlzFrameSetEnable(button, false)
                 BlzFrameSetEnable(button, true)
             end
@@ -154,15 +147,15 @@ do
         if previewUnit and previewSkin == hero.previewSkin then return end
         StopPreview()
         local shot, area = SurvivorConfig.setupPreview, bj_mapInitialPlayableArea
-        local x = shot.x or (GetRectMinX(area) + GetRectMaxX(area)) / 2
-        local y = shot.y or (GetRectMinY(area) + GetRectMaxY(area)) / 2
+        local x = shot.x or GetRectCenterX(area)
+        local y = shot.y or GetRectCenterY(area)
         -- A unit, unlike an effect, can hide its hero glow. The hero's skin goes on a stock
         -- footman: the story's portrait proxy cannot move, so it never left the ground.
         -- ALICE hooks CreateUnit itself, so exclude the type first; locust keeps the unit out
         -- of selection and targeting, and without an attack it never acquires anything.
         local carrier = FourCC("hfoo")
         if ALICE_ExcludeTypes then ALICE_ExcludeTypes(carrier) end
-        previewUnit = CreateUnit(Player(SurvivorConfig.playerId), carrier, x, y, 270) -- Faces the camera.
+        previewUnit = CreateUnit(SurvivorConfig.Owner(), carrier, x, y, 270) -- Faces the camera.
         assert(previewUnit and GetUnitTypeId(previewUnit) == carrier, "Could not create the hero preview")
         previewSkin = hero.previewSkin
         BlzSetUnitSkin(previewUnit, hero.previewSkin)

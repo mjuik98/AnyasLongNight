@@ -355,13 +355,41 @@ function SurvivorConfig.HeroOf(unit)
     end
     return SurvivorConfig.defaultHero, SurvivorConfig.heroes[SurvivorConfig.defaultHero]
 end
+-- The single human player who owns the run.
+function SurvivorConfig.Owner()
+    return Player(SurvivorConfig.playerId)
+end
 -- Guards local-only presentation; reads GetLocalPlayer on every call rather than caching it.
 function SurvivorConfig.IsLocalPlayer()
-    return GetLocalPlayer() == Player(SurvivorConfig.playerId)
+    return GetLocalPlayer() == SurvivorConfig.Owner()
 end
 -- Frame lookups can return nil, 0 or a released handle.
 function SurvivorConfig.ValidFrame(frame)
     return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
+end
+-- A unit handle that still refers to a unit (removed units report type 0).
+function SurvivorConfig.UnitExists(unit)
+    return unit ~= nil and GetUnitTypeId(unit) ~= 0
+end
+function SurvivorConfig.UnitLive(unit)
+    return unit ~= nil and GetUnitTypeId(unit) ~= 0 and UnitAlive(unit)
+end
+-- Terrain height at a point. One map-lifetime probe serves every module; never remove it.
+local terrainProbe = nil
+function SurvivorConfig.TerrainZ(x, y)
+    if terrainProbe == nil then terrainProbe = Location(x, y) else MoveLocation(terrainProbe, x, y) end
+    return GetLocationZ(terrainProbe)
+end
+-- Owner-only frame event whose failures end the run through RunSession.
+function SurvivorConfig.BindFrameEvent(triggers, frame, event, callback)
+    local trigger = CreateTrigger()
+    triggers[#triggers + 1] = trigger
+    BlzTriggerRegisterFrameEvent(trigger, frame, event)
+    TriggerAddAction(trigger, function()
+        if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
+        local ok, message = pcall(callback)
+        if not ok then RunSession.Fail(message) end
+    end)
 end
 
 function SurvivorConfig.SpawnRate(difficultyId, stage, stageElapsed)

@@ -34,7 +34,7 @@ do
     end
 
     local function ResultDetails(cleared)
-        if not hero or not build or GetUnitTypeId(hero) == 0 then return nil end
+        if not SurvivorConfig.UnitExists(hero) or not build then return nil end
         local elapsed, level = RunSession.GetElapsed(), GetHeroLevel(hero)
         if not stageRecords[stage] then
             stageRecords[stage] = {level = level, duration = elapsed - stageStarted,
@@ -90,7 +90,7 @@ do
         rewardLevel, rerollsRemaining, stageTransition, heroDefeated = nil, 0, false, false
     end
     local function QueueLevelRewards()
-        if hero == nil or GetUnitTypeId(hero) == 0 then return end
+        if not SurvivorConfig.UnitExists(hero) then return end
         local actualLevel = GetHeroLevel(hero)
         for gained = observedLevel + 1, actualLevel do queuedLevels[#queuedLevels + 1] = gained end
         observedLevel = actualLevel
@@ -107,7 +107,7 @@ do
         local recipient = hero
         SuspendHeroXP(recipient, false)
         local ok, message = pcall(AddHeroXP, recipient, amount, true)
-        if GetUnitTypeId(recipient) ~= 0 then SuspendHeroXP(recipient, true) end
+        if SurvivorConfig.UnitExists(recipient) then SuspendHeroXP(recipient, true) end
         if not ok then error(message) end
         -- Also reconcile multi-level jumps; the event may fire once or repeatedly.
         QueueLevelRewards()
@@ -354,7 +354,7 @@ do
         local function SameTransition()
             return not resumed and runSerial == expectedRun and hero == expectedHero and stage == expectedStage
                 and stageTransition and RunSession.GetState() == "STAGE_CLEAR"
-                and expectedHero ~= nil and GetUnitTypeId(expectedHero) ~= 0 and UnitAlive(expectedHero)
+                and SurvivorConfig.UnitLive(expectedHero)
         end
         local function CanStart()
             return SameTransition() and not RunSession.IsInventoryOpen()
@@ -443,7 +443,7 @@ do
         nextElite = SurvivorConfig.eliteInterval
         bossStarted = false
         spawnBudget, enemyClock, hudClock, choiceGrace = 0, 0, 0, 0
-        hero = CreateUnit(Player(SurvivorConfig.playerId), SurvivorConfig.heroes[selectedHero].unitId, x, y, 270)
+        hero = CreateUnit(SurvivorConfig.Owner(), SurvivorConfig.heroes[selectedHero].unitId, x, y, 270)
         assert(hero ~= nil, "Hero object ID is missing")
         -- Combat takes ownership immediately, including during partial startup failure.
         SurvivorCombat.Init(hero, stats, arena, function(dead, elite, isBoss)
@@ -465,7 +465,7 @@ do
         observedLevel = GetHeroLevel(hero)
         QueueLevelRewards()
         levelTrigger = CreateTrigger()
-        TriggerRegisterPlayerUnitEvent(levelTrigger, Player(SurvivorConfig.playerId), EVENT_PLAYER_HERO_LEVEL, nil)
+        TriggerRegisterPlayerUnitEvent(levelTrigger, SurvivorConfig.Owner(), EVENT_PLAYER_HERO_LEVEL, nil)
         TriggerAddAction(levelTrigger, function()
             if GetTriggerUnit() ~= hero then return end
             -- Defer the modal UI to Step, outside Warcraft's level-up/death event.
@@ -609,7 +609,7 @@ do
             AnyasLongNight.IsStorySummary, AnyasLongNight.ToggleStorySummary)
         if SurvivorConfig.debugCommands then
             debugTrigger = CreateTrigger() -- Map lifetime; registered once across restarts.
-            TriggerRegisterPlayerChatEvent(debugTrigger, Player(SurvivorConfig.playerId), "-hs", false)
+            TriggerRegisterPlayerChatEvent(debugTrigger, SurvivorConfig.Owner(), "-hs", false)
             TriggerAddAction(debugTrigger, function()
                 local ok, message = pcall(function()
                     local text = GetEventPlayerChatString()

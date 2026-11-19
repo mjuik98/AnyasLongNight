@@ -69,7 +69,7 @@ do
             end)
         end
     end
-    local painted, paintedCells, heightLocation = {}, {}, nil
+    local painted, paintedCells = {}, {}
     local cells, walls, reachable, lava = {}, {}, {}, {}
     -- Stock assets, resolved through the player's graphics mode. No imported model overrides.
     local grave = [[Doodads\Cityscape\Props\CityGrave\CityGrave]]
@@ -129,19 +129,18 @@ do
         end
         local variant = math.floor(Variation(math.floor(x / 128) * 31 + math.floor(y / 128) * 17, index) * 4)
         SetTerrainType(x, y, FourCC(tile), variant, 1, 1)
-        if blighted ~= nil then SetBlightPoint(Player(SurvivorConfig.playerId), x, y, blighted) end
+        if blighted ~= nil then SetBlightPoint(SurvivorConfig.Owner(), x, y, blighted) end
     end
     local function RestoreTerrain(errors)
         local restore = painted
         painted, paintedCells = {}, {} -- Detach before native writes.
         AttemptEach(errors, "stage terrain", restore, function(cell)
             SetTerrainType(cell.x, cell.y, cell.tile, cell.variation, 1, 1)
-            SetBlightPoint(Player(SurvivorConfig.playerId), cell.x, cell.y, cell.blighted)
+            SetBlightPoint(SurvivorConfig.Owner(), cell.x, cell.y, cell.blighted)
         end)
     end
     local function Ground(effect, x, y)
-        MoveLocation(heightLocation, x, y)
-        BlzSetSpecialEffectZ(effect, GetLocationZ(heightLocation))
+        BlzSetSpecialEffectZ(effect, SurvivorConfig.TerrainZ(x, y))
     end
     local function Scenery(model, x, y, scale, angle, color)
         local effect = AddSpecialEffect(model, x, y)
@@ -156,7 +155,7 @@ do
         return effect
     end
     function SurvivorStage.SceneProp(key, model, x, y, scale, angle, tint)
-        assert(currentTheme and heightLocation, "Initialize stage presentation before scene scenery")
+        assert(currentTheme and rect, "Initialize stage presentation before scene scenery")
         if sceneProps[key] then return sceneProps[key] end
         if #effects >= 96 or not Inside(x, y, 32) then return end
         local effect = Scenery(model, x, y, scale, angle, tint or sceneryColors[currentTheme])
@@ -536,13 +535,12 @@ do
     end
     function SurvivorStage.Cleanup()
         local errors = {}
-        local oldRect, oldHeight = rect, heightLocation
-        rect, heightLocation, arena, paintBounds = nil, nil, nil, nil
+        local oldRect = rect
+        rect, arena, paintBounds = nil, nil, nil
         dialogueAudioOwners = {}
         RunSession.Attempt(errors, "ambience volume", RefreshAmbienceVolume)
         ClearPresentation(errors)
         if oldRect then RunSession.Attempt(errors, "stage rect", function() RemoveRect(oldRect) end) end
-        if oldHeight then RunSession.Attempt(errors, "stage height location", function() RemoveLocation(oldHeight) end) end
         Raise(errors)
     end
     function SurvivorStage.Init(bounds)
@@ -556,7 +554,6 @@ do
             maxY = math.min(bounds.maxY + 1024, GetRectMaxY(world) - 64)}
         RemoveRect(world)
         rect = Rect(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY)
-        heightLocation = Location((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2)
     end
     function SurvivorStage.Apply(index)
         assert(rect ~= nil, "Initialize stage arena first")

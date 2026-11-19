@@ -2,7 +2,7 @@
 -- The run owns every created unit/effect and removes them on finish/restart.
 SurvivorCombat = {}
 do
-    local hero, heightLocation, deathTrigger = nil, nil, nil
+    local hero, deathTrigger = nil, nil
     local units, objects, statusUnits, frostStackUnits, poisonUnits = {}, {}, {}, {}, {}
     local stats, onKill, onDeath, onBonus, bounds = nil, nil, nil, nil, nil
     local enemyCount, frozen = 0, false
@@ -97,7 +97,7 @@ do
         escapeEffect, escapeOwnsInvulnerability = nil, false
         escapeUntil = 0
         local errors = {}
-        if release and hero ~= nil and GetUnitTypeId(hero) ~= 0 then
+        if release and SurvivorConfig.UnitExists(hero) then
             CleanupCall(errors, "escape invulnerability", function() SetUnitInvulnerable(hero, false) end)
         end
         if effect then CleanupCall(errors, "escape effect", function() DestroyEffect(effect) end) end
@@ -125,9 +125,7 @@ do
         return rows
     end
 
-    local function Alive(u)
-        return u ~= nil and GetUnitTypeId(u) ~= 0 and UnitAlive(u)
-    end
+    local Alive = SurvivorConfig.UnitLive
     local function Enemy(u)
         local record = units[u]
         return record ~= nil and record.enemy and record.alive and Alive(u)
@@ -216,7 +214,7 @@ do
             if record[key] then record[key] = record[key] + duration end
         end
         record.wasPaused = record.timeStopWasPaused
-        if GetUnitTypeId(u) ~= 0 then EnemyColor(u, record, false) end
+        if SurvivorConfig.UnitExists(u) then EnemyColor(u, record, false) end
         if Alive(u) then
             PauseUnit(u, frozen or record.timeStopWasPaused == true or record.special ~= nil
                 or (record.freezeUntil ~= nil and record.freezeUntil > now))
@@ -303,10 +301,7 @@ do
         SurvivorMetrics.Count(weapon .. ".area.orderScans", scanned)
         return list
     end
-    local function Height(x, y)
-        MoveLocation(heightLocation, x, y)
-        return GetLocationZ(heightLocation)
-    end
+    local Height = SurvivorConfig.TerrainZ
     local function WarningStrip(owner, ax, ay, bx, by, width, color, alpha, elevation)
         local x, y, dx, dy = (ax + bx) / 2, (ay + by) / 2, bx - ax, by - ay
         local effect = AddSpecialEffect(SurvivorConfig.warningPlaneModel, x, y)
@@ -538,7 +533,7 @@ do
     end
     local function EscapeLanding(source)
         local x, y = GetUnitX(hero), GetUnitY(hero)
-        local hasSource = source ~= nil and source ~= hero and GetUnitTypeId(source) ~= 0
+        local hasSource = source ~= hero and SurvivorConfig.UnitExists(source)
         local angle = hasSource and Atan2(y - GetUnitY(source), x - GetUnitX(source))
             or HeroYaw()
         local enemies = {}
@@ -1806,7 +1801,7 @@ do
     -- Spread enemies over allied slots that borrow Neutral Hostile's color; all share one display name.
     local function NextEnemyOwner()
         if not enemyOwners then
-            local template, heroOwner = Player(PLAYER_NEUTRAL_AGGRESSIVE), Player(SurvivorConfig.playerId)
+            local template, heroOwner = Player(PLAYER_NEUTRAL_AGGRESSIVE), SurvivorConfig.Owner()
             enemyOwners = {}
             for _, id in ipairs(SurvivorConfig.enemyPlayerIds) do enemyOwners[#enemyOwners + 1] = Player(id) end
             for _, owner in ipairs(enemyOwners) do
@@ -2631,7 +2626,7 @@ do
             BlzUnitDisableAbility(hero, FourCC("Amov"), false, false)
         end
         for u, record in pairs(units) do
-            if GetUnitTypeId(u) ~= 0 then
+            if SurvivorConfig.UnitExists(u) then
                 if enable and not frozen then
                     record.wasPaused = IsUnitPaused(u)
                     if record.freezeUntil then record.wasPaused = record.freezeWasPaused end
@@ -2694,7 +2689,7 @@ do
     local function RemoveEnemy(u)
         local record = units[u]
         if not record or not record.enemy then return end
-        if GetUnitTypeId(u) ~= 0 then EnemyColor(u, record, false, true) end
+        if SurvivorConfig.UnitExists(u) then EnemyColor(u, record, false, true) end
         statusUnits[u] = nil
         frostStackUnits[u] = nil
         poisonUnits[u] = nil
@@ -2809,7 +2804,7 @@ do
         CleanupCall(errors, "battlefield timer", CancelBattlefieldClear)
         onKill, onDeath, onBonus = nil, nil, nil
         if stats then stats.nativeRegenerationPaused = true end
-        if hero ~= nil and GetUnitTypeId(hero) ~= 0 then
+        if SurvivorConfig.UnitExists(hero) then
             CleanupCall(errors, "hero regeneration", function() SurvivorAugments.ApplyHeroRegeneration(hero, stats) end)
         end
         CleanupCall(errors, "escape", ClearEscape)
@@ -2844,9 +2839,8 @@ do
             end
             CleanupCall(errors, "unit", function() RemoveUnit(u) end)
         end
-        local oldHeight, oldGroup = heightLocation, queryGroup
-        heightLocation, queryGroup = nil, nil
-        if oldHeight ~= nil then CleanupCall(errors, "height location", function() RemoveLocation(oldHeight) end) end
+        local oldGroup = queryGroup
+        queryGroup = nil
         if oldGroup ~= nil then CleanupCall(errors, "query group", function() DestroyGroup(oldGroup) end) end
         candidatePool = {}
         friendlyAlpha = 140
@@ -2875,7 +2869,6 @@ do
         units[hero] = {enemy = false, alive = true}
         stats.nativeRegenerationPaused, stats.combatPaused = false, false
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
-        heightLocation = Location(0, 0)
         queryGroup = CreateGroup()
         bonusPickupTrigger = CreateTrigger()
         TriggerRegisterAnyUnitEventBJ(bonusPickupTrigger, EVENT_PLAYER_UNIT_PICKUP_ITEM)
@@ -2906,7 +2899,7 @@ do
                     ward, damage = ward - absorbed, damage - absorbed
                 end
                 local source = GetEventDamageSource()
-                local sourceName = source ~= hero and source ~= nil and GetUnitTypeId(source) ~= 0 and GetUnitName(source) or "환경"
+                local sourceName = source ~= hero and SurvivorConfig.UnitExists(source) and GetUnitName(source) or "환경"
                 local entry = {time = RunSession.GetElapsed(), damage = math.min(damage, GetWidgetLife(hero)),
                     name = sourceName .. " / " .. (damageContext and damageContext.name or "일반 공격"),
                     hint = damageContext and damageContext.hint or "근접 적에게 포위되지 않도록 넓은 쪽으로 이동하세요."}

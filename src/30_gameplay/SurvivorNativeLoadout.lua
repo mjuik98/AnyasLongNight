@@ -80,7 +80,7 @@ do
         return changed
     end
     function SurvivorNativeLoadout.GrantStageTalent(index)
-        assert(hero ~= nil and GetUnitTypeId(hero) ~= 0, "Talent points need a live loadout")
+        assert(SurvivorConfig.UnitExists(hero), "Talent points need a live loadout")
         if index <= talentEarned then return false end
         assert(index == talentEarned + 1 and index <= #SurvivorConfig.talents.tiers, "Invalid talent point stage")
         talentEarned, talentRetry = index, 0
@@ -197,14 +197,14 @@ do
     end
     -- Combat calls this on every pause transition, before units resume.
     function SurvivorNativeLoadout.RefreshStatDisplays()
-        if hero == nil or GetUnitTypeId(hero) == 0 then return end
+        if not SurvivorConfig.UnitExists(hero) then return end
         -- Combat sets this for every pause reason (see SurvivorCombat.SetPaused); the
         -- regeneration flag is not used here because interactive panels keep it false.
         local paused = build.stats.combatPaused == true
         for _, display in ipairs(statDisplays) do RefreshStatDisplay(display, paused) end
     end
     function SurvivorNativeLoadout.Refresh()
-        if hero == nil or GetUnitTypeId(hero) == 0 then return end
+        if not SurvivorConfig.UnitExists(hero) then return end
         SurvivorMetrics.Count("loadout.refreshes")
         refreshSerial = refreshSerial + 1
         DeliverTalentPoint()
@@ -331,7 +331,7 @@ do
         for _, item in pairs(oldItems) do
             Attempt("indicator item", function() if GetItemTypeId(item) ~= 0 then RemoveItem(item) end end)
         end
-        if oldHero ~= nil and GetUnitTypeId(oldHero) ~= 0 then
+        if SurvivorConfig.UnitExists(oldHero) then
             local talents = SurvivorConfig.talents
             local function Remove(code) Attempt("ability " .. code, function() UnitRemoveAbility(oldHero, FourCC(code)) end) end
             if ownedController then Remove(talents.controller) end
