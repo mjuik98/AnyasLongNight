@@ -896,7 +896,7 @@ do
         eventTrigger = CreateTrigger()
         for _, event in ipairs({EVENT_PLAYER_UNIT_EQUIP_ITEM, EVENT_PLAYER_UNIT_UNEQUIP_ITEM,
             EVENT_PLAYER_UNIT_PICKUP_ITEM, EVENT_PLAYER_UNIT_DROP_ITEM}) do
-            TriggerRegisterPlayerUnitEvent(eventTrigger, GetOwningPlayer(hero), event, nil)
+            TriggerRegisterPlayerUnitEvent(eventTrigger, SurvivorConfig.Owner(), event, nil)
         end
         local function OnItemEvent()
             -- Event timing may precede native slot mutation. Read slots after the transaction.

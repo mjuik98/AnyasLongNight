@@ -135,7 +135,7 @@ do
         if item ~= nil and GetItemTypeId(item) ~= 0 and main.positions[item] ~= nil then return item, false end
         -- The native inventory can reject additions while the hero is paused for
         -- a level-up choice. Keep the learned level and create its indicator later.
-        if IsUnitPaused(hero) or not UnitAlive(hero) then return nil, false end
+        if IsUnitPaused(hero) or not SurvivorConfig.UnitLive(hero) then return nil, false end
         -- A native UI move into the expanded bag must not hide a learned trinket
         -- forever or alter its bonuses. Restore only our indicator, never other gear.
         local empty
