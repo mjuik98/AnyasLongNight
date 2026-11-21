@@ -40,22 +40,16 @@ do
         BlzFrameSetSize(frame, width, 0.026)
         BlzFrameSetPoint(frame, FRAMEPOINT_TOPLEFT, parent, FRAMEPOINT_TOPLEFT, x, y)
         BlzFrameSetText(frame, text)
-        local trigger = CreateTrigger()
-        triggers[#triggers + 1] = trigger -- Map lifetime: Init runs only once.
-        BlzTriggerRegisterFrameEvent(trigger, frame, FRAMEEVENT_CONTROL_CLICK)
-        TriggerAddAction(trigger, function()
-            if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
+        -- Map lifetime: Init runs only once.
+        SurvivorConfig.BindFrameEvent(triggers, frame, FRAMEEVENT_CONTROL_CLICK, function()
             BlzFrameSetEnable(frame, false); BlzFrameSetEnable(frame, true)
             if rendered[frame] then rendered[frame].enabled = nil end
             local state = RunSession.GetState()
             if SharedModalVisible() then return end
             if state ~= "RUNNING" and state ~= "INVENTORY" and state ~= "STAGE_CLEAR" then return end
-            local ok, message = pcall(function()
-                action()
-                SurvivorLootUI.Refresh()
-            end)
-            if not ok then RunSession.Fail(message) end
-        end)
+            action()
+            SurvivorLootUI.Refresh()
+        end, function(message) RunSession.Fail(message) end)
         return frame
     end
     local function CanManage()

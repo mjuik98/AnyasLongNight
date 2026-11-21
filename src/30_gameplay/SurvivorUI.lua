@@ -91,7 +91,7 @@ do
         local timer, generation = CreateTimer(), timeStopFilterGeneration
         timeStopFilterTimer = timer
         TimerStart(timer, 0.02, true, function()
-            if generation ~= timeStopFilterGeneration or timeStopFilterTimer ~= timer then return end
+            if generation ~= timeStopFilterGeneration then return end
             -- Debug.try would only print here, every tick; stop the fade and report once.
             local ok, message = pcall(function()
                 elapsed = elapsed + 0.02
@@ -453,7 +453,7 @@ do
         local timer, generation, step = CreateTimer(), revealGeneration, 0
         revealTimer = timer
         TimerStart(timer, 0.03, true, function()
-            if revealTimer ~= timer or generation ~= revealGeneration or not conversation or not introReady then return end
+            if generation ~= revealGeneration or not conversation or not introReady then return end
             local ok, message = pcall(function()
                 step = step + 1
                 BlzFrameSetAlpha(introRoot, math.max(0, math.floor(255 * (1 - step / 15))))
@@ -474,7 +474,7 @@ do
         local timer, generation, step = CreateTimer(), returnGeneration, 0
         returnTimer = timer
         TimerStart(timer, 0.02, true, function()
-            if returnTimer ~= timer or generation ~= returnGeneration then return end
+            if generation ~= returnGeneration then return end
             local ok, message = pcall(function()
                 step = step + 1
                 local progress = math.min(1, step / 30)
@@ -593,7 +593,7 @@ do
         SetText(preparationCountdown, "|cffffcc00수색 시작까지\n3|r")
         RenderPreparationVisibility()
         TimerStart(timer, 1, true, function()
-            if preparationTimer ~= timer or preparationGeneration ~= generation or not preparationReady then return end
+            if preparationGeneration ~= generation or not preparationReady then return end
             local ok, message = pcall(function()
                 if preparationCheck and not preparationCheck() then
                     SurvivorUI.InterruptCombatPreparation()
