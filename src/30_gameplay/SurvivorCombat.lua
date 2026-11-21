@@ -2722,7 +2722,12 @@ do
         -- handles; it never advances combat time, XP, drops, or weapon lifetimes.
         TimerStart(clearTimer, SurvivorConfig.battlefieldCleanupInterval, true, function()
             if generation ~= clearGeneration then return end
-            if RunSession.GetState() ~= "STAGE_CLEAR" then CancelBattlefieldClear(); return end
+            if RunSession.GetState() ~= "STAGE_CLEAR" then
+                -- Debug.try would only print a failed cancel (release builds not even that).
+                local cancelled, failure = pcall(CancelBattlefieldClear)
+                if not cancelled then RunSession.Fail(failure) end
+                return
+            end
             local started = SurvivorMetrics.Begin()
             local ok, message = pcall(function()
                 local remainingActors = 0
@@ -2920,18 +2925,21 @@ do
                     BlzSetSpecialEffectColor(escapeEffect, 185, 135, 255)
                     stageEscapeUses[stage] = (stageEscapeUses[stage] or 0) + 1
                     entry.escaped, entry.damage = true, 0
-                    SurvivorUI.Cue("escape")
-                    SurvivorUI.Alert(6,
+                    -- The escape is already applied; its cue, notice and line are presentation only.
+                    SurvivorConfig.Present("escape cue", SurvivorUI.Cue, "escape")
+                    SurvivorConfig.Present("escape alert", SurvivorUI.Alert, 6,
                         "|cffbbaaff그림자 탈출 · " .. (moved and "순간 이동" or "제자리 보호")
                         .. "|r\n생명력 최소 30% · 2.5초 무적\n다음 스테이지에서 재충전", 50, "escape")
                     local heroId, profile = SurvivorConfig.HeroOf(hero)
                     local lines = escapeLines[heroId] or escapeLines.anya
-                    SurvivorUI.Say(profile.name, lines[stage] or lines[1])
+                    SurvivorConfig.Present("escape line", SurvivorUI.Say, profile.name, lines[stage] or lines[1])
                 else BlzSetEventDamage(damage) end
                 if damage > 0 then
                     if #recentDamage == 5 then table.remove(recentDamage, 1) end
                     recentDamage[#recentDamage + 1] = entry
-                    if not entry.escaped and SurvivorUI.HitFlash then SurvivorUI.HitFlash(damage / BlzGetUnitMaxHP(hero)) end
+                    if not entry.escaped and SurvivorUI.HitFlash then
+                        SurvivorConfig.Present("hit vignette", SurvivorUI.HitFlash, damage / BlzGetUnitMaxHP(hero))
+                    end
                 end
             elseif record and record.shieldSource and Enemy(record.shieldSource)
                 and (GetUnitX(target) - GetUnitX(record.shieldSource))^2 + (GetUnitY(target) - GetUnitY(record.shieldSource))^2 <= 400^2 then

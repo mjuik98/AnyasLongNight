@@ -6,9 +6,11 @@ do
     local generation = 0
     local haltedBySession = false
     local choosing, inventoryOpen, stageClear = false, false, false
-    -- A teardown requested from inside a hit, death, pickup or click callback waits
-    -- for a session-owned callback (the gameplay step while running, the watchdog
-    -- while paused), so no caller's state is cleaned under its own stack.
+    -- A teardown requested (RequestFinish/RequestFail) from inside a hit, death,
+    -- pickup or item-loop callback waits for a session-owned callback (the gameplay
+    -- step while running, the watchdog while paused), so no caller's state is
+    -- cleaned under its own stack. Frame clicks, chat commands and story/UI timers
+    -- run outside those loops and may call Fail/Finish directly as their last step.
     local pendingReason, pendingMessage = nil, nil
     -- Protected ALICE catches actor errors, disables only that pair and keeps the
     -- cycle running; its error observer reports them here. An error outside the
@@ -19,6 +21,9 @@ do
     function RunSession.GetState() return state end
     function RunSession.GetElapsed() return elapsed end
     function RunSession.IsRunning() return state == "RUNNING" and pendingReason == nil end
+    -- A paused state (CHOOSING/INVENTORY/STAGE_CLEAR) keeps its name until the
+    -- watchdog consumes a pending teardown; player actions check this as well.
+    function RunSession.IsPending() return pendingReason ~= nil end
     function RunSession.IsInventoryOpen() return inventoryOpen end
     -- Cleanup steps keep running after a failure; each failure is recorded as "label: message".
     function RunSession.Attempt(errors, label, action)

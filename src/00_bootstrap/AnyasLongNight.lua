@@ -70,13 +70,19 @@ do
         if oldTrigger ~= nil then DestroyTrigger(oldTrigger) end
     end
     local Attempt = RunSession.Attempt
+    -- Player actions and deferred stage callbacks act only on a paused state that
+    -- no pending teardown is about to replace (see RunSession.IsPending).
+    local function Acting(state) return RunSession.GetState() == state and not RunSession.IsPending() end
     -- The one subsystem teardown list for finish, failed startup and restart. Every
     -- step is attempted; a restart also clears the per-run story and expedition records.
+    -- Finish ends the expedition earlier for its result details; EndStage is idempotent.
     local function TeardownSubsystems(errors, restart)
         Attempt(errors, "progression", ClearProgression)
         Attempt(errors, "hide UI", SurvivorUI.HidePanel)
+        Attempt(errors, "screen effects", SurvivorUI.ResetScreenEffects)
         Attempt(errors, "story", restart and SurvivorStory.Reset or SurvivorStory.Cleanup)
-        if restart then Attempt(errors, "expedition", SurvivorExpedition.Reset) end
+        -- Before combat cleanup: the expedition releases its courier through the combat port.
+        Attempt(errors, "expedition", restart and SurvivorExpedition.Reset or SurvivorExpedition.EndStage)
         Attempt(errors, "inventory observer", SurvivorInventoryPause.Cleanup)
         -- Detach the camera before removing its target, even if scene cleanup failed.
         Attempt(errors, "camera", function()
@@ -124,17 +130,17 @@ do
                 local maximum, before = BlzGetUnitMaxHP(hero), GetWidgetLife(hero)
                 local after = math.min(maximum, before + maximum * config.healFraction)
                 SetWidgetLife(hero, after)
-                SurvivorUI.Notify("|cff88ff99회복의 룬 · 생명력 +" .. math.floor(after - before) .. "|r")
+                SurvivorConfig.Present("bonus notice", SurvivorUI.Notify, "|cff88ff99회복의 룬 · 생명력 +" .. math.floor(after - before) .. "|r")
             elseif kind == "experienceProp" then
                 local amount = math.floor(config.experience * SurvivorConfig.stageXP[stage])
                 AwardXP(amount)
-                SurvivorUI.Notify("|cffbbaaff경험치의 서 · 경험치 +" .. amount .. "|r")
+                SurvivorConfig.Present("bonus notice", SurvivorUI.Notify, "|cffbbaaff경험치의 서 · 경험치 +" .. amount .. "|r")
             elseif kind == "purge" then
                 local count = SurvivorCombat.PurgeNearby()
-                SurvivorUI.Notify("|cffffcc88소멸의 룬 · 주변 적 " .. count .. " 처치|r")
+                SurvivorConfig.Present("bonus notice", SurvivorUI.Notify, "|cffffcc88소멸의 룬 · 주변 적 " .. count .. " 처치|r")
             elseif kind == "timeStop" then
                 SurvivorCombat.StopTime()
-                SurvivorUI.Notify("|cff88ddff정지의 룬 · 적과 적 투사체 8초 정지|r")
+                SurvivorConfig.Present("bonus notice", SurvivorUI.Notify, "|cff88ddff정지의 룬 · 적과 적 투사체 8초 정지|r")
             end
         end)
         -- Purge kills run inside this pickup event; teardown waits for the session callback.
@@ -144,6 +150,8 @@ do
         stageTransition = false
         gearOffers, eventOffers = nil, nil
         local errors, details, report = {}, nil, nil
+        -- End the expedition before the details so an interrupted risk is recorded;
+        -- TeardownSubsystems repeats this idempotent step as part of the shared list.
         Attempt(errors, "expedition", SurvivorExpedition.EndStage)
         Attempt(errors, "damage board", RefreshDamageBoard)
         local ok, value = Attempt(errors, "result details", function() return ResultDetails(reason == "boss_defeated") end)
@@ -172,7 +180,7 @@ do
         else offers, rewardLevel = nil, nil end
     end
     local function Reroll(index)
-        if RunSession.GetState() ~= "CHOOSING" or offers == nil or rerollsRemaining <= 0 then return end
+        if not Acting("CHOOSING") or offers == nil or rerollsRemaining <= 0 then return end
         if SurvivorAugments.Reroll(build, offers, index) then
             rerollsRemaining = rerollsRemaining - 1
         end
@@ -181,7 +189,7 @@ do
     end
     -- Returns whether the click consumed the choice; the UI keeps its cards otherwise.
     local function Choose(index)
-        if RunSession.GetState() ~= "CHOOSING" or offers == nil or offers[index] == nil then return false end
+        if not Acting("CHOOSING") or offers == nil or offers[index] == nil then return false end
         local selected = offers[index]
         offers, rewardLevel = nil, nil -- Consume once, before callbacks or combat resume.
         SurvivorAugments.Apply(selected, build, hero)
@@ -204,7 +212,7 @@ do
         return true
     end
     local function Exclude(index)
-        if RunSession.GetState() ~= "CHOOSING" or offers == nil then return end
+        if not Acting("CHOOSING") or offers == nil then return end
         SurvivorAugments.Exclude(build, offers, index)
         -- Excluding replaces only this card; no reroll or queued level is consumed.
         ShowChoice()
@@ -226,7 +234,7 @@ do
         end
     end
     local function ChooseGear(index)
-        if RunSession.GetState() ~= "STAGE_CLEAR" or not gearOffers or not gearOffers[index] then return false end
+        if not Acting("STAGE_CLEAR") or not gearOffers or not gearOffers[index] then return false end
         local id = gearOffers[index]
         gearOffers = nil -- Consume before granting the item; duplicate clicks cannot grant twice.
         assert(SurvivorEquipment.ClaimReward(id), "Boss reward could not be granted")
@@ -237,15 +245,15 @@ do
         return true
     end
     local function ChooseEventGear(index)
-        if RunSession.GetState() ~= "CHOOSING" or not eventOffers or not eventOffers[index] then return false end
+        if not Acting("CHOOSING") or not eventOffers or not eventOffers[index] then return false end
         local id = eventOffers[index]
         eventOffers = nil
         assert(SurvivorEquipment.ClaimReward(id, "봉인 조사 보상"), "Risk reward could not be granted")
         SurvivorExpedition.RecordReward(id)
         SurvivorUI.HidePanel()
         choiceGrace = 0.25
-        RunSession.EndChoice()
-        RefreshDamageBoard()
+        -- A failed resume hook already finished the run; do not refresh its torn-down board.
+        if RunSession.EndChoice() then RefreshDamageBoard() end
         return true
     end
     local function ExpeditionReward(kind)
@@ -253,7 +261,9 @@ do
             rerollsRemaining = math.min(SurvivorConfig.rerollCapacity, rerollsRemaining + 1)
         elseif kind == "risk" then
             eventOffers = SurvivorEquipment.RollRiskReward()
-            assert(RunSession.BeginChoice(), "Risk reward requires running session")
+            -- Step runs only while RUNNING, so a refusal means a failed pause hook
+            -- already reported and finished the run.
+            if not RunSession.BeginChoice() then eventOffers = nil; return end
             SurvivorUI.ShowGearRewards(eventOffers, stage, ChooseEventGear, "봉인 경보 해제 · " .. (stage <= 2 and "희귀 이상" or "영웅 등급") .. " 장비 하나 선택")
         end
         RefreshDamageBoard()
@@ -273,7 +283,7 @@ do
                 -- Deferred cleanup/story callbacks act only on the run and stage that started them.
                 local expectedRun, expectedStage = runSerial, stage
                 local function SameClear()
-                    return runSerial == expectedRun and stage == expectedStage and RunSession.GetState() == "STAGE_CLEAR"
+                    return runSerial == expectedRun and stage == expectedStage and Acting("STAGE_CLEAR")
                 end
                 SurvivorCombat.ClearBattlefieldAsync(function()
                     if not SameClear() then return end
@@ -383,7 +393,7 @@ do
         local prepared, resumed = false, false
         local function SameTransition()
             return not resumed and runSerial == expectedRun and hero == expectedHero and stage == expectedStage
-                and stageTransition and RunSession.GetState() == "STAGE_CLEAR"
+                and stageTransition and Acting("STAGE_CLEAR")
                 and SurvivorConfig.UnitLive(expectedHero)
         end
         local function CanStart()
@@ -411,7 +421,7 @@ do
         end, expectedHero)
     end
     function AnyasLongNight.NextStage()
-        if RunSession.GetState() ~= "STAGE_CLEAR" or stageTransition or gearOffers or stage >= SurvivorConfig.stages then return false end
+        if not Acting("STAGE_CLEAR") or stageTransition or gearOffers or stage >= SurvivorConfig.stages then return false end
         stageTransition, nextHazard, nextRush = true, 35, SurvivorConfig.swarmRush.firstAt
         stage, stageStarted, bossEngagedAt = stage + 1, RunSession.GetElapsed(), nil
         stageStartKills = kills
@@ -431,7 +441,7 @@ do
         runSerial = runSerial + 1
         stageTransition, nextHazard, nextRush = false, 35, SurvivorConfig.swarmRush.firstAt
         gearOffers, eventOffers = nil, nil
-        RunSession.Finish("restarted")
+        -- BeginRun reaches here only from READY/FINISHED; AnyasLongNight.Start ends a live run.
         kills = 0 -- A failed startup must not report the previous run's kills.
         -- One failing teardown must not leave the later subsystems still owned.
         local cleanupErrors = {}
@@ -536,7 +546,9 @@ do
             SetCameraTargetController(hero, 0, 0, false)
         end
         stageTransition = true
-        RunSession.BeginStageClear()
+        -- A failed pause hook already ran Finish and showed the error result; an
+        -- introduction opened now would hide that result behind a dead run.
+        if not RunSession.BeginStageClear() or RunSession.GetState() ~= "STAGE_CLEAR" then return end
         ShowStageIntroduction(startingWeapon, startingTrinket)
         SurvivorNativeLoadout.Refresh()
     end
@@ -619,7 +631,6 @@ do
             if hooked then return ok end
             -- Errors before RunSession.Start acquired its hooks need explicit cleanup.
             local errors = {}
-            Attempt(errors, "expedition", SurvivorExpedition.EndStage)
             CleanupRun(errors)
             Attempt(errors, "result UI", function() SurvivorUI.ShowResult("error", RunSession.GetElapsed(), kills) end)
             for _, failure in ipairs(errors) do print("[AnyasLongNight cleanup] " .. failure) end

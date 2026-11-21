@@ -388,6 +388,14 @@ function SurvivorConfig.TerrainZ(x, y)
     if terrainProbe == nil then terrainProbe = Location(x, y) else MoveLocation(terrainProbe, x, y) end
     return GetLocationZ(terrainProbe)
 end
+-- Presentation (cues, notices, speech, screen flashes) called from hit, death or
+-- pickup loops. Like the screen-effect reset in SurvivorUI.BeginRun, a failure is
+-- reported but never ends the run; gameplay state changes stay outside this call.
+function SurvivorConfig.Present(label, action, ...)
+    local ok, message = pcall(action, ...)
+    if not ok then print("[AnyasLongNight presentation] " .. label .. ": " .. tostring(message)) end
+    return ok
+end
 -- Owner-only frame event. Bootstrap loads before the run owner, so the caller
 -- passes the failure handler (gameplay modules pass RunSession.Fail).
 function SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, onError)

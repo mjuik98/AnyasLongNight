@@ -754,11 +754,13 @@ do
         local copies = inventory.copies[entry.id] or 0
         return copies < (entry.slot == "Ring" and 2 or 1)
     end
-    function SurvivorEquipment.BagEntries()
+    -- Read-only bag rows. Local renderers use this: ObserveBag changes shared
+    -- revision/tooltip state, so it must run identically on every client.
+    local function ListBag(observe)
         local list = {}
         if not hero then return list, 0, 0 end
         local bag, count, capacity = ReadBag()
-        ObserveBag(bag, capacity)
+        if observe then ObserveBag(bag, capacity) end
         for i = 1, capacity do
             local item = bag[i]
             local entry = Entry(item)
@@ -766,6 +768,8 @@ do
         end
         return list, count, capacity
     end
+    function SurvivorEquipment.BagEntries() return ListBag(true) end
+    function SurvivorEquipment.ReadBagEntries() return ListBag(false) end
     function SurvivorEquipment.ToggleLock(item)
         if not hero or not Entry(item) or not UnitHasItemBagged(hero, item) then return false end
         locked[item] = not locked[item] or nil
@@ -814,7 +818,7 @@ do
     end
     function SurvivorEquipment.ConfirmCleanup(preview)
         local state = RunSession.GetState()
-        if not hero or not preview or (state ~= "INVENTORY" and state ~= "STAGE_CLEAR") then return 0 end
+        if not hero or not preview or RunSession.IsPending() or (state ~= "INVENTORY" and state ~= "STAGE_CLEAR") then return 0 end
         local allowed, removed = {}, 0
         for _, item in ipairs(SurvivorEquipment.PreviewCleanup(preview.kind, preview.keepFamily).items) do allowed[item] = true end
         -- Never delete newly arrived items or items equipped/locked since the preview.
