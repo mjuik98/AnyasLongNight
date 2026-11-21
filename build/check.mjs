@@ -3143,6 +3143,11 @@ for _,label in ipairs(restartSteps)do
     end
     assert(levelTrigger.destroyed,'Restart releases the level trigger')
 end
+-- A search reward can come from a kill inside a weapon hit loop: its board refresh is presentation.
+local reward=Local(AnyasLongNight.NextStage,'ExpeditionReward')
+SetLocal(reward,'RefreshDamageBoard',function()error('injected board failure')end)
+messages={};assert(pcall(reward,'search'),'A failed board refresh never fails the kill reward')
+assert(table.concat(messages,'\n'):find('damage board') and table.concat(messages,'\n'):find('injected board failure'))
 `);
 
 suite('actual run startup releases partially initialized heroes and retains a valid retry setup', mocks + String.raw`
@@ -3184,6 +3189,11 @@ assert(world[#world].removed and Local(SurvivorCombat.Init,'hero')==nil and Loca
     'A native name failure after unit creation must release the owned hero')
 for _,trigger in ipairs(triggers)do assert(trigger.destroyed)end
 assert(AnyasLongNight.CanRetrySame() and resultReason=='error')
+-- Combat owns the hero before its own validation can fail.
+failName=false;SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','injected-missing')
+assert(not AnyasLongNight.RetrySame())
+assert(world[#world].removed and Local(SurvivorCombat.Init,'hero')==nil,'A combat validation failure still removes the created hero')
+SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','normal')
 `);
 
 suite('hero death defers run teardown to the next step, a post-start or startup-pause failure shows one detailed result and a pending teardown blocks stage actions', mocks + String.raw`
@@ -3375,6 +3385,22 @@ assert(errorObserver==nil,'Finish releases the error observer')
 -- A cycle that halted itself after an unprotected crash is resumed when the run ends.
 Begin();halted=true;RunSession.Finish('test')
 assert(not halted,'Finish resumes a self-halted ALICE cycle so released actors drain')
+-- A direct Fail from a native timer can preempt a queued error; both causes are printed.
+Begin();RunSession.RequestFail('injected root cause');messages={}
+RunSession.Fail('injected secondary failure')
+local log=table.concat(messages,'\n')
+assert(finished=='error' and log:find('injected root cause') and log:find('injected secondary failure'),
+    'A preempted pending error is still reported')
+-- A pause must not adopt a cycle that ALICE halted itself: resuming it would hide the crash.
+Begin();periodic();halted=true;messages={}
+assert(not RunSession.SetInventoryOpen(true),'A pause on a self-halted cycle is refused')
+assert(finished=='error' and table.concat(messages,'\n'):find('ALICE cycle halted'),'The hidden crash fails the run')
+assert(not halted and RunSession.GetState()=='FINISHED','Finish still resumes the self-halted cycle once')
+Begin();periodic();halted=true;assert(not RunSession.BeginChoice() and finished=='error','Choices refuse the halted cycle too')
+-- A session-owned halt is still switched between pause reasons without failing.
+Begin();assert(RunSession.BeginChoice() and halted);RunSession.SetInventoryOpen(true)
+assert(RunSession.EndChoice() and RunSession.GetState()=='INVENTORY' and finished==nil)
+RunSession.Finish('test')
 `);
 
 suite('kills and weapon damage in the tick of a pending teardown still count, without new procs', mocks + String.raw`
@@ -4046,6 +4072,21 @@ GetManipulatedItem=manipulated
 assert(#failures==0 and Local(SurvivorEquipment.Init,'hero')==hero,'Item events fire inside equipment scans; teardown is deferred')
 FlushRunSession()
 assert(#failures==1 and failures[1]:find('injected item event failure'),'Item-event failures reach RunSession.Fail')
+SurvivorEquipment.Cleanup()
+`);
+
+suite('equipment notices are presentation: a failing notifier inside the pickup scan never ends the run', gearMocks + String.raw`
+messages={};print=function(message)messages[#messages+1]=tostring(message)end
+`, [config, metrics, augments, equipment], String.raw`
+local hero=NewGear();state='RUNNING';now=0
+SurvivorUI.Notify=function()error('injected notice failure')end
+assert(SurvivorEquipment.ClaimReward('Hs01'),'A reward is granted even when its notice fails')
+local item=SurvivorEquipment.DropAt(hero.x,hero.y,CatalogIndex('Hs02'))
+SurvivorEquipment.Step(1) -- The auto-pickup notice runs inside Step's owned-item loop.
+assert(RunSession.IsRunning() and not RunSession.IsPending(),'A notice failure neither fails nor defers teardown')
+assert(hero.bag[2]==item or hero.bag[1]==item,'The pickup itself completed')
+local log=table.concat(messages,'\n')
+assert(select(2,log:gsub('injected notice failure',''))>=2 and log:find('equipment notice'),'Each notice failure is reported')
 SurvivorEquipment.Cleanup()
 `);
 
@@ -6885,12 +6926,17 @@ local revision=build.revision
 ClickFrame(frames.ScriptDialogButton821)
 assert(frames.ScriptDialogButton821.text:find('잠금') and build.revision==revision,'UI locks never invalidate combat statistics')
 hero.bag[1]=CreateItem('Hs14',0,0) -- Native movement without an item event.
+-- The local observer entry never observes shared bag state itself.
+local before=Local(SurvivorEquipment.UIRevision,'uiRevision')
 SurvivorLootUI.SetInventoryVisible(true)
+assert(Local(SurvivorEquipment.UIRevision,'uiRevision')==before,'A local render without a revision must not observe the shared bag')
+-- Like InventoryPause.Tick: observe on every client, then pass the revision to the local renderer.
+SurvivorLootUI.SetInventoryVisible(true,SurvivorEquipment.UIRevision())
 assert(frames.ScriptDialogButton821.text:find('빛바랜 목걸이') and not frames.ScriptDialogButton821.text:find('잠금'),
     'The native bag observer invalidates rows even without an event callback')
 assert(SurvivorEquipment.ClaimReward('Hs04'));SurvivorLootUI.Refresh()
 assert(frames.HSPendingRewards.visible and frames.HSPendingRewards.text:find('1개'))
-hero.bag[1]=nil;SurvivorEquipment.CollectRest();SurvivorLootUI.SetInventoryVisible(true)
+hero.bag[1]=nil;SurvivorEquipment.CollectRest();SurvivorLootUI.SetInventoryVisible(true,SurvivorEquipment.UIRevision())
 assert(not frames.HSPendingRewards.visible and frames.ScriptDialogButton821.text:find(SurvivorEquipment.Name('Hs04')),
     'Collecting the protected reward updates both its notice and bag row')
 SurvivorLootUI.Reset();SurvivorEquipment.Cleanup()
@@ -6901,9 +6947,11 @@ localPlayer,observations,localRenders=12,0,0
 function GetLocalPlayer()return localPlayer end
 function BlzTriggerRegisterPlayerSyncEvent()end
 function BlzSendSyncData()return true end
-SurvivorCombat={MaintainInventoryPause=function()end,IsClearing=function()return false end}
+freezes,collections=0,0
+SurvivorCombat={MaintainInventoryPause=function()freezes=freezes+1 end,IsClearing=function()return false end}
 SurvivorNativeLoadout={Refresh=function()end}
-SurvivorEquipment={Reconcile=function()end,CollectRest=function()end,UIRevision=function()observations=observations+1;return observations end}
+SurvivorEquipment={Reconcile=function()collections=collections+1 end,CollectRest=function()collections=collections+1 end,
+    UIRevision=function()observations=observations+1;return observations end}
 SurvivorUI={SetRestInventoryVisible=function()end}
 SurvivorLootUI={Init=function()end,Reset=function()end,SetInventoryVisible=function(open,revision)
     assert(localPlayer==0 and revision==observations,'Render the already observed shared revision only on the local client')
@@ -6914,7 +6962,11 @@ state='RUNNING';SurvivorInventoryPause.Init();TickTimers()
 assert(observations==1 and localRenders==0,'Nonlocal clients still perform identical equipment metadata observation')
 localPlayer=0;TickTimers();assert(observations==2 and localRenders==1)
 TickTimers();assert(observations==3 and localRenders==2,'Each local timer tick observes once and forwards that revision')
-SurvivorInventoryPause.Cleanup()
+-- Paused rest: collect normally, but never transact on a run whose teardown is pending.
+state='STAGE_CLEAR';TickTimers();assert(collections==1 and freezes==1)
+RunSession.RequestFail('injected pending teardown');TickTimers()
+assert(collections==1 and freezes==2,'A pending teardown stops item transactions but keeps the paused vitals frozen')
+pendingFailure=nil;SurvivorInventoryPause.Cleanup()
 `);
 
 suite('checkpoint patterns and reinforcements keep gameplay and ground warnings without monster notices', presentationMocks + String.raw`

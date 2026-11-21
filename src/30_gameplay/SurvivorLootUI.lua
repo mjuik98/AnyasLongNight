@@ -130,7 +130,8 @@ do
         cancel = Button(panel, 845, 0.07, 0.196, -0.286, "취소", function() preview = nil end)
         SurvivorLootUI.Reset()
     end
-    function SurvivorLootUI.Refresh(observedRevision)
+    -- localOnly: called from a GetLocalPlayer block, so never observe shared bag state.
+    function SurvivorLootUI.Refresh(observedRevision, localOnly)
         if not root then return end
         local state = RunSession.GetState()
         local active = not ModalVisible() and (state == "RUNNING" or state == "INVENTORY" or state == "STAGE_CLEAR")
@@ -146,7 +147,10 @@ do
         if not active then return end
         -- UIRevision still observes native bag transactions, even without item events.
         local revision = observedRevision
-        if revision == nil and SurvivorEquipment.UIRevision then revision = SurvivorEquipment.UIRevision() end
+        if revision == nil and SurvivorEquipment.UIRevision then
+            -- A local caller without a synchronized revision redraws the last one it saw.
+            if localOnly then revision = lastRevision else revision = SurvivorEquipment.UIRevision() end
+        end
         local changed = revision == nil or revision ~= lastRevision
         local pending = changed and SurvivorEquipment.PendingRewardCount() or lastPending or 0
         Set(pendingNotice, "visible", pending > 0)
@@ -188,7 +192,8 @@ do
     function SurvivorLootUI.SetInventoryVisible(open, observedRevision, detailsOpen)
         inventoryOpen = open
         nativeDetailsVisible = detailsOpen == true
-        SurvivorLootUI.Refresh(observedRevision)
+        -- Only the local native-panel observer calls this.
+        SurvivorLootUI.Refresh(observedRevision, true)
     end
     -- Synchronized close: the shared management state collapses on every client.
     function SurvivorLootUI.SetInventoryOpen(open)
