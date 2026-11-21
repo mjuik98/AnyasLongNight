@@ -890,7 +890,9 @@ do
             "장비 시스템은 Warcraft III 3.0 이상이 필요합니다.")
         hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = unit, runBuild, 0, true, true, 1
         -- The run owner passes the UI notifier; this system never reaches into gameplay UI.
-        notify = assert(type(onNotify) == "function" and onNotify, "Equipment needs a notifier")
+        assert(type(onNotify) == "function", "Equipment needs a notifier")
+        -- Notices also run inside Step's item loop and pickup events: report, never end the run.
+        notify = function(text) SurvivorConfig.Present("equipment notice", onNotify, text) end
         pickupMode, locked = 1, {}
         -- AInv holds level-up trinket indicators; AIni/AEqu hold physical dropped gear.
         for _, code in ipairs({"AInv", "AIni", "AEqu"}) do
@@ -1071,6 +1073,7 @@ do
         tooltipCache, lastBagCapacity, lastPendingCount = setmetatable({}, {__mode = "k"}), nil, nil
         locked, pickupMode = {}, 1
         hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = nil, nil, 0, true, true, 1
+        notify = function() end
         Attempt("equipment UI revision", TouchUI)
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end

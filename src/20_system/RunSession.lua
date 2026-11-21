@@ -15,7 +15,8 @@ do
     -- Protected ALICE catches actor errors, disables only that pair and keeps the
     -- cycle running; its error observer reports them here. An error outside the
     -- protected regions halts the whole cycle instead, and this native timer
-    -- notices that the gameplay clock stopped while still RUNNING.
+    -- notices that the gameplay clock stopped while still RUNNING. A pause that
+    -- would begin on such a halted cycle fails the run instead (ApplyPauseReasons).
     local watchdog, watchedElapsed, stalledFor = nil, 0.0, 0.0
     local WATCHDOG_INTERVAL, WATCHDOG_LIMIT = 0.5, 3.0
     function RunSession.GetState() return state end
@@ -56,7 +57,10 @@ do
         state = "FINISHED"
         generation = generation + 1
         choosing, inventoryOpen, stageClear = false, false, false
+        -- A direct Fail/Finish can preempt a queued error; keep that root cause visible.
+        local preempted = pendingMessage
         pendingReason, pendingMessage = nil, nil
+        if preempted ~= nil then print("[AnyasLongNight] (earlier pending) " .. preempted) end
         -- Detach ownership before any native/callback can fail or re-enter Finish.
         local oldCaller, oldHooks, wasHalted, oldWatchdog = caller, hooks, haltedBySession, watchdog
         caller, hooks, haltedBySession, watchdog = nil, nil, false, nil
@@ -159,6 +163,13 @@ do
         if pendingReason ~= nil then return false end
         local nextState = stageClear and "STAGE_CLEAR" or choosing and "CHOOSING" or inventoryOpen and "INVENTORY" or "RUNNING"
         if nextState == state then return true end
+        -- A cycle halted by an unprotected actor crash must not be adopted as a session
+        -- pause: the later resume would restart it silently and hide the crash from the
+        -- watchdog, which only measures stalls while RUNNING.
+        if state == "RUNNING" and not haltedBySession and type(ALICE_IsHalted) == "function" and ALICE_IsHalted() then
+            RunSession.Fail("ALICE cycle halted after an actor error before " .. nextState)
+            return false
+        end
         state = nextState
         if nextState == "RUNNING" then
             local ok, message = pcall(hooks.resume)

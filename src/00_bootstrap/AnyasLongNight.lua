@@ -266,7 +266,8 @@ do
             if not RunSession.BeginChoice() then eventOffers = nil; return end
             SurvivorUI.ShowGearRewards(eventOffers, stage, ChooseEventGear, "봉인 경보 해제 · " .. (stage <= 2 and "희귀 이상" or "영웅 등급") .. " 장비 하나 선택")
         end
-        RefreshDamageBoard()
+        -- A search reward can arrive from a kill inside a weapon hit loop; the board is presentation.
+        SurvivorConfig.Present("damage board", RefreshDamageBoard)
     end
     -- Expedition reaches combat only through this port; combat already queries it.
     local expeditionCombat = {
@@ -423,15 +424,18 @@ do
     function AnyasLongNight.NextStage()
         if not Acting("STAGE_CLEAR") or stageTransition or gearOffers or stage >= SurvivorConfig.stages then return false end
         stageTransition, nextHazard, nextRush = true, 35, SurvivorConfig.swarmRush.firstAt
-        stage, stageStarted, bossEngagedAt = stage + 1, RunSession.GetElapsed(), nil
-        stageStartKills = kills
-        SurvivorEquipment.SetStage(stage)
+        bossEngagedAt = nil
+        -- Commit the stage number only after every subsystem accepted it: a failure
+        -- here reports the cleared stage, not an empty record for the next one.
+        local nextStage, started = stage + 1, RunSession.GetElapsed()
+        SurvivorEquipment.SetStage(nextStage)
         SurvivorEquipment.Reconcile()
         SurvivorNativeLoadout.Refresh()
-        SurvivorCombat.BeginStage(stage, stageStarted)
-        SurvivorStage.Apply(stage)
-        SurvivorExpedition.BeginStage(hero, stage, stageStarted, ExpeditionReward, expeditionCombat)
+        SurvivorCombat.BeginStage(nextStage, started)
+        SurvivorStage.Apply(nextStage)
+        SurvivorExpedition.BeginStage(hero, nextStage, started, ExpeditionReward, expeditionCombat)
         SurvivorEquipment.CarryGroundToStage()
+        stage, stageStarted, stageStartKills = nextStage, started, kills
         nextElite, bossStarted = SurvivorConfig.eliteInterval, false
         weaponClocks, spawnBudget, enemyClock, hudClock = {}, 0, 0, 0
         ShowStageIntroduction()

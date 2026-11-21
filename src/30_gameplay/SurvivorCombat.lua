@@ -2865,12 +2865,13 @@ do
     end
     function SurvivorCombat.Init(unit, buildStats, arena, killCallback, deathCallback, difficultyId, bonusCallback)
         assert(hero == nil, "Combat must be cleaned before reinitializing")
-        difficulty = assert(SurvivorConfig.difficulties[difficultyId or "normal"], "Invalid combat difficulty")
+        -- Own the hero before any validation can fail, so Cleanup removes it.
         hero, stats, bounds, onKill, onDeath = unit, buildStats, arena, killCallback, deathCallback
+        units[hero] = {enemy = false, alive = true}
+        difficulty = assert(SurvivorConfig.difficulties[difficultyId or "normal"], "Invalid combat difficulty")
         onBonus = bonusCallback
         moveOrder, attackOrder = OrderId("move"), OrderId("attack")
         bonusCount, nextBonusAt = 0, RunSession.GetElapsed() + SurvivorConfig.bonusProps.firstSpawn
-        units[hero] = {enemy = false, alive = true}
         stats.nativeRegenerationPaused, stats.combatPaused = false, false
         SurvivorAugments.ApplyHeroRegeneration(hero, stats)
         queryGroup = CreateGroup()

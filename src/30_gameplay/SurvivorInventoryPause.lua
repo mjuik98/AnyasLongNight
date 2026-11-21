@@ -39,7 +39,9 @@ do
         -- This native timer keeps running while ALICE and the gameplay clock halt.
         if state == "INVENTORY" or state == "CHOOSING" or state == "STAGE_CLEAR" then
             SurvivorCombat.MaintainInventoryPause()
-            if not SurvivorCombat.IsClearing() then
+            -- A pending teardown keeps the paused state's name until the watchdog consumes
+            -- it; do not pick up, reconcile or grant loadout items on that doomed run.
+            if not SurvivorCombat.IsClearing() and not RunSession.IsPending() then
                 local _
                 if state == "STAGE_CLEAR" then _, revision = SurvivorEquipment.CollectRest()
                 else _, revision = SurvivorEquipment.Reconcile() end
