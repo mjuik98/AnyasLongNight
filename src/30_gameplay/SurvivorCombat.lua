@@ -1826,9 +1826,10 @@ do
     end
     -- Each move order repaths; skip it while the unit already heads near the same point.
     -- A unit still moving re-aims only on its due tick; a lost order is replaced at once.
+    local moveOrder, attackOrder -- Constant order ids, read once per Init instead of every enemy tick.
     local function MoveEnemy(unit, record, x, y, slack, due)
         local ox, oy = record.moveX, record.moveY
-        if ox and GetUnitCurrentOrder(unit) == OrderId("move")
+        if ox and GetUnitCurrentOrder(unit) == moveOrder
             and (not due or (ox - x)^2 + (oy - y)^2 <= slack * slack) then return end
         record.moveX, record.moveY = x, y
         IssuePointOrder(unit, "move", x, y)
@@ -2573,7 +2574,7 @@ do
                         end
                     else
                         -- Reissuing an attack during its windup can interrupt the hit.
-                        if GetUnitCurrentOrder(u) ~= OrderId("attack") then IssueTargetOrder(u, "attack", hero) end
+                        if GetUnitCurrentOrder(u) ~= attackOrder then IssueTargetOrder(u, "attack", hero) end
                     end
                     if record.boss and elapsed >= record.nextBlast then
                         local enraged = stage == 5 and GetWidgetLife(u) <= BlzGetUnitMaxHP(u) * 0.5
@@ -2869,6 +2870,7 @@ do
         difficulty = assert(SurvivorConfig.difficulties[difficultyId or "normal"], "Invalid combat difficulty")
         hero, stats, bounds, onKill, onDeath = unit, buildStats, arena, killCallback, deathCallback
         onBonus = bonusCallback
+        moveOrder, attackOrder = OrderId("move"), OrderId("attack")
         bonusCount, nextBonusAt = 0, RunSession.GetElapsed() + SurvivorConfig.bonusProps.firstSpawn
         units[hero] = {enemy = false, alive = true}
         stats.nativeRegenerationPaused, stats.combatPaused = false, false

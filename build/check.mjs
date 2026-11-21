@@ -47,6 +47,7 @@ EVENT_PLAYER_UNIT_PICKUP_ITEM = "pickup"
 UNIT_STATE_MANA, UNIT_STATE_MAX_MANA = "mana", "maxMana"
 UNIT_RF_HIT_POINTS_REGENERATION_RATE = 'uhpr'
 function FourCC(x) return x end
+function OrderId(x) return x end
 function Player(x) return x end
 playerColors, playerNames, alliances, ALLIANCE_PASSIVE = {}, {}, {}, 'passive'
 function GetPlayerColor(p) return playerColors[p] or 'color' .. tostring(p) end
