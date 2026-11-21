@@ -72,10 +72,10 @@ do
         SurvivorLootUI.Reset()
         sentSequence, receivedSequence, lastSentOpen, frames = 0, 0, false, {}
         syncTrigger = CreateTrigger()
+        -- Registered for the owner only, so every event is the owner's sync.
         BlzTriggerRegisterPlayerSyncEvent(syncTrigger, SurvivorConfig.Owner(), prefix, false)
         TriggerAddAction(syncTrigger, function()
             if activeGeneration ~= runGeneration then return end
-            if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
             local state = RunSession.GetState()
             if state == "READY" or state == "FINISHED" then return end
             local data = BlzGetTriggerSyncData()
@@ -102,10 +102,11 @@ do
             end)
             if not ok then RunSession.Fail(message) end
         end)
+        -- Cleanup clears activeGeneration together with timer, so the generation alone
+        -- rejects a callback from a cancelled timer.
         timer = CreateTimer()
-        local runTimer = timer
-        TimerStart(runTimer, 0.05, true, function()
-            if activeGeneration ~= runGeneration or timer ~= runTimer then return end
+        TimerStart(timer, 0.05, true, function()
+            if activeGeneration ~= runGeneration then return end
             local ok, message = pcall(Tick)
             if not ok then RunSession.Fail(message) end
         end)
@@ -125,7 +126,7 @@ do
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         RunSession.CancelTimer(errors, "observer timer", oldTimer)
-        if oldTrigger ~= nil then Attempt("sync trigger", function() DestroyTrigger(oldTrigger) end) end
+        RunSession.DestroyTrigger(errors, "sync trigger", oldTrigger)
         Attempt("rest inventory", function()
             if SurvivorConfig.IsLocalPlayer() then SurvivorUI.SetRestInventoryVisible(false) end
         end)

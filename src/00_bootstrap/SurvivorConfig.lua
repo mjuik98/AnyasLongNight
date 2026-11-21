@@ -372,7 +372,7 @@ function SurvivorConfig.UnitExists(unit)
     return unit ~= nil and GetUnitTypeId(unit) ~= 0
 end
 function SurvivorConfig.UnitLive(unit)
-    return unit ~= nil and GetUnitTypeId(unit) ~= 0 and UnitAlive(unit)
+    return SurvivorConfig.UnitExists(unit) and UnitAlive(unit)
 end
 -- An item handle that still refers to an item (removed items report type 0).
 function SurvivorConfig.ItemExists(item)

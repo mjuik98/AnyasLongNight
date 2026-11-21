@@ -504,13 +504,12 @@ do
         QueueLevelRewards()
         levelTrigger = CreateTrigger()
         TriggerRegisterPlayerUnitEvent(levelTrigger, SurvivorConfig.Owner(), EVENT_PLAYER_HERO_LEVEL, nil)
-        TriggerAddAction(levelTrigger, function()
+        -- AddHeroXP from a kill reward raises this event inside the same hit loop.
+        TriggerAddAction(levelTrigger, RunSession.TriggerAction(function()
             if GetTriggerUnit() ~= hero then return end
             -- Defer the modal UI to Step, outside Warcraft's level-up/death event.
-            local ok, message = pcall(QueueLevelRewards)
-            -- AddHeroXP from a kill reward raises this event inside the same hit loop.
-            if not ok then RunSession.RequestFail(message) end
-        end)
+            QueueLevelRewards()
+        end))
         BlzUnitDisableAbility(hero, FourCC("Aatk"), true, true)
         BlzUnitDisableAbility(hero, FourCC("AHer"), true, true)
         BlzSetUnitMaxHP(hero, SurvivorConfig.heroLife)
