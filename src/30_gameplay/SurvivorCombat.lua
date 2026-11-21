@@ -48,15 +48,8 @@ do
     end
 
     local CleanupCall = RunSession.Attempt
-    -- DebugUtils' Debug.try only prints trigger-action errors. Route them to the
-    -- run owner, as UI, sync and timer callbacks already do. These events fire
-    -- inside UnitDamageTarget hit loops, so teardown waits for the session callback.
-    local function RunAction(action)
-        return function()
-            local ok, message = pcall(action)
-            if not ok then RunSession.RequestFail(message) end
-        end
-    end
+    -- Damage, death and pickup events fire inside UnitDamageTarget hit loops, so
+    -- RunSession.TriggerAction defers their failures to the session callback.
     local function HeroYaw() return GetUnitFacing(hero) * bj_DEGTORAD end
 
     local function HurtHero(source, amount, name, hint)
@@ -2820,9 +2813,9 @@ do
         CleanupCall(errors, "escape", ClearEscape)
         local oldDamage, oldDeath, oldPickup = damageTrigger, deathTrigger, bonusPickupTrigger
         damageTrigger, deathTrigger, bonusPickupTrigger = nil, nil, nil
-        if oldDamage then CleanupCall(errors, "damage trigger", function() DestroyTrigger(oldDamage) end) end
-        if oldDeath then CleanupCall(errors, "death trigger", function() DestroyTrigger(oldDeath) end) end
-        if oldPickup then CleanupCall(errors, "bonus pickup trigger", function() DestroyTrigger(oldPickup) end) end
+        RunSession.DestroyTrigger(errors, "damage trigger", oldDamage)
+        RunSession.DestroyTrigger(errors, "death trigger", oldDeath)
+        RunSession.DestroyTrigger(errors, "bonus pickup trigger", oldPickup)
         local pendingItems = bonusItems
         bonusItems = {}
         timeStopUntil, timeStopBossUntil, purging = 0, 0, false
@@ -2884,7 +2877,7 @@ do
         bonusPickupTrigger = CreateTrigger()
         -- Only the hero collects bonus items, and the hero always belongs to the run owner.
         TriggerRegisterPlayerUnitEvent(bonusPickupTrigger, SurvivorConfig.Owner(), EVENT_PLAYER_UNIT_PICKUP_ITEM, nil)
-        TriggerAddAction(bonusPickupTrigger, RunAction(function()
+        TriggerAddAction(bonusPickupTrigger, RunSession.TriggerAction(function()
             if GetTriggerUnit() ~= hero or not Alive(hero) then return end
             local item = GetManipulatedItem()
             local record = bonusItems[item]
@@ -2894,7 +2887,7 @@ do
         end))
         damageTrigger = CreateTrigger()
         TriggerRegisterAnyUnitEventBJ(damageTrigger, EVENT_PLAYER_UNIT_DAMAGED)
-        TriggerAddAction(damageTrigger, RunAction(function()
+        TriggerAddAction(damageTrigger, RunSession.TriggerAction(function()
             local target, damage = GetTriggerUnit(), GetEventDamage()
             if damage <= 0 then return end
             local record = units[target]
@@ -2950,7 +2943,7 @@ do
         end))
         deathTrigger = CreateTrigger()
         TriggerRegisterAnyUnitEventBJ(deathTrigger, EVENT_PLAYER_UNIT_DEATH)
-        TriggerAddAction(deathTrigger, RunAction(function()
+        TriggerAddAction(deathTrigger, RunSession.TriggerAction(function()
             local dead = GetTriggerUnit()
             local record = units[dead]
             if not record or not record.alive then return end

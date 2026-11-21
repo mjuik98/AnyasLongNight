@@ -37,6 +37,19 @@ do
         RunSession.Attempt(errors, label .. " pause", function() PauseTimer(timer) end)
         RunSession.Attempt(errors, label .. " destroy", function() DestroyTimer(timer) end)
     end
+    -- Records a failure as "<label>: message"; a nil trigger is skipped.
+    function RunSession.DestroyTrigger(errors, label, trigger)
+        if trigger == nil then return end
+        RunSession.Attempt(errors, label, function() DestroyTrigger(trigger) end)
+    end
+    -- Wraps a trigger action. DebugUtils' Debug.try would only print its error;
+    -- unit and item events can fire inside hit or item loops, so teardown is deferred.
+    function RunSession.TriggerAction(action)
+        return function()
+            local ok, message = pcall(action)
+            if not ok then RunSession.RequestFail(message) end
+        end
+    end
 
     function RunSession.Finish(reason)
         if state == "FINISHED" or state == "READY" then return false end

@@ -191,6 +191,16 @@ RunSession = {GetElapsed=function() return now end,
         if not timer then return end
         RunSession.Attempt(errors,label.." pause",function() PauseTimer(timer) end)
         RunSession.Attempt(errors,label.." destroy",function() DestroyTimer(timer) end)
+    end,
+    DestroyTrigger=function(errors,label,trigger)
+        if trigger==nil then return end
+        RunSession.Attempt(errors,label,function() DestroyTrigger(trigger) end)
+    end,
+    TriggerAction=function(action)
+        return function()
+            local ok,message=pcall(action)
+            if not ok then RunSession.RequestFail(message) end
+        end
     end}
 function FlushRunSession()
     local message=pendingFailure
