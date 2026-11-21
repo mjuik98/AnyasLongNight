@@ -45,7 +45,7 @@ do
             BlzFrameSetEnable(frame, false); BlzFrameSetEnable(frame, true)
             if rendered[frame] then rendered[frame].enabled = nil end
             local state = RunSession.GetState()
-            if SharedModalVisible() then return end
+            if SharedModalVisible() or RunSession.IsPending() then return end
             if state ~= "RUNNING" and state ~= "INVENTORY" and state ~= "STAGE_CLEAR" then return end
             action()
             SurvivorLootUI.Refresh()
@@ -54,7 +54,7 @@ do
     end
     local function CanManage()
         local state = RunSession.GetState()
-        return not SharedModalVisible() and RunSession.IsInventoryOpen() and (state == "INVENTORY" or state == "STAGE_CLEAR")
+        return not SharedModalVisible() and not RunSession.IsPending() and RunSession.IsInventoryOpen() and (state == "INVENTORY" or state == "STAGE_CLEAR")
     end
     local function ShowsManage() return inventoryOpen and not nativeDetailsVisible and CanManage() end
     -- Resolve bag rows and page bounds from the shared bag, not the locally rendered list.
@@ -162,7 +162,8 @@ do
         if not manage or not expanded then return end
         Set(familyButton, "text", "보존: " .. SurvivorEquipment.CleanupFamilies()[familyIndex])
         if not bagList then
-            bagList, bagCount, bagCapacity = SurvivorEquipment.BagEntries()
+            -- Rendering can run in the local inventory observer; never observe shared bag state here.
+            bagList, bagCount, bagCapacity = SurvivorEquipment.ReadBagEntries()
             -- Preserve compatibility with other providers that return only the list.
             if bagCount == nil then bagCount, bagCapacity = SurvivorEquipment.BagCount() end
         end

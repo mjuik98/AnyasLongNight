@@ -178,6 +178,7 @@ end
 -- session callback consumes it; FlushRunSession() plays that callback.
 RunSession = {GetElapsed=function() return now end,
     IsRunning=function() return state=="RUNNING" and pendingFailure==nil end,
+    IsPending=function() return pendingFailure~=nil end,
     GetState=function() return state end, Fail=function(message) error(message) end,
     RequestFail=function(message) if pendingFailure==nil then pendingFailure=tostring(message) end end,
     IsInventoryOpen=function() return state=="INVENTORY" end,
@@ -775,7 +776,7 @@ SurvivorCombat.Cleanup()
 for _,entry in ipairs(beams)do assert(entry.cleaned and entry.lightning==nil)end
 `);
 
-suite('shadow escape blinks through walkable routes, protects once per stage and releases native invulnerability', mocks + String.raw`
+suite('shadow escape blinks through walkable routes, protects once per stage, releases native invulnerability and survives presentation failures', mocks + String.raw`
 PATHING_TYPE_WALKABILITY='walk'
 function IsTerrainPathable()return false end
 function BlzIsUnitInvulnerable(u)return u.invulnerable==true end
@@ -816,6 +817,20 @@ assert(Receive(hero,source,400)==400 and select(3,SurvivorCombat.EscapeStatus())
 SurvivorCombat.BeginStage(2,now);assert(SurvivorCombat.EscapeStatus())
 hero.life=100;assert(Receive(hero,nil,100)==0 and hero.invulnerable and SurvivorCombat.StageEscapeUses(2)==1)
 SurvivorCombat.BeginStage(3,now);assert(not hero.invulnerable and SurvivorCombat.EscapeStatus())
+-- The escape's cue and line are presentation inside the hit loop: a failure is
+-- reported once each but never defers a run teardown or undoes the escape.
+local say,cue,oldPrint,printed=SurvivorUI.Say,SurvivorUI.Cue,print,{}
+SurvivorUI.Say=function()error('injected speech failure')end
+SurvivorUI.Cue=function()error('injected cue failure')end
+print=function(message)printed[#printed+1]=tostring(message)end
+hero.life=100
+local dealt=Receive(hero,source,100)
+print,SurvivorUI.Say,SurvivorUI.Cue=oldPrint,say,cue
+assert(dealt==0 and hero.invulnerable and SurvivorCombat.StageEscapeUses(3)==1 and RunSession.IsRunning(),
+    'A presentation failure keeps the applied escape and the run')
+local log=table.concat(printed,'\n')
+assert(#printed==2 and log:find('injected speech failure') and log:find('injected cue failure'),
+    'Each presentation failure is reported')
 SurvivorCombat.Cleanup()
 
 hero,build,units=NewCombat('firebolt');hero.maxLife,hero.life=1000,100
@@ -3083,7 +3098,7 @@ function Mark(label)
     attempts[label]=(attempts[label]or 0)+1
     if failAt==label then error('injected '..label..' failure')end
 end
-SurvivorUI={HidePanel=function()Mark('panel')end,ShowResult=function(reason)Mark('result');shownReason=reason end}
+SurvivorUI={HidePanel=function()Mark('panel')end,ResetScreenEffects=function()Mark('effects')end,ShowResult=function(reason)Mark('result');shownReason=reason end}
 SurvivorStory={Cleanup=function()Mark('story')end,Reset=function()Mark('storyReset')end}
 SurvivorInventoryPause={Cleanup=function()Mark('inventory')end}
 SurvivorNativeLoadout={Cleanup=function()Mark('loadout')end}
@@ -3096,16 +3111,17 @@ messages={};print=function(message)messages[#messages+1]=tostring(message)end
 local finish=Local(AnyasLongNight.BeginRun,'Finish')
 SetLocal(finish,'RefreshDamageBoard',function()Mark('board')end)
 SetLocal(finish,'ResultDetails',function()Mark('details');return {}end)
-for _,label in ipairs({'expedition','board','details','report','panel','story','inventory','camera','loadout','equipment','combat','stage','result'})do
+for _,label in ipairs({'expedition','board','details','report','panel','effects','story','inventory','camera','loadout','equipment','combat','stage','result'})do
     attempts,resumes,shownReason,failAt,messages={},0,nil,label,{}
     SetLocal(finish,'hero',CreateUnit(0,'hero',0,0,0));SetLocal(finish,'build',{})
     local levelTrigger=CreateTrigger();SetLocal(finish,'levelTrigger',levelTrigger)
     assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,finish=finish}))
     assert(RunSession.BeginChoice() and halted)
     RunSession.Fail('original failure')
-    for _,cleanup in ipairs({'panel','story','inventory','camera','loadout','equipment','combat','stage','result'})do
+    for _,cleanup in ipairs({'panel','effects','story','inventory','camera','loadout','equipment','combat','stage','result'})do
         assert(attempts[cleanup]==1,'Earlier '..label..' failure skipped '..cleanup)
     end
+    assert(attempts.expedition==2,'Finish ends the expedition for its details and again in the shared teardown list')
     assert(levelTrigger.destroyed and Local(finish,'hero')==nil and Local(finish,'build')==nil)
     assert(RunSession.GetState()=='FINISHED' and periodic==nil and not halted and resumes==1)
     local log=table.concat(messages,'\n')
@@ -3116,7 +3132,7 @@ end
 -- A restart attempts the same subsystem list (plus per-run resets), then prints
 -- each cleanup failure without blocking the new run.
 local start=Local(AnyasLongNight.BeginRun,'Start')
-local restartSteps={'panel','storyReset','expeditionReset','inventory','camera','loadout','equipment','combat','stage'}
+local restartSteps={'panel','effects','storyReset','expeditionReset','inventory','camera','loadout','equipment','combat','stage'}
 for _,label in ipairs(restartSteps)do
     attempts,failAt,messages={},label,{}
     local levelTrigger=CreateTrigger();SetLocal(finish,'levelTrigger',levelTrigger)
@@ -3142,7 +3158,7 @@ function GetRectCenterX(rect)return (rect.minX+rect.maxX)/2 end
 function GetRectCenterY(rect)return (rect.minY+rect.maxY)/2 end
 function IsTerrainPathable()return false end
 function BlzSetHeroProperName()if failName then error('injected hero name failure')end end
-SurvivorUI={HidePanel=function()end,BeginRun=function()end,ShowResult=function(reason)resultReason=reason end}
+SurvivorUI={HidePanel=function()end,ResetScreenEffects=function()end,BeginRun=function()end,ShowResult=function(reason)resultReason=reason end}
 SurvivorStory={Reset=function()end,Cleanup=function()storyCleaned=true end}
 SurvivorInventoryPause={Cleanup=function()inventoryCleaned=true end}
 SurvivorNativeLoadout={Cleanup=function()loadoutCleaned=true end}
@@ -3170,7 +3186,7 @@ for _,trigger in ipairs(triggers)do assert(trigger.destroyed)end
 assert(AnyasLongNight.CanRetrySame() and resultReason=='error')
 `);
 
-suite('hero death defers run teardown to the next step and a post-start failure shows one detailed result', mocks + String.raw`
+suite('hero death defers run teardown to the next step, a post-start or startup-pause failure shows one detailed result and a pending teardown blocks stage actions', mocks + String.raw`
 OnInit={final=function()end}
 function GetLocalPlayer()return 0 end
 function ResetToGameCamera()end
@@ -3198,7 +3214,7 @@ function SetCameraPosition()end
 function SetCameraTargetController()end
 results={}
 local noop=function()end
-SurvivorUI={HidePanel=noop,BeginRun=noop,UpdateDamageBoard=noop,UpdateExpedition=noop,ShowStageIntro=noop,
+SurvivorUI={HidePanel=noop,ResetScreenEffects=noop,BeginRun=noop,UpdateDamageBoard=noop,UpdateExpedition=noop,ShowStageIntro=noop,
     Notify=noop,Alert=noop,Say=noop,Cue=noop,
     ShowResult=function(reason,_,_,_,_,_,details)results[#results+1]={reason=reason,details=details}end}
 SurvivorStory={Reset=noop,Cleanup=noop,JournalChapters=function()return {}end}
@@ -3245,6 +3261,30 @@ assert(AnyasLongNight.RetrySame() and RunSession.GetState()=='STAGE_CLEAR',
 assert(table.concat(messages,'\n'):find('injected ambience failure'),'The cleanup failure is still reported')
 SurvivorStage.Cleanup=function()end
 RunSession.Finish('test')
+-- A failed pause hook at startup returns normally after Fail already showed the
+-- error result (the shared mock's Fail raises instead, so only the real session shows this).
+local intros=0;SurvivorUI.ShowStageIntro=function()intros=intros+1 end
+SurvivorExpedition.SetPaused=function(paused)if paused and failPause then error('injected pause failure',0)end end
+results,failPause={},true
+AnyasLongNight.RetrySame()
+failPause=false
+assert(RunSession.GetState()=='FINISHED' and #results==1 and results[1].reason=='error' and intros==0,
+    'Start must not open the introduction over the error result of a run its pause hook finished')
+assert(Local(SurvivorCombat.Init,'hero')==nil and AnyasLongNight.CanRetrySame(),'The failed start leaves a retryable setup')
+-- A teardown requested while paused keeps the STAGE_CLEAR name until the watchdog
+-- consumes it; stage actions must not start a transition the teardown then discards.
+assert(AnyasLongNight.RetrySame() and RunSession.GetState()=='STAGE_CLEAR' and intros==1)
+SetLocal(AnyasLongNight.NextStage,'stageTransition',false)
+local applied=0;SurvivorStage.Apply=function()applied=applied+1 end
+RunSession.RequestFail('injected paused failure')
+assert(RunSession.GetState()=='STAGE_CLEAR' and RunSession.IsPending())
+assert(not AnyasLongNight.NextStage() and applied==0 and Local(AnyasLongNight.NextStage,'stage')==1,
+    'A pending teardown blocks the next stage')
+results={}
+TickTimers()
+assert(RunSession.GetState()=='FINISHED' and not RunSession.IsPending() and #results==1 and results[1].reason=='error',
+    'The paused watchdog still consumes the request')
+SurvivorStage.Apply=function()end
 `);
 
 suite('run-clock soul burst cooldown and the status-death guard reset across runs and after proc failures', mocks + String.raw`
@@ -4878,7 +4918,7 @@ end
 AnyasLongNight.IsStorySummary=function()return false end
 SurvivorEquipment={UIRevision=function()return 1 end,PendingRewardCount=function()return 0 end,
     PickupMode=function()return '전체'end,CleanupFamilies=function()return {'화염'}end,
-    BagEntries=function()return {},0,9 end,
+    BagEntries=function()return {},0,9 end,ReadBagEntries=function()return {},0,9 end,
     Get=function(id)return {id=id,icon='icon',description='gear'}end,
     Name=function(id)return id end,Summary=function()return 'summary','set'end}
 `, [config,augments,'src/30_gameplay/SurvivorStory.lua','src/30_gameplay/SurvivorUI.lua',
@@ -6445,6 +6485,10 @@ state='RUNNING';now=0
 SurvivorUI.Say('안야','전투 중 읽던 대사');SurvivorUI.UpdateSpeech()
 now=1;SurvivorUI.UpdateSpeech()
 local before=Local(SurvivorUI.UpdateSpeech,'speech').remaining
+-- The local native-panel observer only redraws: it never advances the shared reading clock.
+now=3;SurvivorUI.SetRestInventoryVisible(true);SurvivorUI.SetRestInventoryVisible(false);now=1
+assert(Local(SurvivorUI.UpdateSpeech,'speech').remaining==before and Local(SurvivorUI.UpdateSpeech,'speechClock')==1,
+    'Local panel visibility changes redraw speech without consuming reading time')
 SurvivorUI.Alert(2,'지원병 합류',70,'support')
 SurvivorUI.Alert(3,'통로 옆으로 회피',100,'pattern')
 SurvivorUI.UpdateSpeech()
@@ -6778,7 +6822,7 @@ local count=createCalls;SurvivorLootUI.Init();assert(createCalls==count,'Success
 
 suite('loot UI revisions skip unchanged bag rendering and preserve locks, rewards and native visibility', presentationMocks + String.raw`
 local revision,locked,pending,mode=1,false,1,'전체'
-bagReads,pendingReads,lootWrites,expeditionUpdates=0,0,0,0
+bagReads,observedReads,pendingReads,lootWrites,expeditionUpdates=0,0,0,0,0
 SurvivorUI={IsNarrativeVisible=function()return narrative==true end,UpdateExpedition=function()expeditionUpdates=expeditionUpdates+1 end}
 SurvivorEquipment={
     UIRevision=function()return revision end,
@@ -6786,7 +6830,9 @@ SurvivorEquipment={
     PickupMode=function()return mode end,
     CyclePickup=function()mode='끔';revision=revision+1 end,
     CleanupFamilies=function()return {'화염','번개','얼음','칼날','공용'}end,
-    BagEntries=function()bagReads=bagReads+1;return {{item='item',id='Hs15',locked=locked}},1,6 end,
+    -- BagEntries also observes shared bag state; local rendering must use ReadBagEntries.
+    BagEntries=function()bagReads,observedReads=bagReads+1,observedReads+1;return {{item='item',id='Hs15',locked=locked}},1,6 end,
+    ReadBagEntries=function()bagReads=bagReads+1;return {{item='item',id='Hs15',locked=locked}},1,6 end,
     BagCount=function()error('A shared bag snapshot already contains its count and capacity')end,
     Name=function()return '병사의 반지'end,
     ToggleLock=function(item)assert(item=='item');locked=not locked;revision=revision+1 end,
@@ -6803,9 +6849,10 @@ local reads,updates=pendingReads,expeditionUpdates;lootWrites=0
 for i=1,100 do SurvivorLootUI.SetInventoryVisible(true)end
 assert(lootWrites==0 and bagReads==1 and pendingReads==reads and expeditionUpdates==updates,
     'Unchanged native visibility and equipment revisions do not redraw or reread the bag')
+assert(observedReads==0,'Rendering (also run by the local inventory observer) never observes shared bag state')
 ClickFrame(frames.ScriptDialogButton821)
 -- The synchronized click resolves its row from the shared bag, then the render rereads once.
-assert(frames.ScriptDialogButton821.text:find('잠금') and bagReads==3,'Lock changes update the cached row')
+assert(frames.ScriptDialogButton821.text:find('잠금') and bagReads==3 and observedReads==1,'Lock changes update the cached row')
 ChangePending(2);SurvivorLootUI.Refresh();assert(frames.HSPendingRewards.text:find('2개') and bagReads==4)
 ClickFrame(frames.ScriptDialogButton810);assert(frames.ScriptDialogButton810.text=='줍기: 끔')
 narrative=true;SurvivorLootUI.Refresh();assert(not frames.HSLootRoot.visible)

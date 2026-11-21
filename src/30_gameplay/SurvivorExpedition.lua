@@ -82,7 +82,8 @@ do
         return SurvivorStage.FindPoint(angle, 1000, objective and objective.points or {})
     end
     local function Say(text)
-        SurvivorUI.Notify(text)
+        -- Presentation: also reached from kill callbacks inside weapon hit loops.
+        SurvivorConfig.Present("expedition notice", SurvivorUI.Notify, text)
     end
     -- The playing hero speaks its own line; chapter[heroId] overrides the Anya text.
     -- records[stage].reply keeps the Anya text because story scenes reuse it.
@@ -95,7 +96,7 @@ do
             text = chapter and chapter[key] or heroLines.anya[key]
             if index then text = text[index] end
         end
-        SurvivorUI.Say(profile.name, text)
+        SurvivorConfig.Present("expedition line", SurvivorUI.Say, profile.name, text)
     end
     local function Locate(point)
         local dx, dy = point.x - GetUnitX(hero), point.y - GetUnitY(hero)
@@ -185,7 +186,7 @@ do
         records[stage].finding, records[stage].reply = chapter.finding, chapter.reply
         local healthReward = combat.grantRecovery()
         rewardCallback("search")
-        SurvivorUI.Cue("clue")
+        SurvivorConfig.Present("clue cue", SurvivorUI.Cue, "clue")
         Say("|cff70e6cc수색 완료 · 리롤 보충|r\n" .. healthReward)
         Speak(chapter, "reply")
     end
@@ -254,7 +255,7 @@ do
             risk.state = "offered"
             Marker(risk, "위험 · " .. chapter.relic .. " (접근 후 수락)", 235, 130, 245)
             PingMinimapEx(risk.x, risk.y, 4, 235, 130, 245, false)
-            SurvivorUI.Say("수색 기록", chapter.temptation)
+            SurvivorConfig.Present("risk line", SurvivorUI.Say, "수색 기록", chapter.temptation)
         end
         if risk and risk.state == "offered" then
             if age >= riskCloses then risk.state = "closed"; RemoveMarker(risk) end

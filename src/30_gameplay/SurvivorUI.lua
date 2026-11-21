@@ -42,12 +42,11 @@ do
     local noticeHeightText, noticeHeightUrgent, noticeHeight
     local timeStopFilterTimer, timeStopFilterGeneration = nil, 0
     local timeStopFilterActive, timeStopFilterOwned, timeStopFilterAlpha = false, false, 0
-    -- Attempt both natives, then raise the first failure.
+    -- Attempt both natives through the shared helper, then raise every failure.
     local function StopTimer(timer)
-        if not timer then return end
-        local paused, pauseError = pcall(PauseTimer, timer)
-        local destroyed, destroyError = pcall(DestroyTimer, timer)
-        if not paused or not destroyed then error(tostring(pauseError or destroyError)) end
+        local errors = {}
+        RunSession.CancelTimer(errors, "UI timer", timer)
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function CancelTimeStopFilterFade()
         timeStopFilterGeneration = timeStopFilterGeneration + 1
@@ -686,14 +685,12 @@ do
         end
         damageBoardExpanded = expanded == true
     end
-    function SurvivorUI.UpdateSpeech()
-        HideNativeHUD()
-        if cinematicMode then ApplyCinematicFrames(cinematicMode)
-        elseif next(cinematicSaved) ~= nil then RestoreCinematicFrames() end
+    -- redrawOnly: called from the local native-panel observer, so it must not
+    -- advance the shared reading clock or queues; it only redraws them.
+    local function AdvanceSpeech()
         local elapsed = RunSession.GetElapsed()
         local dt = math.max(0, elapsed - speechClock)
         speechClock = elapsed
-        local active = CombatHUDVisible()
         -- Reading time and queues advance only from synchronized state; local native
         -- panel visibility decides only what is drawn (an open bag is a synced pause).
         if SpeechClockRunning() then
@@ -721,6 +718,13 @@ do
                 BlzFrameSetText(speechText, speech.text)
             end
         end
+    end
+    function SurvivorUI.UpdateSpeech(redrawOnly)
+        HideNativeHUD()
+        if cinematicMode then ApplyCinematicFrames(cinematicMode)
+        elseif next(cinematicSaved) ~= nil then RestoreCinematicFrames() end
+        if not redrawOnly then AdvanceSpeech() end
+        local active = CombatHUDVisible()
         local visible = active and speech ~= nil and not (notice and notice.urgent)
         local quiet = visible or (active and notice ~= nil and notice.urgent == true)
         speechVisible = visible
@@ -970,13 +974,21 @@ do
             RunSession.Fail(message)
         end
     end
-    function SurvivorUI.BeginRun()
-        -- Screen effects are local presentation; a failed reset is reported, not fatal to the run.
+    -- Stops the time-stop filter and hit vignette; both are attempted, then failures raised.
+    -- The run teardown list calls this so a fade never outlives its run over the result.
+    function SurvivorUI.ResetScreenEffects()
+        local failures = {}
         for _, reset in ipairs({{"time stop filter", function() SurvivorUI.SetTimeStopFilter(false, true) end},
             {"hit vignette", StopHitVignette}}) do
             local ok, message = pcall(reset[2])
-            if not ok then print("[AnyasLongNight cleanup] " .. reset[1] .. ": " .. tostring(message)) end
+            if not ok then failures[#failures + 1] = reset[1] .. ": " .. tostring(message) end
         end
+        if #failures > 0 then error(table.concat(failures, "\n"), 0) end
+    end
+    function SurvivorUI.BeginRun()
+        -- Screen effects are local presentation; a failed reset is reported, not fatal to the run.
+        local ok, message = pcall(SurvivorUI.ResetScreenEffects)
+        if not ok then print("[AnyasLongNight cleanup] " .. tostring(message)) end
         if not initialized then return end
         -- Reuse the one map-lifetime handle after a failed run; never duplicate it.
         if speechTimer == nil then speechTimer = CreateTimer(); speechTimerPaused = true end
@@ -1572,7 +1584,8 @@ do
         if preparationReady then RenderPreparationVisibility() end
         -- Hide local HUD immediately even while the synchronized pause is still in flight.
         if nativeInventoryVisible and essentialRoot then SetVisible(essentialRoot, false) end
-        if changed and initialized then SurvivorUI.UpdateSpeech() end
+        -- Local observer: redraw only; the speech queue advances on the synchronized timer.
+        if changed and initialized then SurvivorUI.UpdateSpeech(true) end
         if not restVisible then return end
         -- Only presentation follows local native panel visibility; the rest pause stays synchronized.
         SetVisible(resultBackdrop, not open)

@@ -88,7 +88,10 @@ do
                 -- Apply any last native gear transaction before resuming attacks.
                 SurvivorEquipment.Reconcile()
                 SurvivorNativeLoadout.Refresh() -- Apply the last native talent selection before resuming combat.
+                -- A failed pause/resume hook already finished the run.
                 RunSession.SetInventoryOpen(value == "1")
+                local state = RunSession.GetState()
+                if state == "READY" or state == "FINISHED" then return end
                 -- Shared loot-management state collapses on the synchronized close.
                 if SurvivorLootUI.SetInventoryOpen then SurvivorLootUI.SetInventoryOpen(value == "1") end
                 -- Interrupt on the synchronized open event even if the bag closes
