@@ -21,7 +21,7 @@ do
             "포위라… 계산이 틀렸군. 다시 길을 내지.", "물길로 빠진다. 아직 데려갈 자가 남았어."},
     }
     local difficulty = SurvivorConfig.difficulties.normal
-    local Slow, SetHit, ExpireEmber, ZoneLifetime, ApplyStatus, Throw, StatusDeath, Residue
+    local Slow, SetHit, ExpireEmber, ZoneLifetime, ApplyStatus, Throw, StatusDeath, Residue, PoisonShares, ConsumePoison
     local soulReady, inStatusProc = 0, false
     local stormHits, stormReady, bladeReady = 0, 0, 0
     local boss, bossDefeated = nil, false
@@ -749,16 +749,20 @@ do
                 local record = units[u]
                 if not record or not record.alive or not Enemy(u) or now >= (record.poisonUntil or 0) or record.poison <= 0 then
                     poisonUnits[u] = nil
-                    if record then record.poison = 0 end
+                    if record then record.poison, record.poisonBy = 0, nil end
                 elseif now >= record.poisonNext then due[#due + 1] = u end
             end
             for _, u in ipairs(due) do
                 local record = units[u]
                 if Enemy(u) and RunSession.IsRunning() then
                     record.poisonNext = record.poisonNext + config.poisonTick
-                    local status = stats.status and stats.status[record.poisonWeapon]
-                    local power = status and status.tickPower or stats.poisonDamage / config.poisonDamage
-                    Hit(u, record.poison * config.poisonDamage * power * config.poisonTick, record.poisonWeapon, true)
+                    -- Each weapon's stacks tick with that weapon's power and credit.
+                    for _, weapon in ipairs(PoisonShares(record)) do
+                        if not Enemy(u) or not RunSession.IsRunning() then break end
+                        local status = stats.status and stats.status[weapon]
+                        local power = status and status.tickPower or stats.poisonDamage / config.poisonDamage
+                        Hit(u, record.poisonBy[weapon] * config.poisonDamage * power * config.poisonTick, weapon, true)
+                    end
                 end
             end
         end
@@ -1006,6 +1010,35 @@ do
         ProcVisual(x, y, z, SurvivorConfig.chainHitModel, 0.6, weapon)
         Hit(target, damage * 0.6, weapon, "tag")
     end
+    -- record.poison is the total; record.poisonBy[weapon] holds each weapon's share.
+    -- Returns the weapons holding stacks in id order, so ticks are deterministic.
+    PoisonShares = function(record)
+        if record.poisonBy == nil then
+            record.poisonBy = {}
+            -- A record poisoned before shares existed belongs to its last applier.
+            if (record.poison or 0) > 0 and record.poisonWeapon then record.poisonBy[record.poisonWeapon] = record.poison end
+        end
+        local list = {}
+        for weapon, stacks in pairs(record.poisonBy) do
+            if stacks > 0 then list[#list + 1] = weapon end
+        end
+        table.sort(list)
+        return list
+    end
+    -- A reaction consumes every weapon's share in proportion; the remainder goes in id order.
+    ConsumePoison = function(record, consumed)
+        local list, total, left = PoisonShares(record), record.poison, consumed
+        local shares = record.poisonBy
+        for _, weapon in ipairs(list) do
+            local take = math.floor(shares[weapon] * consumed / total)
+            shares[weapon], left = shares[weapon] - take, left - take
+        end
+        for _, weapon in ipairs(list) do
+            if left <= 0 then break end
+            if shares[weapon] > 0 then shares[weapon], left = shares[weapon] - 1, left - 1 end
+        end
+        record.poison = total - consumed
+    end
     -- Putress statuses. Reaction consumes poison before this hit adds new stacks.
     -- scale < 1 (multicast) applies a reduced, never zero, number of stacks.
     ApplyStatus = function(target, weapon, status, scale)
@@ -1020,7 +1053,8 @@ do
         if (status.reaction or 0) > 0 and (record.poison or 0) > 0 and now < (record.poisonUntil or 0)
             and now >= (record.reactionReady or 0) then
             local consumed = status.reactionAll and record.poison or math.ceil(record.poison / 2)
-            record.poison, record.reactionReady = record.poison - consumed, now + config.reactionCooldown
+            ConsumePoison(record, consumed)
+            record.reactionReady = now + config.reactionCooldown
             local x, y, z = ImpactPoint(target)
             ProcVisual(x, y, z, SurvivorConfig.reactionModel, SurvivorConfig.reactionScale, weapon)
             Hit(target, consumed * config.reactionDamage * status.reaction * stats.poisonDamage / config.poisonDamage
@@ -1033,9 +1067,13 @@ do
         end
         local poison = Stacks(status.poison)
         if poison > 0 then
-            if now >= (record.poisonUntil or 0) then record.poison, record.poisonNext = 0, now + config.poisonTick end
-            record.poison = math.min(config.poisonMax + (stats.sets.apothecary and 4 or 0), record.poison + poison)
-            record.poisonUntil, record.poisonWeapon = now + config.poisonDuration * life, weapon
+            if now >= (record.poisonUntil or 0) then record.poison, record.poisonNext, record.poisonBy = 0, now + config.poisonTick, nil end
+            PoisonShares(record)
+            local total = math.min(config.poisonMax + (stats.sets.apothecary and 4 or 0), record.poison + poison)
+            -- Stacks above the cap are dropped; existing stacks keep their weapon.
+            record.poisonBy[weapon] = (record.poisonBy[weapon] or 0) + total - record.poison
+            -- poisonWeapon names only the last applier (the apothecary spread's credit).
+            record.poison, record.poisonUntil, record.poisonWeapon = total, now + config.poisonDuration * life, weapon
             poisonUnits[target] = true
         end
         local curse = Stacks(status.curse)

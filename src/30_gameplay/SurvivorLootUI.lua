@@ -34,7 +34,6 @@ do
     local function SharedModalVisible()
         return SurvivorUI.IsNarrativeVisible() or (SurvivorUI.IsChoiceVisible and SurvivorUI.IsChoiceVisible())
     end
-    local function ModalVisible() return nativeDetailsVisible or SharedModalVisible() end
     local function Button(parent, context, width, x, y, text, action)
         local frame = BlzCreateFrame("ScriptDialogButton", parent, 0, context)
         BlzFrameSetSize(frame, width, 0.026)
@@ -134,7 +133,14 @@ do
     function SurvivorLootUI.Refresh(observedRevision, localOnly)
         if not root then return end
         local state = RunSession.GetState()
-        local active = not ModalVisible() and (state == "RUNNING" or state == "INVENTORY" or state == "STAGE_CLEAR")
+        local sharedActive = not SharedModalVisible() and (state == "RUNNING" or state == "INVENTORY" or state == "STAGE_CLEAR")
+        local active = sharedActive and not nativeDetailsVisible
+        -- UIRevision observes native bag transactions and mutates shared metadata, so
+        -- decide it from synchronized state only, never from the local details panel.
+        local revision = observedRevision
+        if sharedActive and revision == nil and not localOnly and SurvivorEquipment.UIRevision then
+            revision = SurvivorEquipment.UIRevision()
+        end
         local manage = ShowsManage()
         local view = tostring(active) .. ":" .. tostring(manage) .. ":" .. tostring(expanded) .. ":" .. tostring(inventoryOpen)
         if expeditionView ~= view then
@@ -145,12 +151,8 @@ do
         Set(manageButton, "visible", manage)
         Set(panel, "visible", manage and expanded)
         if not active then return end
-        -- UIRevision still observes native bag transactions, even without item events.
-        local revision = observedRevision
-        if revision == nil and SurvivorEquipment.UIRevision then
-            -- A local caller without a synchronized revision redraws the last one it saw.
-            if localOnly then revision = lastRevision else revision = SurvivorEquipment.UIRevision() end
-        end
+        -- A local caller without a synchronized revision redraws the last one it saw.
+        if revision == nil and localOnly and SurvivorEquipment.UIRevision then revision = lastRevision end
         local changed = revision == nil or revision ~= lastRevision
         local pending = changed and SurvivorEquipment.PendingRewardCount() or lastPending or 0
         Set(pendingNotice, "visible", pending > 0)
