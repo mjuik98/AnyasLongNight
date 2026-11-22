@@ -2895,22 +2895,23 @@ do
             if record and record.bonus then
                 BlzSetEventDamage(RunSession.IsRunning() and record.alive and Alive(hero) and GetEventDamageSource() == hero and 1 or 0)
             elseif target == hero then
+                -- The damage source and the session clock stay fixed for the whole event.
+                local source, now = GetEventDamageSource(), RunSession.GetElapsed()
                 -- Post-mitigation damage event, before HP subtraction; catches native melee too.
-                if not RunSession.IsRunning() or RunSession.GetElapsed() < escapeUntil then BlzSetEventDamage(0); return end
-                if UnitTimeStopped(GetEventDamageSource()) then BlzSetEventDamage(0); return end
-                if SurvivorExpedition.RiskActive() and Enemy(GetEventDamageSource()) then damage = damage * 1.25 end
-                if stats.sets.bulwark and RunSession.GetElapsed() < tagState.meleeUntil then damage = damage * 0.85 end
-                if ward > 0 and RunSession.GetElapsed() < wardUntil then
+                if not RunSession.IsRunning() or now < escapeUntil then BlzSetEventDamage(0); return end
+                if UnitTimeStopped(source) then BlzSetEventDamage(0); return end
+                if SurvivorExpedition.RiskActive() and Enemy(source) then damage = damage * 1.25 end
+                if stats.sets.bulwark and now < tagState.meleeUntil then damage = damage * 0.85 end
+                if ward > 0 and now < wardUntil then
                     local absorbed = math.min(ward, damage)
                     ward, damage = ward - absorbed, damage - absorbed
                 end
-                local source = GetEventDamageSource()
                 local sourceName = source ~= hero and SurvivorConfig.UnitExists(source) and GetUnitName(source) or "환경"
-                local entry = {time = RunSession.GetElapsed(), damage = math.min(damage, GetWidgetLife(hero)),
+                local entry = {time = now, damage = math.min(damage, GetWidgetLife(hero)),
                     name = sourceName .. " / " .. (damageContext and damageContext.name or "일반 공격"),
                     hint = damageContext and damageContext.hint or "근접 적에게 포위되지 않도록 넓은 쪽으로 이동하세요."}
                 if escapeReady and damage >= GetWidgetLife(hero) - 0.405 then
-                    escapeReady, escapeUntil, escapeUses = false, RunSession.GetElapsed() + SurvivorConfig.escapeDuration, escapeUses + 1
+                    escapeReady, escapeUntil, escapeUses = false, now + SurvivorConfig.escapeDuration, escapeUses + 1
                     BlzSetEventDamage(0)
                     SetWidgetLife(hero, math.max(GetWidgetLife(hero), BlzGetUnitMaxHP(hero) * 0.30))
                     escapeOwnsInvulnerability = not BlzIsUnitInvulnerable(hero)

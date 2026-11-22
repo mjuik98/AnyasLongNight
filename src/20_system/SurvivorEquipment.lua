@@ -914,10 +914,11 @@ do
                 if Entry(item) then
                     tooltipDirty[item] = true
                     owned[item] = owned[item] or {expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime}
-                    if GetTriggerEventId() == EVENT_PLAYER_UNIT_DROP_ITEM then
+                    local kind = GetTriggerEventId()
+                    if kind == EVENT_PLAYER_UNIT_DROP_ITEM then
                         owned[item].noAuto, owned[item].restPickup, owned[item].reward = true, false, false
                         owned[item].pendingReward = false
-                    elseif GetTriggerEventId() == EVENT_PLAYER_UNIT_PICKUP_ITEM then
+                    elseif kind == EVENT_PLAYER_UNIT_PICKUP_ITEM then
                         owned[item].noAuto = false
                         Received(item, owned[item])
                     end

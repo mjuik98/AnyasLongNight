@@ -128,7 +128,13 @@ do
         SetCameraField(CAMERA_FIELD_FARZ, shot.distance + shot.clip, 0)
     end
     local function StopPreview()
-        if previewTimer then PauseTimer(previewTimer); DestroyTimer(previewTimer); previewTimer = nil end
+        if previewTimer then
+            -- A failed native still aborts here, keeping the timer and unit as before.
+            local errors = {}
+            RunSession.CancelTimer(errors, "preview timer", previewTimer)
+            if #errors > 0 then error(table.concat(errors, "\n"), 0) end
+            previewTimer = nil
+        end
         if previewUnit then
             -- Removal plays no death animation; hide first so nothing lingers when the shade lifts.
             ShowUnit(previewUnit, false)
