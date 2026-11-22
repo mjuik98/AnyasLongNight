@@ -602,10 +602,18 @@ do
                 if remaining > 0 then
                     SetText(preparationCountdown, "|cffffcc00수색 시작까지\n" .. remaining .. "|r")
                 else
-                    local callback = preparationReady
+                    local callback, check = preparationReady, preparationCheck
                     StopPreparation() -- Consume the callback before gameplay or a replacement screen.
                     DisplayDamageBoard(true)
-                    callback()
+                    if callback() == false and preparationReady == nil
+                        and RunSession.GetState() == "STAGE_CLEAR" and not RunSession.IsPending() then
+                        -- A refused start keeps the live panel; the player clicks again.
+                        preparationReady, preparationCheck = callback, check
+                        DisplayDamageBoard(false)
+                        RenderPreparationVisibility()
+                        SetText(preparationFooter, "|cffffcc00수색을 시작하지 못했습니다.|r\n‘수색 시작’을 다시 눌러 주세요.")
+                        return
+                    end
                     if SurvivorLootUI then SurvivorLootUI.Refresh() end
                 end
             end)

@@ -174,12 +174,21 @@ do
         if nextState == "RUNNING" then
             local ok, message = pcall(hooks.resume)
             if not ok then RunSession.Fail(message); return false end
-            if haltedBySession then haltedBySession = false; ALICE_Resume() end
+            if haltedBySession then
+                haltedBySession = false
+                local resumed, resumeError = pcall(ALICE_Resume)
+                if not resumed then RunSession.Fail(resumeError); return false end
+            end
         else
             -- Switching between two pause reasons never advances combat/time.
             local ok, message = pcall(hooks.pause, nextState)
             if not ok then RunSession.Fail(message); return false end
-            if not haltedBySession then haltedBySession = true; ALICE_Halt(false) end
+            -- Own the halt only after it succeeds, so Finish never resumes a cycle it did not stop.
+            if not haltedBySession then
+                local halted, haltError = pcall(ALICE_Halt, false)
+                if not halted then RunSession.Fail(haltError); return false end
+                haltedBySession = true
+            end
         end
         return true
     end

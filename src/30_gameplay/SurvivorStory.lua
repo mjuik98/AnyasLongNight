@@ -74,7 +74,7 @@ do
         local ownErrors = errors == nil
         errors = errors or {}
         RunSession.CancelTimer(errors, "story camera timer", timer)
-        if ownErrors and #errors > 0 then error(table.concat(errors, "\n")) end
+        if ownErrors and #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function GuardCamera(x, y, duration)
         StopCameraTransition()
@@ -223,7 +223,7 @@ do
                 end
             end)
         end
-        if #errors > 0 then error(table.concat(errors, "\n")) end
+        if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function BeginScene(hero)
         SurvivorStory.Cleanup()
@@ -358,7 +358,7 @@ do
         errors = errors or {}
         RunSession.CancelTimer(errors, "story motion timer", previous.timer)
         if snap then Attempt(errors, "story final pose", previous.finish) end
-        if ownErrors and #errors > 0 then error(table.concat(errors, "\n")) end
+        if ownErrors and #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     local function Choreograph(targets, duration, instant, cue, after)
         StopMotion(true)
@@ -412,7 +412,7 @@ do
                     local errors = {}
                     RunSession.CancelTimer(errors, "story motion timer", timer)
                     Finish()
-                    if #errors > 0 then error(table.concat(errors, "\n")) end
+                    if #errors > 0 then error(table.concat(errors, "\n"), 0) end
                 end
             end)
             if not ok then SceneTimerError(message) end
@@ -420,7 +420,7 @@ do
     end
     local function CreateScene(action)
         local ok, message = pcall(action)
-        if not ok then error(SceneError(message)) end
+        if not ok then error(SceneError(message), 0) end
     end
     local function Page(speaker, text) return {speaker = speaker, text = text} end
     local function RememberPages(pages)
@@ -439,7 +439,7 @@ do
                 SelectSpeaker(shown[page].speaker)
                 if onPage then onPage(concise and #pages or page, concise) end
             end)
-            if not ok then error(SceneError(message)) end
+            if not ok then error(SceneError(message), 0) end
         end
         local ok, message = pcall(function()
             BeginPortraits(hero or hiddenHero, not concise)
@@ -453,7 +453,7 @@ do
                 if sceneGeneration == generation then SurvivorStory.Cleanup() end
             end, finishLabel)
         end)
-        if not ok then error(SceneError(message)) end
+        if not ok then error(SceneError(message), 0) end
     end
     function SurvivorStory.ShowBriefing(hero, onComplete)
         if type(hero) == "function" and onComplete == nil then onComplete, hero = hero, nil end

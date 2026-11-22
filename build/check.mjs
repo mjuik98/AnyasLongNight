@@ -1741,7 +1741,7 @@ hit(target,10,'plaguedart',false,false,1,{curse=5})
 assert(units[target].curse==cfg.curseMax,'Curse stacks cap')
 hits={};hit(target,10,'plaguedart',false,false,1,{})
 assert(math.abs(hits[1].damage-10*(1+cfg.curseAmp*cfg.curseMax))<1e-9,'Cursed enemies take amplified damage')
-units[target].poison=8;hits={}
+units[target].poison,units[target].poisonBy=8,{plaguedart=8};hits={}
 hit(target,10,'plaguedart',false,false,1,{reaction=1})
 local amp=1+cfg.curseAmp*cfg.curseMax
 assert(units[target].poison==4 and #hits==2,'Reaction consumes half of the poison')
@@ -1755,6 +1755,27 @@ hit(target,10,'plaguedart',false,false,.5,{poison=1});assert(units[target].poiso
 hit(target,10,'plaguedart',true,false,1,{poison=4});assert(units[target].poison==3,'Set procs and ticks never add status')
 now=now+60;SurvivorCombat.UpdateWeapons(.02)
 assert(units[target].poison==0 and next(Local(SurvivorCombat.UpdateWeapons,'poisonUnits'))==nil,'Expired poison stops ticking')
+-- Two poison weapons on one enemy: each share ticks with its own power and credit,
+-- and a reaction consumes both shares in proportion.
+local shared=EnemyAt(units,200,0,false);shared.life=100000
+local dartPower=build.stats.status.plaguedart.tickPower
+build.stats.status.plaguejar={tickPower=dartPower*2}
+SurvivorCombat.TrackWeapons({'plaguejar'})
+hit(shared,10,'plaguedart',false,false,1,{poison=6})
+hit(shared,10,'plaguejar',false,false,1,{poison=2})
+assert(units[shared].poison==8 and units[shared].poisonBy.plaguedart==6 and units[shared].poisonBy.plaguejar==2,
+    'A later weapon adds its own share instead of taking every stack')
+local function Dealt(id)return SurvivorCombat.DamageRows({id})[1].damage end
+local dart,jar=Dealt('plaguedart'),Dealt('plaguejar')
+hits={};now=now+cfg.poisonTick;SurvivorCombat.UpdateWeapons(.02)
+local unit=cfg.poisonDamage*cfg.poisonTick
+assert(#hits==2 and math.abs(hits[1].damage-6*unit*dartPower)<1e-6 and math.abs(hits[2].damage-2*unit*dartPower*2)<1e-6,
+    'Each share ticks at its own weapon power, in weapon-id order')
+assert(math.abs(Dealt('plaguedart')-dart-6*unit*dartPower)<1e-6 and math.abs(Dealt('plaguejar')-jar-4*unit*dartPower)<1e-6,
+    'Each share credits its own weapon')
+now=now+cfg.reactionCooldown;hit(shared,10,'plaguedart',false,false,1,{reaction=1})
+assert(units[shared].poison==4 and units[shared].poisonBy.plaguedart==3 and units[shared].poisonBy.plaguejar==1,
+    'A reaction consumes every share in proportion')
 SurvivorCombat.Cleanup()
 assert(next(Local(SurvivorCombat.UpdateWeapons,'poisonUnits'))==nil)
 `);
@@ -2648,7 +2669,13 @@ for stage=1,5 do
     if stage<5 then
         assert(rewards==1 and restCalls==1 and inventoryStops==0 and not finished)
         RunSession.Finish("test")
-    else assert(finished and restCalls==0 and inventoryStops==1) end
+    else
+        -- The ending's click continues after its callback, so the finish is requested
+        -- and the paused-state watchdog consumes it.
+        assert(not finished and RunSession.IsPending(),'The ending requests its finish')
+        for i=1,20 do TickTimers() end
+        assert(finished and restCalls==0 and inventoryStops==1)
+    end
     SurvivorCombat.Cleanup()
 end
 -- An observer teardown failure at the final clear must not turn the victory into an error,
@@ -2667,7 +2694,9 @@ periodic();assert(RunSession.SetInventoryOpen(true) and RunSession.IsInventoryOp
 for i=1,20 do TickTimers() end
 assert(storyStage==5 and inventoryStops==1 and reason==nil,'The ending still starts after an observer failure')
 assert(not RunSession.IsInventoryOpen() and RunSession.GetState()=="STAGE_CLEAR")
-story();assert(reason=="boss_defeated")
+story();assert(reason==nil and RunSession.IsPending())
+for i=1,20 do TickTimers() end
+assert(reason=="boss_defeated")
 SurvivorCombat.Cleanup()
 `);
 
@@ -6921,6 +6950,14 @@ SurvivorEquipment.ToggleLock=toggleLock
 ClickFrame(frames.ScriptDialogButton811);assert(SurvivorLootUI.IsExpanded())
 SurvivorLootUI.SetInventoryVisible(false)
 assert(not SurvivorLootUI.IsExpanded() and not frames.ScriptDialogButton811.visible and not frames.QuestButtonBaseTemplate812.visible)
+-- A synchronized refresh observes shared bag state on every client, even where the
+-- local details panel hides the loot UI; the local observer never observes.
+local uiObservations,uiRevision=0,SurvivorEquipment.UIRevision
+SurvivorEquipment.UIRevision=function()uiObservations=uiObservations+1;return uiRevision()end
+SurvivorLootUI.SetInventoryVisible(false,nil,true);assert(uiObservations==0)
+SurvivorLootUI.Refresh();assert(uiObservations==1 and not frames.HSLootRoot.visible,
+    'The local details panel cannot skip a synchronized observation')
+SurvivorEquipment.UIRevision=uiRevision
 SurvivorLootUI.Reset();assert(not frames.HSLootRoot.visible)
 `);
 
@@ -6957,6 +6994,7 @@ localPlayer,observations,localRenders=12,0,0
 function GetLocalPlayer()return localPlayer end
 function BlzTriggerRegisterPlayerSyncEvent()end
 function BlzSendSyncData()return true end
+function BlzGetTriggerSyncData()return syncData end
 freezes,collections=0,0
 SurvivorCombat={MaintainInventoryPause=function()freezes=freezes+1 end,IsClearing=function()return false end}
 SurvivorNativeLoadout={Refresh=function()end}
@@ -6976,6 +7014,10 @@ TickTimers();assert(observations==3 and localRenders==2,'Each local timer tick o
 state='STAGE_CLEAR';TickTimers();assert(collections==1 and freezes==1)
 RunSession.RequestFail('injected pending teardown');TickTimers()
 assert(collections==1 and freezes==2,'A pending teardown stops item transactions but keeps the paused vitals frozen')
+-- The synchronized open/close event follows the same rule as the timer.
+syncData=Local(SurvivorInventoryPause.Init,'generation')..':1:0'
+Local(SurvivorInventoryPause.Cleanup,'syncTrigger').action()
+assert(collections==1,'A pending teardown stops the sync event from reconciling gear or granting talents')
 pendingFailure=nil;SurvivorInventoryPause.Cleanup()
 `);
 
@@ -7536,6 +7578,15 @@ local fifth=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
 SurvivorUI.ShowStageIntro(2,Ready);fifth.callback()
 assert(fifth.destroyed and not SurvivorUI.IsCombatPreparationVisible()and frames.AnyasLongNightStageIntro.visible)
 SurvivorUI.HidePanel();assert(#unsafeFrameCalls==0 and completed==10)
+-- A start refused by the gameplay callback keeps the panel and its callback for another click.
+local refusals=0
+SurvivorUI.ShowCombatPreparation(5,function()refusals=refusals+1;return refusals>1 end,CanStart)
+ClickFrame(start);AdvanceVisualTime(3)
+assert(refusals==1 and SurvivorUI.IsCombatPreparationVisible()and root.visible and start.visible and not countdown.visible
+    and LiveTimers(1)==0,'A refused start returns to the live preparation panel')
+ClickFrame(start);AdvanceVisualTime(3)
+assert(refusals==2 and not SurvivorUI.IsCombatPreparationVisible(),'The next click starts normally')
+SurvivorUI.HidePanel()
 `);
 
 suite('combat preparation errors detach callbacks and cleanup proceeds after timer native failures', presentationMocks,

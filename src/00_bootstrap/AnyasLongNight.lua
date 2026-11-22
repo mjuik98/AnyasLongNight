@@ -88,8 +88,10 @@ do
         Attempt(errors, "camera", function()
             if SurvivorConfig.IsLocalPlayer() then ResetToGameCamera(0) end
         end)
-        Attempt(errors, "native loadout", SurvivorNativeLoadout.Cleanup)
+        -- Equipment first: its item trigger is gone before the loadout removes carried
+        -- items, whose immediate drop events would otherwise reach a live listener.
         Attempt(errors, "equipment", SurvivorEquipment.Cleanup)
+        Attempt(errors, "native loadout", SurvivorNativeLoadout.Cleanup)
         Attempt(errors, "combat", SurvivorCombat.Cleanup)
         Attempt(errors, "stage", SurvivorStage.Cleanup)
     end
@@ -261,8 +263,8 @@ do
             rerollsRemaining = math.min(SurvivorConfig.rerollCapacity, rerollsRemaining + 1)
         elseif kind == "risk" then
             eventOffers = SurvivorEquipment.RollRiskReward()
-            -- Step runs only while RUNNING, so a refusal means a failed pause hook
-            -- already reported and finished the run.
+            -- A refusal means a failed pause hook already finished the run, or a kill in
+            -- this step requested teardown; either way the risk reward is dropped.
             if not RunSession.BeginChoice() then eventOffers = nil; return end
             SurvivorUI.ShowGearRewards(eventOffers, stage, ChooseEventGear, "봉인 경보 해제 · " .. (stage <= 2 and "희귀 이상" or "영웅 등급") .. " 장비 하나 선택")
         end
@@ -295,8 +297,10 @@ do
                         Attempt(errors, "inventory observer", SurvivorInventoryPause.Cleanup)
                         Attempt(errors, "inventory pause", function() RunSession.SetInventoryOpen(false) end)
                         for _, message in ipairs(errors) do print("[AnyasLongNight cleanup] " .. message) end
+                        -- The ending's last click keeps running after this callback (loot UI,
+                        -- reveal fade), so request the finish; the paused-state watchdog owns it.
                         SurvivorStory.ShowEnding(hero, function()
-                            if SameClear() then RunSession.Finish("boss_defeated") end
+                            if SameClear() then RunSession.RequestFinish("boss_defeated") end
                         end)
                     else
                         rerollsRemaining = math.min(SurvivorConfig.rerollCapacity, rerollsRemaining + SurvivorConfig.rerollsPerStage)
@@ -386,6 +390,8 @@ do
         if hudClock >= 0.1 then
             hudClock = 0
             SurvivorEquipment.Step(elapsed)
+            -- A pickup in that loop may have requested teardown; grant no talent item then.
+            if not RunSession.IsRunning() then return end
             SurvivorNativeLoadout.Refresh()
         end
     end

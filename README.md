@@ -257,7 +257,7 @@ release/development 빌드의 기본 입력은 정식 테스트 맵입니다. �
 6. 네이티브 String/Texture에 일반 프레임용 가시성 API를 적용하지 않습니다. 인벤토리 덮개·월드 렌더링 프레임과 선택 유닛별 세부 패널을 수동 가시성 복원 대상으로 추가하지 않습니다. 검정 배경의 실제 import 경로는 `AnyasLongNightUI\Black.tga`입니다.
 7. 장면 종료 시 선택 영웅 표시/선택 → 초상화 유닛 제거 → 카메라 복원 → 기본 UI 복원 순서를 유지합니다. 중복·지연 close 콜백이 새 장면을 정리하지 않도록 세대 번호를 확인합니다. Lua `pcall`은 엔진 메모리 오류를 복구하지 못합니다.
 8. 정적 검사·네이티브 모의 실행과 실제 Warcraft III/World Editor 검증을 구분합니다.
-9. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
+9. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
 
 AI 에이전트용 추가 지침은 [CLAUDE.md](CLAUDE.md)에 있습니다.
 

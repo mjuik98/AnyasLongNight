@@ -87,6 +87,8 @@ do
             if run ~= runGeneration or not sequence or sequence <= receivedSequence then return end
             receivedSequence = sequence
             local ok, message = pcall(function()
+                -- A pending teardown owns the doomed run, as in Tick: grant or reconcile nothing.
+                if RunSession.IsPending() then return end
                 -- Apply any last native gear transaction before resuming attacks.
                 SurvivorEquipment.Reconcile()
                 SurvivorNativeLoadout.Refresh() -- Apply the last native talent selection before resuming combat.
