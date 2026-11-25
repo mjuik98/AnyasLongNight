@@ -1,13 +1,17 @@
 -- Map-lifetime frames using stock Blizzard templates and background textures.
+-- Screen effects (SurvivorScreenEffects), native HUD visibility (SurvivorNativeHUD),
+-- the damage multiboard (SurvivorDamageBoard) and subtitles/notices (SurvivorSpeech)
+-- live in their own modules.
 SurvivorUI = {}
 do
+    local Board, NativeHUD, Speech = SurvivorDamageBoard, SurvivorNativeHUD, SurvivorSpeech
     local initialized, choosing = false, false
     local panel, shade, heading, note, restartButton, resultBackdrop
     local cards, triggers = {}, {}
     local chooseCallback, restartCallback, rerollCallback
     local parentName, resultHeading, resultNote, nextCallback
     local resultSummaryInfo, resultSummaryDamage, resultSummaryRest
-    local restVisible, damageBoard = false, nil
+    local restVisible = false
     local nativeInventoryVisible = false
     local rerollCounter, rerollPips = nil, {}
     local excludeCallback
@@ -17,17 +21,9 @@ do
     local expeditionRoot, expeditionText
     local actionFeedback, actionTooltip, actionTooltipText = {}, nil, nil
     local ResetActionFeedback
-    local speechRoot, speechName, speechText, noticeRoot, noticeText
-    local speechQueue, speech, notice, speechClock, speechVisible = {}, nil, nil, 0, false
-    local deferredNotice
-    local alerts, alertSerial = {}, 0
     local essentialRoot, bossName, bossTrack, bossFill, riskAccept
     local wardText, wardTextCache, essentialLayout
     local bossSnapshot
-    local nativeHiddenFrames = {}
-    local cinematicFrames, cinematicSaved, cinematicAncestors = {}, {}, {}
-    local cinematicMode
-    local damageBoardOriginalMinimized, damageBoardQuiet = nil, false
     local retrySame, journalPrevious, journalNext, chapterPrevious, chapterNext, journalPosition
     local conversation, conversationIndex, conversationAction, conversationTitle, sceneSkip, conversationClose
     local conversationFinishLabel
@@ -37,76 +33,16 @@ do
     local preparationGeneration = 0
     local speechTimer, speechTimerPaused
     local frameCache = {}
-    local damageCells, damageValues, damageRowCount, damageBuild, damageTitle = {}, {}, nil, nil, nil
-    local damageBoardVisible, damageBoardExpanded = nil, false
-    local noticeHeightText, noticeHeightUrgent, noticeHeight
-    local timeStopFilterTimer, timeStopFilterGeneration = nil, 0
-    local timeStopFilterActive, timeStopFilterOwned, timeStopFilterAlpha = false, false, 0
     -- Attempt both natives through the shared helper, then raise every failure.
     local function StopTimer(timer)
         local errors = {}
         RunSession.CancelTimer(errors, "UI timer", timer)
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
-    local function CancelTimeStopFilterFade()
-        timeStopFilterGeneration = timeStopFilterGeneration + 1
-        local timer = timeStopFilterTimer
-        timeStopFilterTimer = nil
-        StopTimer(timer)
-    end
-    -- Cine filters tint the world render, without recoloring UI frames or consuming input.
-    function SurvivorUI.SetTimeStopFilter(active, immediate)
-        if not immediate and active == timeStopFilterActive then return end
-        CancelTimeStopFilterFade()
-        timeStopFilterActive = active
-        if not active and not timeStopFilterOwned then return end
-        local config = SurvivorConfig.bonusProps.timeStopFilter
-        local target = active and config.alpha or 0
-        if active then timeStopFilterOwned = true end
-        local function Paint(alpha)
-            timeStopFilterAlpha = alpha
-            if SurvivorConfig.IsLocalPlayer() then
-                local color, opacity = config.color, math.floor(alpha + 0.5)
-                SetCineFilterDuration(0)
-                SetCineFilterStartColor(color[1], color[2], color[3], opacity)
-                SetCineFilterEndColor(color[1], color[2], color[3], opacity)
-                DisplayCineFilter(opacity > 0)
-            end
-        end
-        if SurvivorConfig.IsLocalPlayer() then
-            SetCineFilterTexture(config.texture)
-            SetCineFilterBlendMode(BLEND_MODE_BLEND)
-            SetCineFilterTexMapFlags(TEXMAP_FLAG_NONE)
-            SetCineFilterStartUV(0, 0, 1, 1)
-            SetCineFilterEndUV(0, 0, 1, 1)
-        end
-        if immediate or timeStopFilterAlpha == target then
-            Paint(target)
-            timeStopFilterOwned = active
-            return
-        end
-        local start, elapsed = timeStopFilterAlpha, 0
-        local duration = active and config.fadeIn or config.fadeOut
-        local timer, generation = CreateTimer(), timeStopFilterGeneration
-        timeStopFilterTimer = timer
-        TimerStart(timer, 0.02, true, function()
-            if generation ~= timeStopFilterGeneration then return end
-            -- Debug.try would only print here, every tick; stop the fade and report once.
-            local ok, message = pcall(function()
-                elapsed = elapsed + 0.02
-                local fraction = math.min(1, (elapsed + 0.000001) / duration)
-                Paint(start + (target - start) * fraction)
-                if fraction == 1 then
-                    timeStopFilterOwned = active
-                    CancelTimeStopFilterFade()
-                end
-            end)
-            if not ok then
-                pcall(CancelTimeStopFilterFade)
-                RunSession.RequestFail(message)
-            end
-        end)
-    end
+    SurvivorUI.SetTimeStopFilter = SurvivorScreenEffects.SetTimeStopFilter
+    SurvivorUI.HitFlash = SurvivorScreenEffects.HitFlash
+    SurvivorUI.ResetScreenEffects = SurvivorScreenEffects.Reset
+    SurvivorUI.Say, SurvivorUI.Notify, SurvivorUI.Alert = Speech.Say, Speech.Notify, Speech.Alert
     local function FrameState(frame)
         local state = frameCache[frame]
         if not state then state = {}; frameCache[frame] = state end
@@ -115,53 +51,6 @@ do
     local function SetVisible(frame, visible)
         local state = FrameState(frame)
         if state.visible ~= visible then BlzFrameSetVisible(frame, visible); state.visible = visible end
-    end
-    -- A UI frame, not a cine filter: the world filter belongs to time stop.
-    local hitVignette, hitTimer, hitTimerRunning = nil, nil, false
-    local hitAlpha, hitPeak, hitHold, hitRate = 0, 0, 0, 0
-    local function PaintHitVignette(alpha)
-        hitAlpha = alpha
-        if not hitVignette or not SurvivorConfig.IsLocalPlayer() then return end
-        local opacity = math.floor(alpha + 0.5)
-        if opacity > 0 then
-            -- Stretch to the local screen so the red edges sit on its real borders.
-            local width = BlzGetLocalClientWidth and BlzGetLocalClientWidth() or 0
-            local height = BlzGetLocalClientHeight and BlzGetLocalClientHeight() or 0
-            local aspect = width > 0 and height > 0 and width / height or 4 / 3
-            BlzFrameSetSize(hitVignette, 0.6 * aspect, 0.6)
-            BlzFrameSetAlpha(hitVignette, opacity)
-        end
-        BlzFrameSetVisible(hitVignette, opacity > 0)
-    end
-    local function StopHitVignette()
-        local running = hitTimerRunning
-        hitTimerRunning, hitPeak, hitHold, hitRate = false, 0, 0, 0
-        if hitTimer and running then PauseTimer(hitTimer) end
-        PaintHitVignette(0)
-    end
-    function SurvivorUI.HitFlash(fraction)
-        if not hitVignette then return end
-        local c = SurvivorConfig.hitVignette
-        local target = c.minAlpha + (c.maxAlpha - c.minAlpha) * math.max(0, math.min(1, fraction / c.fullFraction))
-        if target <= hitAlpha or (hitHold > 0 and target <= hitPeak) then return end
-        hitPeak, hitHold, hitRate = target, c.cooldown, target / c.fade
-        PaintHitVignette(target)
-        if hitTimerRunning then return end
-        hitTimer = hitTimer or CreateTimer()
-        hitTimerRunning = true
-        TimerStart(hitTimer, 0.02, true, function()
-            -- Debug.try would only print here, every tick; stop the fade and report once.
-            local ok, message = pcall(function()
-                hitHold = math.max(0, hitHold - 0.02)
-                if hitAlpha > 0 then PaintHitVignette(math.max(0, hitAlpha - hitRate * 0.02)) end
-                if hitAlpha == 0 and hitHold == 0 then StopHitVignette() end
-            end)
-            if not ok then
-                hitAlpha = 0
-                pcall(StopHitVignette)
-                RunSession.RequestFail(message)
-            end
-        end)
     end
     local function SetText(frame, text)
         local state = FrameState(frame)
@@ -180,54 +69,10 @@ do
             BlzFrameSetAbsPoint(frame, point, x, y); state.point, state.x, state.y = point, x, y
         end
     end
-    local function RestoreDamageBoardMinimize()
-        local original = damageBoardOriginalMinimized
-        damageBoardOriginalMinimized, damageBoardQuiet = nil, false
-        if original == false and damageBoard and SurvivorConfig.IsLocalPlayer()
-            and IsMultiboardMinimized(damageBoard) then
-            MultiboardMinimize(damageBoard, false)
-        end
-    end
     function SurvivorUI.ClearSpeech()
-        RestoreDamageBoardMinimize()
-        speechQueue, speech, notice, deferredNotice = {}, nil, nil, nil
-        alerts = {}
-        speechClock = RunSession.GetElapsed()
-        if speechRoot then SetVisible(speechRoot, false) end
-        if noticeRoot then SetVisible(noticeRoot, false) end
+        Board.RestoreMinimize()
+        Speech.Clear()
         if expeditionRoot then SetVisible(expeditionRoot, false); SetVisible(expeditionText, false) end
-    end
-    function SurvivorUI.Say(speaker, text)
-        if SurvivorStory then SurvivorStory.Remember(speaker, text) end
-        -- Bound transient notifications; every line remains in the search journal.
-        if #speechQueue >= 6 then table.remove(speechQueue, 1) end
-        speechQueue[#speechQueue + 1] = {speaker = speaker, text = text, remaining = 7}
-    end
-    function SurvivorUI.Notify(text)
-        local entry = {text = text, remaining = 7}
-        if notice and notice.urgent then deferredNotice = entry; return end
-        notice = entry
-        if noticeText then SetText(noticeText, text) end
-    end
-    local function RenderAlerts()
-        if #alerts == 0 then return end
-        table.sort(alerts, function(a, b)
-            return a.priority > b.priority or (a.priority == b.priority and a.serial > b.serial)
-        end)
-        local lines = {}
-        for i = 1, math.min(2, #alerts) do lines[i] = alerts[i].text end
-        notice = {text = table.concat(lines, "\n"), urgent = true}
-        if noticeText then SetText(noticeText, "|cffffb070" .. notice.text .. "|r") end
-    end
-    function SurvivorUI.Alert(seconds, text, priority, key)
-        if notice and not notice.urgent then deferredNotice = notice end
-        key = key or text
-        for i = #alerts, 1, -1 do if alerts[i].key == key then table.remove(alerts, i) end end
-        alertSerial = alertSerial + 1
-        alerts[#alerts + 1] = {text = text, priority = priority or 60, key = key,
-            expires = RunSession.GetElapsed() + seconds, serial = alertSerial}
-        RenderAlerts()
-        while #alerts > 8 do table.remove(alerts) end
     end
     function SurvivorUI.Cue(kind)
         -- Borrow initialized Blizzard GUI sounds; do not create per-hit sound handles.
@@ -237,126 +82,26 @@ do
     end
     local journalPages, journalIndex, currentResultPage = {}, 1, 1
     local journalChapters, journalChapter = {}, 1
-    local function WrappedLines(text)
-        -- Estimate stock-font wrapping without counting Warcraft color escapes.
-        -- Korean glyphs need more room than Latin letters; explicit breaks still count.
-        text = (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|n", "\n")
-        local lines = 0
-        for line in (text .. "\n"):gmatch("([^\n]*)\n") do
-            local width = 0
-            for i = 1, #line do
-                local byte = line:byte(i)
-                if byte < 128 then width = width + 0.55
-                elseif byte >= 192 then width = width + 1 end -- Count UTF-8 leading bytes only.
-            end
-            lines = lines + math.max(1, math.ceil(width / 29))
-        end
-        return math.max(1, lines)
-    end
-    local function NoticeHeight()
-        local text, urgent = notice and notice.text or "", notice and notice.urgent or false
-        if noticeHeightText ~= text or noticeHeightUrgent ~= urgent then
-            noticeHeightText, noticeHeightUrgent = text, urgent
-            noticeHeight = math.max(0.042, math.min(urgent and 0.132 or 0.094,
-                0.028 + WrappedLines(text) * 0.0125))
-        end
-        return noticeHeight
-    end
     local ValidNativeFrame = SurvivorConfig.ValidFrame
-    local function CacheHiddenNativeFrame(frame)
-        if ValidNativeFrame(frame) then nativeHiddenFrames[#nativeHiddenFrames + 1] = frame end
-    end
-    local function NativeChild(frame, index)
-        if not BlzFrameGetChild or not BlzFrameGetChildrenCount or not ValidNativeFrame(frame) then return nil end
-        if BlzFrameGetChildrenCount(frame) <= index then return nil end
-        local child = BlzFrameGetChild(frame, index)
-        return ValidNativeFrame(child) and child or nil
-    end
-    local function HideNativeHUD()
-        if not SurvivorConfig.IsLocalPlayer() then return end
-        for _, frame in ipairs(nativeHiddenFrames) do
-            if ValidNativeFrame(frame) and BlzFrameIsVisible(frame) then BlzFrameSetVisible(frame, false) end
-        end
-    end
-    local function CacheCinematicFrame(name, context, introOnly, origin, index)
-        cinematicFrames[#cinematicFrames + 1] = {name = name, context = context or 0,
-            introOnly = introOnly == true, origin = origin, index = index or 0}
-    end
-    local function AcquireCinematicFrames()
-        -- Lookups can allocate handles: acquire on every client, before local visibility.
-        for _, entry in ipairs(cinematicFrames) do
-            if not ValidNativeFrame(entry.frame) then
-                local frame = entry.name and BlzGetFrameByName(entry.name, entry.context)
-                    or (entry.origin and BlzGetOriginFrame(entry.origin, entry.index))
-                entry.frame = ValidNativeFrame(frame) and not cinematicAncestors[frame] and frame or nil
-            end
-        end
-    end
-    local function RestoreCinematicFrames()
-        cinematicMode = nil
-        if not SurvivorConfig.IsLocalPlayer() then return end
-        local pending, failures = cinematicSaved, {}
-        cinematicSaved = {}
-        for frame, state in pairs(pending) do
-            if state.changed and ValidNativeFrame(frame) then
-                local ok, message = pcall(BlzFrameSetVisible, frame, state.visible)
-                if not ok then
-                    cinematicSaved[frame] = state -- A later cleanup can retry a failed native.
-                    failures[#failures + 1] = tostring(message)
-                end
-            end
-        end
-        if #failures > 0 then error(table.concat(failures, "\n")) end
-    end
-    local function ApplyCinematicFrames(mode)
-        AcquireCinematicFrames()
-        cinematicMode = mode
-        if not SurvivorConfig.IsLocalPlayer() then return end
-        local hidden = {}
-        for _, entry in ipairs(cinematicFrames) do
-            if ValidNativeFrame(entry.frame) and (mode == "intro" or mode == "setup" or not entry.introOnly) then
-                hidden[entry.frame] = true
-            end
-        end
-        -- Capture every flag before hiding any parent; do not snapshot inherited invisibility.
-        for frame in pairs(hidden) do
-            if cinematicSaved[frame] == nil then
-                cinematicSaved[frame] = {visible = BlzFrameIsVisible(frame), changed = false}
-            end
-        end
-        for frame, state in pairs(cinematicSaved) do
-            if not hidden[frame] then
-                if state.changed then BlzFrameSetVisible(frame, state.visible) end
-                cinematicSaved[frame] = nil
-            end
-        end
-        for frame in pairs(hidden) do
-            if BlzFrameIsVisible(frame) then
-                cinematicSaved[frame].changed = true
-                BlzFrameSetVisible(frame, false)
-            end
-        end
-        -- No native enable/anchor/size/parent writes: hotkeys and original positions survive.
-    end
     -- The setup screen hides the whole console like an intro; it only lifts its own mode.
     function SurvivorUI.SetSetupCinematic(active)
         if active then SurvivorUI.SetTimeStopFilter(false, true) end
-        if active then ApplyCinematicFrames("setup")
-        elseif cinematicMode == "setup" then RestoreCinematicFrames() end
+        if active then NativeHUD.Apply("setup")
+        elseif NativeHUD.Mode() == "setup" then NativeHUD.Restore() end
     end
     function SurvivorUI.UpdateExpedition()
         if not expeditionText then return end
         local visible = RunSession.IsRunning() and not choosing and not restVisible
             and not nativeInventoryVisible and not SurvivorUI.IsNarrativeVisible()
             and not (SurvivorLootUI and SurvivorLootUI.IsExpanded())
-            and (not speechVisible or SurvivorExpedition.HasRiskNotice())
-        local text = visible and SurvivorExpedition.Status(speechVisible) or ""
+            and (not Speech.IsSpeaking() or SurvivorExpedition.HasRiskNotice())
+        local text = visible and SurvivorExpedition.Status(Speech.IsSpeaking()) or ""
         visible = visible and text ~= ""
-        local top = notice and math.max(0.36, 0.515 - NoticeHeight() - 0.012) or 0.515
+        local top = Speech.BelowNotice()
         local cached = FrameState(expeditionText)
         if cached.wrapText ~= text then
             cached.wrapText = text
-            cached.wrapHeight = math.min(0.128, math.max(0.041, WrappedLines(text) * 0.0125 + 0.006))
+            cached.wrapHeight = math.min(0.128, math.max(0.041, Speech.WrappedLines(text) * 0.0125 + 0.006))
         end
         local height = cached.wrapHeight
         SetAbsPoint(expeditionRoot, FRAMEPOINT_TOPLEFT, 0.025, top)
@@ -436,7 +181,7 @@ do
         for _, frame in pairs({introRoot, introContent, introSkip, caption, sceneSkip, introFooter, storyPosition}) do
             Attempt(BlzFrameSetVisible, frame, false)
         end
-        Attempt(RestoreCinematicFrames)
+        Attempt(NativeHUD.Restore)
         DialogueAmbience(false)
         if #failures > 0 then error(table.concat(failures, "\n")) end
     end
@@ -493,13 +238,7 @@ do
     local cardTop, cardHeight = -0.045, 0.29
 
     function SurvivorUI.ClearDamageBoard()
-        RestoreDamageBoardMinimize()
-        for _, row in pairs(damageCells) do
-            for _, item in pairs(row) do MultiboardReleaseItem(item) end
-        end
-        if damageBoard then DestroyMultiboard(damageBoard); damageBoard = nil end
-        damageCells, damageValues, damageRowCount, damageBuild, damageTitle = {}, {}, nil, nil, nil
-        damageBoardVisible, damageBoardExpanded = nil, false
+        Board.Clear()
         bossSnapshot = nil
         wardTextCache = nil
         essentialLayout = nil
@@ -512,23 +251,11 @@ do
     local function SpeechClockRunning()
         return RunSession.IsRunning() and not choosing and not SurvivorUI.IsNarrativeVisible()
     end
+    -- The boss HUD and the multiboard show only with the combat HUD.
     local function DisplayDamageBoard(visible, quiet)
-        if essentialRoot and not (visible and CombatHUDVisible()) then SetVisible(essentialRoot, false) end
-        if damageBoard and SurvivorConfig.IsLocalPlayer() then
-            local shown = visible and CombatHUDVisible()
-            if shown and quiet then
-                -- Fold once on entry; subsequent native corner clicks belong to the player.
-                if not damageBoardQuiet then
-                    damageBoardQuiet = true
-                    damageBoardOriginalMinimized = IsMultiboardMinimized(damageBoard)
-                    if not damageBoardOriginalMinimized then MultiboardMinimize(damageBoard, true) end
-                elseif damageBoardOriginalMinimized ~= nil and not IsMultiboardMinimized(damageBoard) then
-                    -- A manual expansion also cancels restoration, including later manual folding.
-                    damageBoardOriginalMinimized = nil
-                end
-            else RestoreDamageBoardMinimize() end
-            if damageBoardVisible ~= shown then MultiboardDisplay(damageBoard, shown); damageBoardVisible = shown end
-        end
+        local shown = visible and CombatHUDVisible()
+        if essentialRoot and not shown then SetVisible(essentialRoot, false) end
+        Board.Display(shown, quiet)
     end
     local function UpdateBossHUD(active)
         if not essentialRoot then return end
@@ -629,7 +356,7 @@ do
         BlzFrameSetText(introText, page.text)
         BlzFrameSetText(introSkip, conversationIndex == #conversation and (conversationFinishLabel or "계속") or "다음 대사")
         if conversationAction then conversationAction(conversationIndex) end
-        ApplyCinematicFrames("conversation") -- Selection can make the command/inventory containers visible again.
+        NativeHUD.Apply("conversation") -- Selection can make the command/inventory containers visible again.
     end
     function SurvivorUI.AdvanceNarrative()
         if not introReady then return end
@@ -644,132 +371,27 @@ do
     function SurvivorUI.SkipConversation()
         if conversation and introReady then CompleteIntro() end
     end
-    local widths = {0.105, 0.048, 0.052, 0.037, 0.052, 0.046}
-    local headings = {"무기", "이번 단계", "누적 피해", "DPS", "보스 누적", "둔화(초)"}
-    local function PrepareDamageCells(weaponCount)
-        if damageRowCount == weaponCount + 1 then return end
-        -- Allocate/release handles on every client, outside native local folding checks.
-        for _, row in pairs(damageCells) do
-            for _, item in pairs(row) do MultiboardReleaseItem(item) end
-        end
-        damageCells, damageValues, damageRowCount = {}, {}, weaponCount + 1
-        MultiboardSetRowCount(damageBoard, damageRowCount)
-        for row = 0, weaponCount do
-            damageCells[row], damageValues[row] = {}, {}
-            for column = 0, 5 do
-                local item = MultiboardGetItem(damageBoard, row, column)
-                damageCells[row][column] = item
-                MultiboardSetItemStyle(item, true, row > 0 and column == 0)
-                MultiboardSetItemWidth(item, widths[column + 1])
-                MultiboardSetItemValueColor(item, 255, row == 0 and 210 or 255, row == 0 and 100 or 255, 255)
-                if row == 0 then MultiboardSetItemValue(item, headings[column + 1]) end
-            end
-        end
-    end
-    local function RenderDamageCells(rows)
-        for row, data in ipairs(rows) do
-            local cells, cached = damageCells[row], damageValues[row]
-            if cells then
-                local entry = SurvivorAugments.Get(data.id)
-                local values = {entry.name .. (damageBuild.evolutions[data.id] and " *" or " " .. SurvivorAugments.Level(damageBuild, data.id)),
-                    string.format("%.0f", data.stageDamage), string.format("%.0f", data.damage), string.format("%.1f", data.dps),
-                    string.format("%.0f", data.bossDamage), string.format("%.1f", data.slowSeconds)}
-                for column = 0, 5 do
-                    if cached[column] ~= values[column + 1] then
-                        MultiboardSetItemValue(cells[column], values[column + 1]); cached[column] = values[column + 1]
-                    end
-                end
-                if cached.icon ~= entry.icon then MultiboardSetItemIcon(cells[0], entry.icon); cached.icon = entry.icon end
-            end
-        end
-    end
-    local function RefreshDamageExpansion(refresh)
-        if not SurvivorConfig.IsLocalPlayer() then return end
-        local expanded = damageBoard ~= nil and damageBuild ~= nil and damageBoardVisible and not IsMultiboardMinimized(damageBoard)
-        if expanded and (refresh or not damageBoardExpanded) then
-            -- The 0.1-second UI observer fills newly expanded rows immediately.
-            -- Only text setters run locally; cell handles were acquired synchronously.
-            RenderDamageCells(SurvivorCombat.DamageRows(damageBuild.weapons))
-        end
-        damageBoardExpanded = expanded == true
-    end
     -- redrawOnly: called from the local native-panel observer, so it must not
     -- advance the shared reading clock or queues; it only redraws them.
-    local function AdvanceSpeech()
-        local elapsed = RunSession.GetElapsed()
-        local dt = math.max(0, elapsed - speechClock)
-        speechClock = elapsed
-        -- Reading time and queues advance only from synchronized state; local native
-        -- panel visibility decides only what is drawn (an open bag is a synced pause).
-        if SpeechClockRunning() then
-            local oldAlertCount = #alerts
-            for i = #alerts, 1, -1 do if alerts[i].expires <= elapsed then table.remove(alerts, i) end end
-            if #alerts > 0 and #alerts ~= oldAlertCount then RenderAlerts()
-            elseif #alerts == 0 and oldAlertCount > 0 then
-                notice, deferredNotice = deferredNotice, nil
-                if notice then SetText(noticeText, notice.text) end
-            end
-            if notice and not notice.urgent then
-                notice.remaining = notice.remaining - dt
-                if notice.remaining <= 0 then
-                    notice, deferredNotice = deferredNotice, nil
-                    if notice then SetText(noticeText, notice.text) end
-                end
-            end
-            if speech and not (notice and notice.urgent) then
-                speech.remaining = speech.remaining - dt
-                if speech.remaining <= 0 then speech = nil end
-            end
-            if not speech and #speechQueue > 0 and not (notice and notice.urgent) then
-                speech = table.remove(speechQueue, 1)
-                BlzFrameSetText(speechName, "|cffffcc00" .. speech.speaker .. "|r")
-                BlzFrameSetText(speechText, speech.text)
-            end
-        end
-    end
     function SurvivorUI.UpdateSpeech(redrawOnly)
-        HideNativeHUD()
-        if cinematicMode then ApplyCinematicFrames(cinematicMode)
-        elseif next(cinematicSaved) ~= nil then RestoreCinematicFrames() end
-        if not redrawOnly then AdvanceSpeech() end
+        NativeHUD.Refresh()
+        if not redrawOnly then Speech.Advance(SpeechClockRunning()) end
         local active = CombatHUDVisible()
-        local visible = active and speech ~= nil and not (notice and notice.urgent)
-        local quiet = visible or (active and notice ~= nil and notice.urgent == true)
-        speechVisible = visible
+        local visible, quiet = Speech.Visibility(active)
         DisplayDamageBoard(active, quiet)
-        if speechRoot then SetVisible(speechRoot, visible) end
-        if noticeRoot then SetVisible(noticeRoot, active and notice ~= nil) end
-        if noticeRoot then
-            local height = NoticeHeight()
-            SetAbsPoint(noticeRoot, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
-            SetSize(noticeRoot, 0.29, height)
-            SetSize(noticeText, 0.254, height - 0.028)
-        end
+        Speech.Render(active, visible)
         UpdateBossHUD(active)
         SurvivorUI.UpdateExpedition()
-        RefreshDamageExpansion()
+        Board.RefreshExpansion()
     end
     function SurvivorUI.UpdateDamageBoard(build, stage, stageElapsed, rerolls, difficultyId)
-        if not damageBoard then
-            damageBoard = CreateMultiboard()
-            MultiboardSetColumnCount(damageBoard, 6)
-            -- The native corner control owns folding; no duplicate custom button.
-            MultiboardMinimize(damageBoard, true)
-            DisplayDamageBoard(true)
-        end
-        damageBuild = build
-        -- Gameplay registers every owned weapon before publishing this build.
-        -- Row handles stay synchronized; dynamic statistics are read only when shown.
-        PrepareDamageCells(#build.weapons)
         local remaining = math.max(0, SurvivorConfig.StageTiming(stage).duration - stageElapsed)
         local difficulty = SurvivorConfig.difficulties[difficultyId or "normal"]
-        UpdateBossHUD(CombatHUDVisible())
         local title = string.format("%s S%d/%d · %d:%02d · 리롤 %d/%d", difficulty.name, stage, SurvivorConfig.stages,
             math.floor(remaining / 60), math.floor(remaining % 60), rerolls, SurvivorConfig.rerollCapacity)
-        if damageTitle ~= title then
-            MultiboardSetTitleText(damageBoard, title); damageTitle = title
-        end
-        RefreshDamageExpansion(true)
+        Board.Update(build, title, function() DisplayDamageBoard(true) end)
+        UpdateBossHUD(CombatHUDVisible())
+        Board.RefreshExpansion(true)
     end
 
     local function Text(parent, name, width, height, x, y)
@@ -982,17 +604,6 @@ do
             RunSession.Fail(message)
         end
     end
-    -- Stops the time-stop filter and hit vignette; both are attempted, then failures raised.
-    -- The run teardown list calls this so a fade never outlives its run over the result.
-    function SurvivorUI.ResetScreenEffects()
-        local failures = {}
-        for _, reset in ipairs({{"time stop filter", function() SurvivorUI.SetTimeStopFilter(false, true) end},
-            {"hit vignette", StopHitVignette}}) do
-            local ok, message = pcall(reset[2])
-            if not ok then failures[#failures + 1] = reset[1] .. ": " .. tostring(message) end
-        end
-        if #failures > 0 then error(table.concat(failures, "\n"), 0) end
-    end
     function SurvivorUI.BeginRun()
         -- Screen effects are local presentation; a failed reset is reported, not fatal to the run.
         local ok, message = pcall(SurvivorUI.ResetScreenEffects)
@@ -1006,75 +617,10 @@ do
             speechTimerPaused = false
         end
     end
-    function SurvivorUI.Init(onChoose, onRestart, onReroll, onNextStage, onExclude, onRetrySame, canRetrySame)
-        if initialized then return end
-        retryCallback = onRetrySame or function() return AnyasLongNight.RetrySame() end
-        canRetryCallback = canRetrySame or function() return AnyasLongNight.CanRetrySame() end
-        assert(BlzLoadTOCFile("CustomTooltip.toc"), "Missing tooltip panel templates")
-        -- Acquire native handles on every client before changing local visibility.
-        -- Keep native button enable states: hiding the upper bar leaves F10 usable.
-        CacheHiddenNativeFrame(BlzGetFrameByName("UpperButtonBarFrame", 0))
-        CacheHiddenNativeFrame(BlzGetFrameByName("ResourceBarFrame", 0))
-        -- Reforged 2.0 added separate top art. Do not hide the bottom console parents.
-        CacheHiddenNativeFrame(BlzGetFrameByName("ConsoleTopBar", 0))
-        -- Tasyen's Big UI-Frame Tutorial (1.32.6+) identifies the clock at [5][0].
-        -- Its parent also contains the minimap, so cache only the clock itself.
-        local gameUI = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0)
-        CacheHiddenNativeFrame(NativeChild(NativeChild(gameUI, 5), 0))
-        -- common.j defines the minimap origins; Tasyen lists buttons 0..4,
-        -- MiniMapFrame and MinimapButtonBar. Leave the shared clock/minimap parent visible.
-        CacheHiddenNativeFrame(BlzGetOriginFrame(ORIGIN_FRAME_MINIMAP, 0))
-        CacheHiddenNativeFrame(BlzGetFrameByName("MiniMapFrame", 0))
-        CacheHiddenNativeFrame(BlzGetFrameByName("MinimapButtonBar", 0))
-        for i = 0, 4 do CacheHiddenNativeFrame(BlzGetOriginFrame(ORIGIN_FRAME_MINIMAP_BUTTON, i)) end
-        HideNativeHUD()
-        chooseCallback, restartCallback, rerollCallback, nextCallback = onChoose, onRestart, onReroll, onNextStage
-        excludeCallback = onExclude
-        -- ConsoleUIBackdrop is above world HP bars; GameUI children can be below them.
-        local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
-        parentName = "ConsoleUIBackdrop"
-        if not ValidNativeFrame(parent) then
-            parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0)
-            parentName = "GameUI"
-        end
-        -- Never hide any ancestor of the custom UI, including the fallback GameUI.
-        local ancestor = parent
-        for _ = 1, 64 do
-            if not ValidNativeFrame(ancestor) or cinematicAncestors[ancestor] then break end
-            cinematicAncestors[ancestor] = true
-            ancestor = BlzFrameGetParent and BlzFrameGetParent(ancestor) or nil
-        end
-        if ValidNativeFrame(gameUI) then cinematicAncestors[gameUI] = true end
-        -- Visibility natives require a Frame/SimpleFrame container. Native String/Texture
-        -- handles (InventoryText, SimpleNameValue, portrait HP/mana text) can crash the
-        -- engine even when GetHandleId is valid; Lua pcall cannot catch that fault.
-        -- Leave the inventory cover alone as well; hide the inventory's container.
-        -- Unit-detail, stat, level, progress and buff panels are selection-owned.
-        -- Restoring a hero's saved visibility while a non-hero portrait is selected
-        -- can enter an invalid native state. Leave those panels and individual
-        -- command/item buttons to the engine; only manage stable HUD containers.
-        for _, name in ipairs({"CommandBarFrame", "SimpleInventoryBar",
-            "ConsoleBottomBarOverlay", "ConsoleUIOverlay"}) do CacheCinematicFrame(name) end
-        for _, name in ipairs({"ConsoleUI", "ConsoleBottomBar"}) do
-            CacheCinematicFrame(name, 0, true)
-        end
-        -- Keep the speaker's portrait/name and Hero armor during dialogue, hiding combat clutter.
-        for _, entry in ipairs({{ORIGIN_FRAME_HERO_BAR},
-            {ORIGIN_FRAME_PORTRAIT, true},
-            {ORIGIN_FRAME_TOOLTIP, true}, {ORIGIN_FRAME_UBERTOOLTIP, true}}) do
-            if entry[1] then CacheCinematicFrame(nil, nil, entry[2], entry[1]) end
-        end
-        -- The opaque backdrop covers the world and its overlays. Leave renderer-owned
-        -- origin frames and undocumented child indices alone when opening a modal UI.
-        AcquireCinematicFrames()
-        -- Created first and display-only, so every HUD panel draws above the flash.
-        hitVignette = BlzCreateFrameByType("BACKDROP", "HSHitVignette", parent, "", 0)
-        BlzFrameSetAbsPoint(hitVignette, FRAMEPOINT_CENTER, 0.4, 0.3)
-        BlzFrameSetSize(hitVignette, 0.8, 0.6)
-        BlzFrameSetTexture(hitVignette, SurvivorConfig.hitVignette.texture, 0, true)
-        BlzFrameSetEnable(hitVignette, false)
-        BlzFrameSetLevel(hitVignette, 1)
-        BlzFrameSetVisible(hitVignette, false)
+    Speech.Bind({SetVisible = SetVisible, SetText = SetText, SetSize = SetSize, SetAbsPoint = SetAbsPoint,
+        Text = Text, FramedPanel = FramedPanel})
+    -- Expedition status, subtitles, notices, the boss/ward HUD and the risk button.
+    local function BuildCombatHUD(parent)
         expeditionRoot = FramedPanel(parent, "HSExpedition", 715, 0.29, 0.069)
         BlzFrameSetAbsPoint(expeditionRoot, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
         BlzFrameSetLevel(expeditionRoot, 15)
@@ -1084,23 +630,7 @@ do
         BlzFrameSetEnable(expeditionText, false)
         BlzFrameSetVisible(expeditionText, false)
         BlzFrameSetVisible(expeditionRoot, false)
-        speechRoot = FramedPanel(parent, "HSSpeech", 710, 0.54, 0.084)
-        BlzFrameSetAbsPoint(speechRoot, FRAMEPOINT_CENTER, 0.4, 0.235)
-        BlzFrameSetSize(speechRoot, 0.54, 0.084)
-        BlzFrameSetLevel(speechRoot, 18)
-        BlzFrameSetEnable(speechRoot, false)
-        speechName = Text(speechRoot, "HSSpeechName", 0.492, 0.019, 0, -0.014)
-        speechText = Text(speechRoot, "HSSpeechText", 0.492, 0.035, 0, -0.035)
-        BlzFrameSetLevel(speechName, 3)
-        BlzFrameSetLevel(speechText, 3)
-        BlzFrameSetTextAlignment(speechText, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
-        noticeRoot = FramedPanel(parent, "HSNotice", 711, 0.29, 0.042)
-        BlzFrameSetAbsPoint(noticeRoot, FRAMEPOINT_TOPLEFT, 0.025, 0.515)
-        BlzFrameSetLevel(noticeRoot, 15)
-        BlzFrameSetEnable(noticeRoot, false)
-        noticeText = Text(noticeRoot, "HSNoticeText", 0.254, 0.014, 0, -0.014)
-        BlzFrameSetLevel(noticeText, 3)
-        BlzFrameSetTextAlignment(noticeText, TEXT_JUSTIFY_TOP, TEXT_JUSTIFY_LEFT)
+        Speech.Build(parent)
         -- Reserve the menu/resource strip and the Undead time-of-day ornament.
         -- Keep a separate column from notifications so both remain readable.
         essentialRoot = FramedPanel(parent, "HSEssentialHUD", 713, 0.26, 0.042)
@@ -1136,6 +666,9 @@ do
         end)
         SetVisible(riskAccept, false)
         SurvivorUI.ClearSpeech()
+    end
+    -- The modal shade and panel, the result backdrop with its tabs and the journal controls.
+    local function BuildResultPanel(parent)
         shade = BlzCreateFrameByType("BACKDROP", "AnyasLongNightShade", parent, "", 0)
         BlzFrameSetAbsPoint(shade, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(shade, 1.6, 0.6)
@@ -1198,6 +731,9 @@ do
         chapterNext = JournalButton(724, 0.226, "다음 장", 0, 1)
         journalPosition = Text(resultBackdrop, "HSJournalPosition", 0.18, 0.022, 0, -0.253)
         BlzFrameSetLevel(journalPosition, 3)
+    end
+    -- Growth/gear cards with reroll and exclude buttons, and the result action buttons.
+    local function BuildChoiceCards(parent)
         heading = Text(panel, "AnyasLongNightHeading", 0.68, 0.04, 0, -0.005)
         note = Text(panel, "AnyasLongNightNote", 0.70, 0.016, 0, -0.405)
         rerollCounter = Text(panel, "AnyasLongNightRerollCount", 0.26, 0.021, -0.065, -0.378)
@@ -1308,6 +844,9 @@ do
         BlzFrameSetVisible(retrySame, false)
         BlzFrameSetVisible(panel, false)
         BlzFrameSetVisible(shade, false)
+    end
+    -- Story scenes, the return shade and the combat preparation panel and countdown.
+    local function BuildNarrative(parent)
         introRoot = BlzCreateFrameByType("BACKDROP", "AnyasLongNightStageIntro", parent, "", 0)
         BlzFrameSetAbsPoint(introRoot, FRAMEPOINT_CENTER, 0.4, 0.3)
         BlzFrameSetSize(introRoot, 2.4, 0.6)
@@ -1381,6 +920,29 @@ do
         BlzFrameSetAbsPoint(preparationCountdown, FRAMEPOINT_CENTER, 0.4, 0.49)
         BlzFrameSetScale(preparationCountdown, 1.5)
         BlzFrameSetLevel(preparationCountdown, 26)
+    end
+    function SurvivorUI.Init(onChoose, onRestart, onReroll, onNextStage, onExclude, onRetrySame, canRetrySame)
+        if initialized then return end
+        retryCallback = onRetrySame or function() return AnyasLongNight.RetrySame() end
+        canRetryCallback = canRetrySame or function() return AnyasLongNight.CanRetrySame() end
+        assert(BlzLoadTOCFile("CustomTooltip.toc"), "Missing tooltip panel templates")
+        NativeHUD.CacheDecorations()
+        chooseCallback, restartCallback, rerollCallback, nextCallback = onChoose, onRestart, onReroll, onNextStage
+        excludeCallback = onExclude
+        -- ConsoleUIBackdrop is above world HP bars; GameUI children can be below them.
+        local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
+        parentName = "ConsoleUIBackdrop"
+        if not ValidNativeFrame(parent) then
+            parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0)
+            parentName = "GameUI"
+        end
+        NativeHUD.CacheContainers(parent)
+        SurvivorScreenEffects.Init(parent)
+        -- Creation order is draw order within a level; keep these in sequence.
+        BuildCombatHUD(parent)
+        BuildResultPanel(parent)
+        BuildChoiceCards(parent)
+        BuildNarrative(parent)
         StopIntro()
         initialized = true
         -- One map-lifetime UI timer. Reading duration follows the paused run clock.
@@ -1397,7 +959,7 @@ do
         if SurvivorConfig.IsLocalPlayer() then ClearTextMessages() end
         introReady = onReady
         DialogueAmbience(true)
-        ApplyCinematicFrames("intro")
+        NativeHUD.Apply("intro")
         BlzFrameSetText(introTitle, "|cffffcc00" .. title .. "|r")
         BlzFrameClearAllPoints(introTitle)
         BlzFrameSetSize(introTitle, 0.70, 0.054)
@@ -1491,8 +1053,8 @@ do
         -- Fit the actual chapter text instead of retaining a large blank footer.
         local mission = "|cff9bdbc0이번 목표|r\n" .. theme.mission
         local hint = "|cffffcc00구역 안내|r\n" .. theme.hint
-        local missionHeight = math.max(0.032, WrappedLines(mission) * 0.0125 + 0.005)
-        local hintHeight = math.max(0.044, WrappedLines(hint) * 0.0125 + 0.005)
+        local missionHeight = math.max(0.032, Speech.WrappedLines(mission) * 0.0125 + 0.005)
+        local hintHeight = math.max(0.044, Speech.WrappedLines(hint) * 0.0125 + 0.005)
         local hintTop = 0.048 + missionHeight + 0.006
         local footerTop = hintTop + hintHeight + 0.005
         local buttonTop = footerTop + 0.026 + 0.008

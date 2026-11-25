@@ -608,21 +608,21 @@ do
     end
     -- Rank only the first boss card, after the existing rarity roll. Compare pure
     -- derived stats so cooldown caps and evolution conversions match real combat.
+    -- Compared fields per engine; "-" marks a field where lower is better.
     local rewardFields = {
-        firebolt = {"missileDamage", "missileCount", "missileRange", "-missileInterval"},
-        flamefield = {"zoneDamage", "zoneRadius", "zoneDuration", "-zoneInterval"},
-        chainlightning = {"chainDamage", "chainTargets", "chainRange", "chainJumpRange", "-chainInterval"},
-        orbitblade = {"bladeDamage", "bladeCount", "bladeRadius", "bladeDuration", "-bladeInterval"},
-        monsoon = {"monsoonDamage", "monsoonCount", "monsoonRange", "monsoonRadius", "-monsoonInterval"},
-        frontslash = {"slashDamage", "slashRange", "slashAngle", "slashDuration", "-slashInterval"},
-        frostshard = {"frostDamage", "frostPierce", "frostSlowDuration", "-frostInterval"},
+        missile = {"damage", "count", "range", "-interval"},
+        zone = {"damage", "radius", "duration", "-interval"},
+        chain = {"damage", "targets", "range", "jumpRange", "-interval"},
+        orbit = {"damage", "count", "radius", "duration", "-interval"},
+        strike = {"damage", "count", "range", "radius", "-interval"},
+        cone = {"damage", "range", "angle", "duration", "-interval"},
+        pierce = {"damage", "pierce", "slowDuration", "-interval"},
     }
     local function RewardValues(stats)
         local values = {stats.equipmentLife, stats.moveSpeed, stats.regeneration}
         for _, weapon in ipairs(build.weapons) do
-            local native = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine].weapon
-            local fields = native and rewardFields[native]
-            local source = native == weapon and stats or native and stats.views[weapon] or stats.extraWeapons[weapon]
+            local fields = rewardFields[SurvivorConfig.weapons[weapon].engine]
+            local source = stats.weapons[weapon]
             for _, field in ipairs(fields or ((weapon == "meteor" or weapon == "plaguejar") and {"damage", "radius", "range", "-interval"}
                 or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"})) do
                 local lower = field:sub(1, 1) == "-"

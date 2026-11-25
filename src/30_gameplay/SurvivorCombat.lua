@@ -1,9 +1,14 @@
 -- ALICE owns scheduling, missile actors, target enumeration and zone pairs.
 -- The run owns every created unit/effect and removes them on finish/restart.
+-- This module keeps the run's units, objects, hit pipeline, weapons, spawning, time
+-- stop and lifecycle. Status effects (SurvivorCombatStatus), set/tag effects
+-- (SurvivorCombatSets) and enemy hazards (SurvivorCombatHazards) are bound to these
+-- primitives at load and attached to each run.
 SurvivorCombat = {}
 do
+    local Status, Sets, Hazards = SurvivorCombatStatus, SurvivorCombatSets, SurvivorCombatHazards
     local hero, deathTrigger = nil, nil
-    local units, objects, statusUnits, frostStackUnits, poisonUnits = {}, {}, {}, {}, {}
+    local units, objects = {}, {}
     local stats, onKill, onDeath, onBonus, bounds = nil, nil, nil, nil, nil
     local enemyCount, frozen = 0, false
     local bonusCount, nextBonusAt = 0, 0
@@ -21,9 +26,7 @@ do
             "포위라… 계산이 틀렸군. 다시 길을 내지.", "물길로 빠진다. 아직 데려갈 자가 남았어."},
     }
     local difficulty = SurvivorConfig.difficulties.normal
-    local Slow, SetHit, ExpireEmber, ZoneLifetime, ApplyStatus, Throw, StatusDeath, Residue, PoisonShares, ConsumePoison
-    local soulReady, inStatusProc = 0, false
-    local stormHits, stormReady, bladeReady = 0, 0, 0
+    local ZoneLifetime, Throw, Residue
     local boss, bossDefeated = nil, false
     local damageTrigger, escapeEffect = nil, nil
     local escapeOwnsInvulnerability = false
@@ -31,20 +34,23 @@ do
     local ward, wardUntil, damageContext, hitSecondary = 0, 0, nil, false
     local recentDamage, stageEscapeUses = {}, {}
     local shatterReady = 0
-    local Shatter, Freeze
+    local Shatter
     local queryGroup, candidatePool = nil, {}
     local clearTimer, clearGeneration, clearing = nil, 0, false
     local friendlyAlpha = 140
     local enemyOwners, enemyOwnerSerial = nil, 0
     local orderSerial, orderPhase = 0, 0
     local summonCounts = {}
-    local FallPayload, AreaHit, RecordFallingCast, RelayEnd
-    local tagState = {summon = {}, fall = {}, relay = {}, burstHits = 0, burstReady = 0, meleeUntil = 0}
+    local FallPayload, AreaHit
     local tagSecondary = false
-    local function HasTag(id, wanted)
-        local weapon = SurvivorConfig.weapons[id]
-        for _, tag in ipairs(weapon and weapon.tags or {}) do if tag == wanted then return true end end
-        return false
+    -- A cast reads its weapon from the shot (extra attacks carry a snapshot); a bare
+    -- call fires the engine's reference weapon.
+    local function ShotWeapon(shot, engine)
+        return shot and shot.weapon or stats.weapons[SurvivorConfig.weaponEngines[engine].weapon]
+    end
+    -- The reference weapon keeps the engine's default effect identifiers.
+    local function ReferenceWeapon(w, engine)
+        return w.weaponId == SurvivorConfig.weaponEngines[engine].weapon
     end
 
     local CleanupCall = RunSession.Attempt
@@ -144,33 +150,6 @@ do
         if object.identifier == "hsBossSpecial" and not object.trail then return UnitTimeStopped(object.source) end
         return RunSession.GetElapsed() < timeStopUntil
     end
-    local function EnemyColor(u, record, stopped, restore)
-        local color = record.baseColor or {255, 255, 255, 255}
-        local now, tint = RunSession.GetElapsed(), nil
-        local palette = SurvivorConfig.statusColors
-        if not restore and record.alive then
-            local slowed = now < (record.freezeUntil or 0)
-            if record.slows then
-                for _, slow in pairs(record.slows) do
-                    if slow.amount > 0 and slow.expires > now then slowed = true; break end
-                end
-            end
-            if slowed then tint = palette.slow
-            elseif (record.poison or 0) > 0 and now < (record.poisonUntil or 0) then tint = palette.poison
-            elseif (record.curse or 0) > 0 and now < (record.curseUntil or 0) then tint = palette.curse end
-        end
-        if stopped == nil then stopped = UnitTimeStopped(u) end
-        local brightness = stopped and SurvivorConfig.bonusProps.timeStopBrightness or 1
-        local strength = tint and palette.strength or 0
-        local r = math.floor((color[1] * (1 - strength) + (tint and tint[1] or 0) * strength) * brightness)
-        local g = math.floor((color[2] * (1 - strength) + (tint and tint[2] or 0) * strength) * brightness)
-        local b = math.floor((color[3] * (1 - strength) + (tint and tint[3] or 0) * strength) * brightness)
-        local cached = record.displayColor
-        if not cached or cached[1] ~= r or cached[2] ~= g or cached[3] ~= b or cached[4] ~= color[4] then
-            SetUnitVertexColor(u, r, g, b, color[4])
-            record.displayColor = {r, g, b, color[4]}
-        end
-    end
     local function ObjectTimeScale(object, stopped)
         local scale = stopped and 0 or 1
         if object.visual then BlzSetSpecialEffectTimeScale(object.visual, scale) end
@@ -199,7 +178,7 @@ do
         timeStopUnits[u] = true
         PauseUnit(u, true)
         SetUnitTimeScale(u, 0)
-        EnemyColor(u, record, true)
+        Status.Color(u, record, true)
         if record.cosmetic then BlzSetSpecialEffectTimeScale(record.cosmetic, 0) end
     end
     local function ReleaseUnitTime(u, record, now)
@@ -208,7 +187,7 @@ do
             if record[key] then record[key] = record[key] + duration end
         end
         record.wasPaused = record.timeStopWasPaused
-        if SurvivorConfig.UnitExists(u) then EnemyColor(u, record, false) end
+        if SurvivorConfig.UnitExists(u) then Status.Color(u, record, false) end
         if Alive(u) then
             PauseUnit(u, frozen or record.timeStopWasPaused == true or record.special ~= nil
                 or (record.freezeUntil ~= nil and record.freezeUntil > now))
@@ -375,10 +354,6 @@ do
         TrackHostile(object)
         ALICE_Create(object)
     end
-    -- Putress curse stacks amplify every hero hit, including poison ticks and reactions.
-    local function CurseStacks(record)
-        return RunSession.GetElapsed() < (record.curseUntil or 0) and record.curse or 0
-    end
     -- status = the weapon's live status entry; statusOverride replaces it (residues, ticks).
     local function Hit(target, amount, weapon, setProc, secondary, statusScale, statusOverride)
         -- Supplies take one point per hit, without weapon damage, status or set procs.
@@ -389,7 +364,7 @@ do
         if RunSession.IsRunning() and Alive(hero) and Enemy(target) then
             local baseAmount = amount
             local status = statusOverride or stats.status and stats.status[weapon]
-            local curse = CurseStacks(units[target])
+            local curse = Status.CurseStacks(units[target])
             if curse > 0 then
                 amount = amount * (1 + SurvivorConfig.status.curseAmp * curse + (status and status.cursedBonus or 0)
                     + (status and curse >= SurvivorConfig.status.curseMax and status.maxCurseBonus or 0))
@@ -413,38 +388,9 @@ do
                 if isBoss then data.bossDamage = data.bossDamage + actual end
             end
             if not RunSession.IsRunning() then return end -- No new procs once teardown is pending.
-            if not setProc and not secondary and actual > 0 then SetHit(target, amount, weapon, baseAmount) end
-            if status and not setProc and not secondary then ApplyStatus(target, weapon, status, statusScale or 1) end
+            if not setProc and not secondary and actual > 0 then Sets.SetHit(target, amount, weapon, baseAmount) end
+            if status and not setProc and not secondary then Status.Apply(target, weapon, status, statusScale or 1) end
         end
-    end
-    local function PrimaryTagAttack(object, tag)
-        return not object.setProc and not object.secondary and not object.tagExtra
-            and (not object.statusScale or object.statusScale >= 1) and HasTag(object.weapon, tag)
-    end
-    local function HomingDamage(object, damage)
-        if stats.sets.pursuer and PrimaryTagAttack(object, "유도") and (object.flightAge or 0) + 0.0000001 >= 0.5 then
-            return damage * 1.4
-        end
-        return damage
-    end
-    local function ZoneRampDamage(zone, target, damage)
-        if not stats.sets.mire then zone.rampHits = nil; return damage end
-        if damage <= 0 or zone.status or not PrimaryTagAttack(zone, "장판") or not Enemy(target) then return damage end
-        zone.rampHits = zone.rampHits or {}
-        local count = math.min(6, (zone.rampHits[target] or 0) + 1)
-        zone.rampHits[target] = count
-        return damage * (1 + (count - 1) * 0.1)
-    end
-    local function PierceDamage(object, target, damage)
-        if not stats.sets.tracker or object.secondary or object.tagExtra or object.statusScale and object.statusScale < 1
-            or not HasTag(object.weapon or "frostshard", "관통") or not Enemy(target) then return damage end
-        object.pierceTargets = object.pierceTargets or {}
-        local count = object.pierceCount or 0
-        if not object.pierceTargets[target] then
-            count = count + 1
-            object.pierceTargets[target], object.pierceCount = true, count
-        end
-        return damage * (1 + math.min(3, math.max(0, count - 1)) * 0.20)
     end
     local function MoveMissile(missile)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -475,17 +421,17 @@ do
         BlzSetSpecialEffectPosition(missile.visual, missile.x, missile.y, missile.z)
         -- The swept step reaches the sphere: no XY-only hits on overhead targets.
         if distance <= step + hitRadius then
-            local target, damage, evolution = missile.target, HomingDamage(missile, missile.damage), missile.evolution
+            local target, damage, evolution = missile.target, Sets.HomingDamage(missile, missile.damage), missile.evolution
             local x, y, z = ImpactPoint(target)
             ALICE_Kill(missile)
-            if evolution == "evolution2" then
+            if evolution == "focus" then
                 local record, now = units[target], RunSession.GetElapsed()
                 local stacks = now < (record.fireFocusUntil or 0) and (record.fireFocus or 0) or 0
                 damage = damage * (1 + math.min(4, stacks) * 0.15)
                 record.fireFocus, record.fireFocusUntil = math.min(4, stacks + 1), now + 3
             end
             Hit(target, damage, missile.weapon, nil, nil, missile.statusScale)
-            if evolution == "evolution1" and RunSession.IsRunning() then
+            if evolution == "burst" and RunSession.IsRunning() then
                 CreateObject({identifier = "hsFireBurst", x = x, y = y, z = z, life = 0.4,
                     isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.fireBurstModel, 0.14)
                 local victims = {}
@@ -524,7 +470,7 @@ do
         end
         zone.life = zone.life - dt
         if zone.life <= 0 then
-            if zone.identifier == "hsZone" then ExpireEmber(zone) end
+            if zone.identifier == "hsZone" then Sets.ExpireEmber(zone) end
             ALICE_Kill(zone)
         end
         return dt
@@ -590,33 +536,33 @@ do
         if GroundTarget(enemy) then
             local dx, dy = GetUnitX(enemy) - zone.x, GetUnitY(enemy) - zone.y
             if dx * dx + dy * dy <= zone.radius * zone.radius then
-                Hit(enemy, ZoneRampDamage(zone, enemy, zone.damage), zone.weapon, nil, nil, zone.statusScale)
+                Hit(enemy, Sets.ZoneRampDamage(zone, enemy, zone.damage), zone.weapon, nil, nil, zone.statusScale)
             end
         end
         return interval
     end
     function SurvivorCombat.FireMissile(shot)
-        local stats = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.missileEnabled then return end
+        local w = ShotWeapon(shot, "missile")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
-        local primary = ALICE_GetClosestObject(x, y, "hsEnemy", stats.missileRange,
+        local primary = ALICE_GetClosestObject(x, y, "hsEnemy", w.range,
             function(u) return AttackTarget(u) and SurvivorStage.LineClear(x, y, GetUnitX(u), GetUnitY(u)) end)
         if primary == nil then return end
         local selected, yaw = {}, HeroYaw()
         local z = Height(x, y) + GetUnitFlyHeight(hero) + SurvivorConfig.missileLaunchHeight
         local extra = shot and shot.index ~= nil
-        for shot = 1, stats.missileCount do
+        for index = 1, w.count do
             -- Prefer different enemies; concentrate extra shots if fewer are nearby.
-            local target = shot == 1 and primary or ALICE_GetClosestObject(x, y, "hsEnemy", stats.missileRange,
+            local target = index == 1 and primary or ALICE_GetClosestObject(x, y, "hsEnemy", w.range,
                 function(u) return AttackTarget(u) and not selected[u] and SurvivorStage.LineClear(x, y, GetUnitX(u), GetUnitY(u)) end) or primary
             selected[target] = true
-            local offset = (shot - (stats.missileCount + 1) / 2) * 18
-            local missile = {identifier = "hsMissile", weapon = stats.weaponId or "firebolt", statusScale = stats.statusScale,
+            local offset = (index - (w.count + 1) / 2) * 18
+            local missile = {identifier = "hsMissile", weapon = w.weaponId, statusScale = w.statusScale,
                 x = x - math.sin(yaw) * offset, y = y + math.cos(yaw) * offset, z = z, yaw = yaw,
-                owner = SurvivorConfig.Owner(), target = target, life = stats.missileLifetime, damage = stats.missileDamage, tagExtra = extra,
-                speed = stats.missileSpeed, hitRadius = stats.missileHitRadius, remaining = stats.missileRange, evolution = stats.fireEvolution,
+                owner = SurvivorConfig.Owner(), target = target, life = w.lifetime, damage = w.damage, tagExtra = extra,
+                speed = w.speed, hitRadius = w.hitRadius, remaining = w.range, evolution = w.evolution,
                 selfInteractions = MoveMissile, isAnonymous = true}
-            CreateObject(missile, stats.model or SurvivorConfig.missileModel, stats.missileScale)
+            CreateObject(missile, w.model or SurvivorConfig.missileModel, w.scale)
             local tx, ty, tz = ImpactPoint(target)
             FaceMissile(missile, tx - missile.x, ty - missile.y, tz - missile.z)
         end
@@ -629,24 +575,24 @@ do
         return x, y
     end
     function SurvivorCombat.CreateZone(shot)
-        local stats = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.zoneEnabled then return end
+        local w = ShotWeapon(shot, "zone")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
-        x, y = SpreadPoint(x, y, stats.zoneRadius * 0.8, shot)
-        CreateObject({identifier = "hsZone", weapon = stats.weaponId or "flamefield", statusScale = stats.statusScale, x = x, y = y, z = Height(x, y),
-            owner = SurvivorConfig.Owner(), radius = stats.zoneRadius, isStationary = true,
-            life = stats.zoneDuration, damage = stats.zoneDamage, pulse = stats.zonePulse, tagExtra = shot and shot.index ~= nil,
+        x, y = SpreadPoint(x, y, w.radius * 0.8, shot)
+        CreateObject({identifier = "hsZone", weapon = w.weaponId, statusScale = w.statusScale, x = x, y = y, z = Height(x, y),
+            owner = SurvivorConfig.Owner(), radius = w.radius, isStationary = true,
+            life = w.duration, damage = w.damage, pulse = w.pulse, tagExtra = shot and shot.index ~= nil,
             selfInteractions = ZoneLifetime, interactions = {hsEnemy = ZoneDamage}},
-            stats.model or SurvivorConfig.zoneModel, stats.zoneRadius / 230)
+            w.model or SurvivorConfig.zoneModel, w.radius / 230)
     end
     function SurvivorCombat.CastChainLightning(shot)
         local relayHits = stats and stats.sets.conductor and not (shot and shot.index) and {} or nil
-        local stats = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.chainEnabled then return end
+        local w = ShotWeapon(shot, "chain")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         local x, y, z = ImpactPoint(hero)
-        local visited, damage, range = {}, stats.chainDamage, stats.chainRange
-        local weapon = stats.weaponId or "chainlightning"
-        for jump = 1, stats.chainTargets do
+        local visited, damage, range = {}, w.damage, w.range
+        local weapon = w.weaponId
+        for jump = 1, w.targets do
             local target = ALICE_GetClosestObject(x, y, "hsEnemy", range,
                 function(u) return AttackTarget(u) and not visited[u] end)
             if target == nil then break end
@@ -655,22 +601,22 @@ do
             local bolt = {identifier = "hsLightning", x = x, y = y, z = z,
                 life = 0.22, isStationary = true, isAnonymous = true,
                 selfInteractions = ZoneLifetime, destroy = DestroyObject}
-            bolt.lightning = AddLightningEx(stats.lightning or (jump == 1 and "CLPB" or "CLSB"), true, x, y, z, tx, ty, tz)
+            bolt.lightning = AddLightningEx(w.lightning or (jump == 1 and "CLPB" or "CLSB"), true, x, y, z, tx, ty, tz)
             objects[bolt] = true
             ALICE_Create(bolt)
             -- Unattached: an attached effect inherits each unit's model and SetUnitScale size.
-            CreateObject({identifier = "hsChainHit", weapon = stats.weaponId, x = tx, y = ty, z = tz,
+            CreateObject({identifier = "hsChainHit", weapon = weapon, x = tx, y = ty, z = tz,
                 life = SurvivorConfig.chainHitDuration,
                 isStationary = true, isAnonymous = true, selfInteractions = ZoneLifetime},
-                stats.model or SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
-            Hit(target, damage, weapon, nil, nil, stats.statusScale)
+                w.model or SurvivorConfig.chainHitModel, SurvivorConfig.chainHitScale)
+            Hit(target, damage, weapon, nil, nil, w.statusScale)
             if relayHits and Enemy(target) then relayHits[#relayHits + 1] = {unit = target, damage = damage} end
-            x, y, z, range = tx, ty, tz, stats.chainJumpRange
+            x, y, z, range = tx, ty, tz, w.jumpRange
             damage = damage * SurvivorConfig.chainFalloff
         end
         for i = #(relayHits or {}), 1, -1 do
             local last = relayHits[i]
-            if Enemy(last.unit) then RelayEnd(weapon, last.unit, last.damage); break end
+            if Enemy(last.unit) then Sets.RelayEnd(weapon, last.unit, last.damage); break end
         end
     end
     local function SegmentDistanceSquared(px, py, ax, ay, bx, by)
@@ -688,8 +634,8 @@ do
         local oldX, oldY = blade.x, blade.y
         blade.age = blade.age + dt
         local orbit = blade.orbit
-        if blade.evolution == "evolution7" then orbit = orbit * (1 + 0.325 * (1 - math.cos(blade.age * 2 * math.pi / 3))) end
-        if blade.evolution == "evolution8" then
+        if blade.evolution == "pulse" then orbit = orbit * (1 + 0.325 * (1 - math.cos(blade.age * 2 * math.pi / 3))) end
+        if blade.evolution == "guard" then
             local desired = HeroYaw() + math.sin(blade.age * 2 * math.pi / blade.period) * 0.65 + blade.offset
             local delta = Atan2(math.sin(desired - blade.angle), math.cos(desired - blade.angle))
             blade.angle = blade.angle + math.max(-dt * 6, math.min(dt * 6, delta))
@@ -713,24 +659,24 @@ do
         return dt
     end
     function SurvivorCombat.CastBlades(shot)
-        local view = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not view.bladeEnabled then return end
+        local w = ShotWeapon(shot, "orbit")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         -- One activation is one evenly spaced ring, including multicast blades.
         -- Older rings keep their own lifetime, damage and per-enemy hit history.
-        local count, phase = view.bladeCount + stats.multiCount, RunSession.GetElapsed()
+        local count, phase = w.count + stats.multiCount, RunSession.GetElapsed()
         local centerX, centerY = GetUnitX(hero), GetUnitY(hero)
-        local weapon = view.weaponId or "orbitblade"
+        local identifier = ReferenceWeapon(w, "orbit") and "hsBlade" or "hsWraith"
         for i = 1, count do
             local angle = 2 * math.pi * (i - 1) / count + phase
             local offset = (i - (count + 1) / 2) / math.max(1, count - 1) * 0.8
-            if view.bladeEvolution == "evolution8" then angle = HeroYaw() + offset end
-            local x, y = centerX + math.cos(angle) * view.bladeRadius, centerY + math.sin(angle) * view.bladeRadius
-            local damage = view.bladeDamage * (i > view.bladeCount and stats.multiDamage or 1)
-            CreateObject({identifier = view.weaponId and "hsWraith" or "hsBlade", weapon = weapon, x = x, y = y, z = Height(x, y) + 65,
-                angle = angle, orbit = view.bladeRadius, period = view.bladePeriod, damage = damage,
-                age = 0, offset = offset, evolution = view.bladeEvolution,
-                life = view.bladeDuration, hitRadius = view.bladeHitRadius, hitInterval = view.bladeHitInterval,
-                hitTimes = {}, isAnonymous = true, selfInteractions = MoveBlade}, view.model or SurvivorConfig.bladeModel, view.bladeScale)
+            if w.evolution == "guard" then angle = HeroYaw() + offset end
+            local x, y = centerX + math.cos(angle) * w.radius, centerY + math.sin(angle) * w.radius
+            local damage = w.damage * (i > w.count and stats.multiDamage or 1)
+            CreateObject({identifier = identifier, weapon = w.weaponId, x = x, y = y, z = Height(x, y) + 65,
+                angle = angle, orbit = w.radius, period = w.period, damage = damage,
+                age = 0, offset = offset, evolution = w.evolution,
+                life = w.duration, hitRadius = w.hitRadius, hitInterval = w.hitInterval,
+                hitTimes = {}, isAnonymous = true, selfInteractions = MoveBlade}, w.model or SurvivorConfig.bladeModel, w.scale)
         end
     end
     function SurvivorCombat.UpdateWeapons(dt)
@@ -742,79 +688,8 @@ do
         local now = RunSession.GetElapsed()
         if ward > 0 and now >= wardUntil then ward, wardUntil = 0, 0 end
         if escapeUntil > 0 and now >= escapeUntil then ClearEscape() end
-        -- Poison ticks: snapshot due units first, because a tick may kill and clean records.
-        if next(poisonUnits) then
-            local config, due = SurvivorConfig.status, {}
-            for u in pairs(poisonUnits) do
-                local record = units[u]
-                if not record or not record.alive or not Enemy(u) or now >= (record.poisonUntil or 0) or record.poison <= 0 then
-                    poisonUnits[u] = nil
-                    if record then record.poison, record.poisonBy = 0, nil end
-                elseif now >= record.poisonNext then due[#due + 1] = u end
-            end
-            for _, u in ipairs(due) do
-                local record = units[u]
-                if Enemy(u) and RunSession.IsRunning() then
-                    record.poisonNext = record.poisonNext + config.poisonTick
-                    -- Each weapon's stacks tick with that weapon's power and credit.
-                    for _, weapon in ipairs(PoisonShares(record)) do
-                        if not Enemy(u) or not RunSession.IsRunning() then break end
-                        local status = stats.status and stats.status[weapon]
-                        local power = status and status.tickPower or stats.poisonDamage / config.poisonDamage
-                        Hit(u, record.poisonBy[weapon] * config.poisonDamage * power * config.poisonTick, weapon, true)
-                    end
-                end
-            end
-        end
-        -- Passive frost stacks need no per-tick update after their slow expires.
-        -- Keep the stacks, and reset all of them when the set is unequipped.
-        if not stats.sets.frost then
-            for u in pairs(frostStackUnits) do
-                if units[u] then units[u].frostHits = 0 end
-                frostStackUnits[u] = nil
-            end
-        end
-        for u in pairs(statusUnits) do
-            checked = checked + 1
-            local record = units[u]
-            if not record or not record.alive then
-                statusUnits[u] = nil
-                frostStackUnits[u] = nil
-            else
-                if record.freezeUntil and record.freezeUntil <= now then
-                    PauseUnit(u, UnitTimeStopped(u, now) or record.special ~= nil or record.freezeWasPaused == true)
-                    record.freezeUntil, record.freezeWasPaused = nil, nil
-                end
-                if record.slows and Enemy(u) then
-                    local strongest, source = 0, nil
-                    for id, slow in pairs(record.slows) do
-                        if slow.expires <= now then record.slows[id] = nil
-                        elseif slow.amount > strongest or slow.amount == strongest and (not source or id < source) then
-                            strongest, source = slow.amount, id
-                        end
-                    end
-                    if strongest ~= record.slowAmount then
-                        record.slowAmount = strongest
-                        SetUnitMoveSpeed(u, record.baseSpeed * (1 - strongest))
-                    end
-                    -- Count only the strongest source, with the original lexical tie break.
-                    if source and damageTotals[source] then damageTotals[source].slowSeconds = damageTotals[source].slowSeconds + dt end
-                    if next(record.slows) == nil then record.slows = nil end
-                end
-                EnemyColor(u, record)
-                local poisoned = (record.poison or 0) > 0 and now < (record.poisonUntil or 0)
-                local cursed = (record.curse or 0) > 0 and now < (record.curseUntil or 0)
-                if not record.freezeUntil and not record.slows and not poisoned and not cursed then
-                    statusUnits[u] = nil
-                end
-            end
-        end
-        if not stats.sets.storm then stormHits = 0 end
-        if not stats.sets.commander then tagState.summon = {} end
-        if not stats.sets.bombardier then tagState.fall = {} end
-        if not stats.sets.destroyer then tagState.burstHits, tagState.burstReady = 0, 0 end
-        if not stats.sets.bulwark then tagState.meleeUntil = 0 end
-        if not stats.sets.conductor then tagState.relay = {} end
+        checked = Status.Update(now, dt)
+        Sets.Update()
         local alpha = now < warningUntil and 70 or 140
         if friendlyAlpha ~= alpha then
             friendlyAlpha = alpha
@@ -859,40 +734,40 @@ do
         return dt
     end
     function SurvivorCombat.CastMonsoon(shot)
-        local stats = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.monsoonEnabled then return end
+        local w = ShotWeapon(shot, "strike")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
-        local primary = ALICE_GetClosestObject(x, y, "hsEnemy", stats.monsoonRange, AttackTarget)
+        local primary = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, AttackTarget)
         if not primary then return end
         local selected = {}
-        for i = 1, stats.monsoonCount do
-            local target = ALICE_GetClosestObject(x, y, "hsEnemy", stats.monsoonRange,
+        for i = 1, w.count do
+            local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range,
                 function(u) return AttackTarget(u) and not selected[u] end) or primary
             selected[target] = true
             local tx, ty, tz = ImpactPoint(target)
-            tx, ty = SpreadPoint(tx, ty, stats.monsoonRadius * 0.7, shot)
+            tx, ty = SpreadPoint(tx, ty, w.radius * 0.7, shot)
             if i == 1 and not (shot and shot.index) and Enemy(target) then
-                RecordFallingCast(stats.weaponId or "monsoon", tx, ty, tz, stats.monsoonDamage, stats.monsoonRadius,
-                    stats.throwModel or SurvivorConfig.meteorModel, (stats.throwScale or 1) * 0.6)
+                Sets.RecordFallingCast(w.weaponId, tx, ty, tz, w.damage, w.radius,
+                    w.throwModel or SurvivorConfig.meteorModel, (w.throwScale or 1) * 0.6)
             end
-            local life = stats.monsoonDelay + (i - 1) * stats.monsoonSpacing
-            if stats.falling then
-                local id, damage, radius, scale = stats.weaponId, stats.monsoonDamage, stats.monsoonRadius, stats.statusScale
-                FallPayload(id, tx, ty, tz, 0.55 + (i - 1) * stats.monsoonSpacing,
-                    stats.throwModel, stats.throwScale or 1, function()
+            local life = w.delay + (i - 1) * w.spacing
+            if w.falling then
+                local id, damage, radius, scale = w.weaponId, w.damage, w.radius, w.statusScale
+                FallPayload(id, tx, ty, tz, 0.55 + (i - 1) * w.spacing,
+                    w.throwModel, w.throwScale or 1, function()
                         CreateObject({identifier = "hsVialImpact", weapon = id, x = tx, y = ty, z = tz, life = 0.45,
-                            isAnonymous = true, selfInteractions = ZoneLifetime}, stats.model, radius / 150)
+                            isAnonymous = true, selfInteractions = ZoneLifetime}, w.model, radius / 150)
                         AreaHit({x = tx, y = ty, z = tz, radius = radius, slow = 0, weapon = id, statusScale = scale}, damage)
                     end)
             else
-                if stats.thrown then
+                if w.thrown then
                     -- A vial lands exactly when its strike resolves; the strike owns the damage.
                     local hx, hy, hz = ImpactPoint(hero)
-                    life = Throw(hx, hy, hz, tx, ty, tz, stats.throwSpeed, (i - 1) * stats.monsoonSpacing, nil, stats.throwScale, stats.throwModel, stats.weaponId)
+                    life = Throw(hx, hy, hz, tx, ty, tz, w.throwSpeed, (i - 1) * w.spacing, nil, w.throwScale, w.throwModel, w.weaponId)
                 end
-                local strike = {identifier = "hsMonsoon", weapon = stats.weaponId or "monsoon", model = stats.model,
-                    statusScale = stats.statusScale, x = tx, y = ty, z = tz,
-                    life = life, radius = stats.monsoonRadius, damage = stats.monsoonDamage,
+                local strike = {identifier = "hsMonsoon", weapon = w.weaponId, model = w.model,
+                    statusScale = w.statusScale, x = tx, y = ty, z = tz,
+                    life = life, radius = w.radius, damage = w.damage,
                     isAnonymous = true, isStationary = true, selfInteractions = StrikeMonsoon, destroy = DestroyObject}
                 objects[strike] = true
                 ALICE_Create(strike)
@@ -941,150 +816,34 @@ do
         return dt
     end
     function SurvivorCombat.CastFrontSlash(shot)
-        local stats = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.slashEnabled then return end
+        local w = ShotWeapon(shot, "cone")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         local x, y = GetUnitX(hero), GetUnitY(hero)
-        local facing, arc = HeroYaw(), stats.slashAngle * bj_DEGTORAD
-        local radius = stats.slashRange
+        local facing, arc = HeroYaw(), w.angle * bj_DEGTORAD
+        local radius = w.range
         local target = ALICE_GetClosestObject(x, y, "hsEnemy", radius, GroundEnemy)
         if target then
             local dx, dy = GetUnitX(target) - x, GetUnitY(target) - y
             if dx * dx + dy * dy >= 1 then facing = math.atan(dy, dx) end
         end
         local sweepRadius, startAngle = radius * 0.7, facing - arc / 2
-        CreateObject({identifier = stats.weaponId and "hsBreath" or "hsSlash", weapon = stats.weaponId, originX = x, originY = y,
+        CreateObject({identifier = ReferenceWeapon(w, "cone") and "hsSlash" or "hsBreath", weapon = w.weaponId, originX = x, originY = y,
             x = x + math.cos(startAngle) * sweepRadius, y = y + math.sin(startAngle) * sweepRadius,
             z = Height(x, y) + 65, facing = facing, arc = arc, radius = sweepRadius,
-            life = math.max(stats.slashSweepTime, stats.slashDuration), sweepTime = stats.slashSweepTime, sweepElapsed = 0,
-            isAnonymous = true, selfInteractions = SweepSlash}, stats.model or SurvivorConfig.bladeModel, 1.3 * stats.slashScale)
+            life = math.max(w.sweepTime, w.duration), sweepTime = w.sweepTime, sweepElapsed = 0,
+            isAnonymous = true, selfInteractions = SweepSlash}, w.model or SurvivorConfig.bladeModel, 1.3 * w.scale)
         -- Snapshot origin/facing/damage for the whole cast. A lingering cone hits each enemy once.
-        local area = {identifier = "hsSlashArea", weapon = stats.weaponId or "frontslash", statusScale = stats.statusScale,
-            hitModel = stats.hitModel, x = x, y = y, z = Height(x, y),
-            facing = facing, arc = arc, radius = radius, damage = stats.slashDamage, scale = stats.slashScale,
-            life = stats.slashDuration, hitTimes = {}, isAnonymous = true, isStationary = true,
+        local area = {identifier = "hsSlashArea", weapon = w.weaponId, statusScale = w.statusScale,
+            hitModel = w.hitModel, x = x, y = y, z = Height(x, y),
+            facing = facing, arc = arc, radius = radius, damage = w.damage, scale = w.scale,
+            life = w.duration, hitTimes = {}, isAnonymous = true, isStationary = true,
             selfInteractions = LingerSlash, destroy = DestroyObject}
         if area.life > 0 then objects[area] = true; ALICE_Create(area) end
         HitSlash(area)
     end
-    Slow = function(target, amount, duration, weapon)
-        if not Enemy(target) then return end
-        local record, now = units[target], RunSession.GetElapsed()
-        if record.boss then amount = math.min(0.20, amount) end
-        record.slows = record.slows or {}
-        statusUnits[target] = true
-        record.slows[weapon] = {amount = amount, expires = now + duration}
-        local strongest = 0
-        for _, slow in pairs(record.slows) do if slow.expires > now then strongest = math.max(strongest, slow.amount) end end
-        record.slowAmount = strongest
-        SetUnitMoveSpeed(target, record.baseSpeed * (1 - strongest))
-        EnemyColor(target, record)
-    end
-    Freeze = function(target, duration)
-        if not Enemy(target) then return false end
-        local record, now = units[target], RunSession.GetElapsed()
-        if now < (record.freezeImmuneUntil or 0) then return false end
-        duration = record.boss and math.min(0.35, duration) or math.min(1, duration)
-        record.freezeImmuneUntil = now + (record.boss and 8 or 5)
-        if not record.freezeUntil then
-            if record.special then record.freezeWasPaused = record.special.sourceWasPaused
-            elseif record.timeStopUntil then record.freezeWasPaused = record.timeStopWasPaused
-            else record.freezeWasPaused = IsUnitPaused(target) end
-        end
-        record.freezeUntil = now + duration
-        statusUnits[target] = true
-        PauseUnit(target, true)
-        EnemyColor(target, record)
-        return true
-    end
     local function ProcVisual(x, y, z, model, scale, weapon)
         CreateObject({identifier = "hsSetEffect", weapon = weapon, x = x, y = y, z = z, life = 0.7,
             isAnonymous = true, selfInteractions = ZoneLifetime}, model, scale)
-    end
-    RelayEnd = function(weapon, target, damage)
-        if not stats or not stats.sets.conductor or not HasTag(weapon, "연쇄") or not Enemy(target)
-            or not RunSession.IsRunning() or not Alive(hero) then return end
-        local now = RunSession.GetElapsed()
-        if now < (tagState.relay[weapon] or 0) then return end
-        tagState.relay[weapon] = now + 2
-        local x, y, z = ImpactPoint(target)
-        ProcVisual(x, y, z, SurvivorConfig.chainHitModel, 0.6, weapon)
-        Hit(target, damage * 0.6, weapon, "tag")
-    end
-    -- record.poison is the total; record.poisonBy[weapon] holds each weapon's share.
-    -- Returns the weapons holding stacks in id order, so ticks are deterministic.
-    PoisonShares = function(record)
-        if record.poisonBy == nil then
-            record.poisonBy = {}
-            -- A record poisoned before shares existed belongs to its last applier.
-            if (record.poison or 0) > 0 and record.poisonWeapon then record.poisonBy[record.poisonWeapon] = record.poison end
-        end
-        local list = {}
-        for weapon, stacks in pairs(record.poisonBy) do
-            if stacks > 0 then list[#list + 1] = weapon end
-        end
-        table.sort(list)
-        return list
-    end
-    -- A reaction consumes every weapon's share in proportion; the remainder goes in id order.
-    ConsumePoison = function(record, consumed)
-        local list, total, left = PoisonShares(record), record.poison, consumed
-        local shares = record.poisonBy
-        for _, weapon in ipairs(list) do
-            local take = math.floor(shares[weapon] * consumed / total)
-            shares[weapon], left = shares[weapon] - take, left - take
-        end
-        for _, weapon in ipairs(list) do
-            if left <= 0 then break end
-            if shares[weapon] > 0 then shares[weapon], left = shares[weapon] - 1, left - 1 end
-        end
-        record.poison = total - consumed
-    end
-    -- Putress statuses. Reaction consumes poison before this hit adds new stacks.
-    -- scale < 1 (multicast) applies a reduced, never zero, number of stacks.
-    ApplyStatus = function(target, weapon, status, scale)
-        if not Enemy(target) then return end
-        local config, record, now = SurvivorConfig.status, units[target], RunSession.GetElapsed()
-        local life = 1 + (stats.commonDurationBonus or 0)
-        local function Stacks(value)
-            value = value or 0
-            if value <= 0 or scale >= 1 then return value end
-            return math.max(1, math.floor(value * scale))
-        end
-        if (status.reaction or 0) > 0 and (record.poison or 0) > 0 and now < (record.poisonUntil or 0)
-            and now >= (record.reactionReady or 0) then
-            local consumed = status.reactionAll and record.poison or math.ceil(record.poison / 2)
-            ConsumePoison(record, consumed)
-            record.reactionReady = now + config.reactionCooldown
-            local x, y, z = ImpactPoint(target)
-            ProcVisual(x, y, z, SurvivorConfig.reactionModel, SurvivorConfig.reactionScale, weapon)
-            Hit(target, consumed * config.reactionDamage * status.reaction * stats.poisonDamage / config.poisonDamage
-                * (stats.sets.apprentice and 1.6 or 1), weapon, true)
-            if not Enemy(target) then
-                -- Apprentice set: a reaction kill leaves a short poison residue.
-                if stats.sets.apprentice and RunSession.IsRunning() then Residue(weapon, x, y) end
-                return
-            end
-        end
-        local poison = Stacks(status.poison)
-        if poison > 0 then
-            if now >= (record.poisonUntil or 0) then record.poison, record.poisonNext, record.poisonBy = 0, now + config.poisonTick, nil end
-            PoisonShares(record)
-            local total = math.min(config.poisonMax + (stats.sets.apothecary and 4 or 0), record.poison + poison)
-            -- Stacks above the cap are dropped; existing stacks keep their weapon.
-            record.poisonBy[weapon] = (record.poisonBy[weapon] or 0) + total - record.poison
-            -- poisonWeapon names only the last applier (the apothecary spread's credit).
-            record.poison, record.poisonUntil, record.poisonWeapon = total, now + config.poisonDuration * life, weapon
-            poisonUnits[target] = true
-        end
-        local curse = Stacks(status.curse)
-        if curse > 0 then
-            record.curse = math.min(config.curseMax, CurseStacks(record) + curse)
-            record.curseUntil = now + config.curseDuration * life
-        end
-        if poison > 0 or curse > 0 or statusUnits[target] then
-            statusUnits[target] = true
-            EnemyColor(target, record)
-        end
     end
     -- Quadratic Bezier throw: P0 = launch, P2 = locked landing point, P1 = midpoint raised by height.
     local function MoveThrow(throw)
@@ -1118,73 +877,6 @@ do
             onLand = onLand, isAnonymous = true, selfInteractions = MoveThrow}, model or config.model, scale or 1)
         return (delay or 0) + flight
     end
-    ExpireEmber = function(zone)
-        if not stats or not stats.sets.ember or zone.weapon ~= "flamefield" or not Alive(hero) then return end
-        ProcVisual(zone.x, zone.y, zone.z, SurvivorConfig.emberBurstModel, zone.radius / 240)
-        local candidates = AreaCandidates(zone.x, zone.y, zone.radius, "ember")
-        for _, u in ipairs(candidates) do
-            if GroundTarget(u) then
-                local dx, dy = GetUnitX(u) - zone.x, GetUnitY(u) - zone.y
-                if dx * dx + dy * dy <= zone.radius ^ 2 then Hit(u, zone.damage * 2, "flamefield", true) end
-            end
-        end
-        ReleaseCandidates(candidates)
-    end
-    SetHit = function(target, amount, weapon, baseAmount)
-        if not stats or not RunSession.IsRunning() or not Alive(hero) then return end
-        local now = RunSession.GetElapsed()
-        if stats.sets.bulwark and HasTag(weapon, "근접") then tagState.meleeUntil = now + 3 end
-        if stats.sets.destroyer and HasTag(weapon, "폭발") then
-            tagState.burstHits = math.min(3, tagState.burstHits + 1)
-            if tagState.burstHits >= 3 and now >= tagState.burstReady then
-                tagState.burstHits, tagState.burstReady = 0, now + 2
-                local x, y, z = ImpactPoint(target)
-                ProcVisual(x, y, z, SurvivorConfig.emberBurstModel, 0.5, weapon)
-                AreaHit({x = x, y = y, z = z, radius = 160, slow = 0, weapon = weapon,
-                    setProc = "tag", enemiesOnly = true}, (baseAmount or amount) * 0.4)
-                if not RunSession.IsRunning() or not Alive(hero) then return end
-            end
-        end
-        if stats.sets.storm and (weapon == "chainlightning" or weapon == "monsoon" or weapon == "thunderorb") then
-            stormHits = math.min(6, stormHits + 1)
-            if stormHits >= 6 and now >= stormReady then
-                stormHits, stormReady = 0, now + 2
-                local victim = Enemy(target) and target or ALICE_GetClosestObject(GetUnitX(hero), GetUnitY(hero), "hsEnemy", 1000, Enemy)
-                if victim then
-                    local x, y, z = ImpactPoint(victim)
-                    ProcVisual(x, y, z, SurvivorConfig.monsoonModel, 1)
-                    Hit(victim, amount, weapon, true)
-                end
-            end
-        elseif stats.sets.frost and Enemy(target) and (weapon == "frostshard" or weapon == "frostnova" or weapon == "blizzard") then
-            local record, slowed = units[target], false
-            for _, slow in pairs(record.slows or {}) do if slow.expires > now then slowed = true end end
-            if not slowed then record.frostHits = 0; frostStackUnits[target] = nil; return end
-            if now < (record.frostReady or 0) then return end
-            record.frostHits = (record.frostHits or 0) + 1
-            frostStackUnits[target] = true
-            if record.frostHits >= 4 then
-                record.frostHits, record.frostReady = 0, now + 5
-                frostStackUnits[target] = nil
-                local x, y, z = ImpactPoint(target)
-                ProcVisual(x, y, z, [[Abilities\Spells\Undead\FrostNova\FrostNovaTarget.mdl]], 0.8)
-                if record.boss then Hit(target, amount, weapon, true)
-                else Freeze(target, 1) end
-            end
-        elseif stats.sets.blade and now >= bladeReady and (weapon == "orbitblade" or weapon == "frontslash" or weapon == "returnblade") then
-            bladeReady = now + 8
-            local x, y = GetUnitX(target), GetUnitY(target)
-            ProcVisual(x, y, Height(x, y) + 65, SurvivorConfig.bladeProcModel, 1.5)
-            local candidates = AreaCandidates(x, y, 220, "bladeSet")
-            for _, u in ipairs(candidates) do
-                if GroundTarget(u) then
-                    local dx, dy = GetUnitX(u) - x, GetUnitY(u) - y
-                    if dx * dx + dy * dy <= 220 ^ 2 then Hit(u, amount * 1.5, weapon, true) end
-                end
-            end
-            ReleaseCandidates(candidates)
-        end
-    end
     -- One mark per enemy stays attached while repeated hits keep refreshing it.
     local function MarkLifetime(mark)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1216,10 +908,10 @@ do
                 local dx, dy = x - object.x, y - object.y
                 local dz = object.spherical and z - object.z or 0
                 if dx * dx + dy * dy + dz * dz <= object.radius ^ 2 then
-                    local damage = HomingDamage(object, ZoneRampDamage(object, u, amount))
+                    local damage = Sets.HomingDamage(object, Sets.ZoneRampDamage(object, u, amount))
                     Hit(u, damage, object.weapon, object.setProc, object.secondary, object.statusScale, object.status)
                     if object.markModel and Enemy(u) then MarkUnit(u, object.markModel, object.pulse + 0.15) end
-                    if object.slow > 0 then Slow(u, object.slow, object.slowDuration, object.weapon) end
+                    if object.slow > 0 then Status.Slow(u, object.slow, object.slowDuration, object.weapon) end
                 end
             end
         end
@@ -1261,44 +953,6 @@ do
         NewZone(weapon, x, y, {radius = 150, duration = 2, pulse = 0.5, slow = 0,
             model = SurvivorConfig.residueModel}, 0, {poison = 1, curse = 0, reaction = 0})
     end
-    -- Putress 4-piece set effects that trigger when a statused enemy dies.
-    StatusDeath = function(dead, record)
-        if not stats or inStatusProc or tagSecondary or not Alive(hero) then return end
-        local now, config = RunSession.GetElapsed(), SurvivorConfig.status
-        local x, y, z = ImpactPoint(dead)
-        local function Nearby(radius, limit)
-            local list, chosen = Candidates(x, y, x, y, radius, "statusDeath"), {}
-            for _, u in ipairs(list) do
-                local distance = (GetUnitX(u) - x) ^ 2 + (GetUnitY(u) - y) ^ 2
-                if u ~= dead and Enemy(u) and distance <= radius * radius then chosen[#chosen + 1] = {unit = u, distance = distance} end
-            end
-            ReleaseCandidates(list)
-            table.sort(chosen, function(a, b) return a.distance < b.distance
-                or a.distance == b.distance and GetHandleId(a.unit) < GetHandleId(b.unit) end)
-            for i = #chosen, (limit or #chosen) + 1, -1 do chosen[i] = nil end
-            return chosen
-        end
-        inStatusProc = true
-        -- Release the reentry guard even when a nested proc fails; a stuck guard
-        -- would silently disable every later status-death set effect.
-        local ok, message = pcall(function()
-            if stats.sets.apothecary and (record.poison or 0) >= 8 and now < (record.poisonUntil or 0) then
-                for _, target in ipairs(Nearby(300, 3)) do
-                    ApplyStatus(target.unit, record.poisonWeapon, {poison = math.floor(record.poison / 2)}, 1)
-                end
-            end
-            if stats and stats.sets.gravewarden and CurseStacks(record) >= config.curseMax and now >= soulReady then
-                soulReady = now + 1
-                ProcVisual(x, y, z, SurvivorConfig.soulBurstModel, 1.2, record.lastWeapon)
-                for _, target in ipairs(Nearby(200)) do
-                    Hit(target.unit, (record.lastHit or 0) * 1.5, record.lastWeapon, true)
-                    if Enemy(target.unit) then ApplyStatus(target.unit, record.lastWeapon, {curse = 1}, 1) end
-                end
-            end
-        end)
-        inStatusProc = false
-        if not ok then error(message, 0) end
-    end
     local function FallMeteor(meteor)
         local dt = ALICE_Config.MIN_INTERVAL
         if not RunSession.IsRunning() or meteor.cleaned then return dt end
@@ -1323,21 +977,6 @@ do
         CreateObject({identifier = "hsFallingPayload", weapon = id, x = x, y = y, z = z + 750, groundZ = z,
             tint = SurvivorConfig.weapons[id].throwTint,
             life = delay, delay = delay, land = land, setProc = setProc, isAnonymous = true, selfInteractions = FallMeteor}, model, scale)
-    end
-    RecordFallingCast = function(id, x, y, z, damage, radius, model, scale)
-        if not stats.sets.bombardier or not HasTag(id, "낙하") then return end
-        local counter = tagState.fall[id] or {hits = 0, ready = 0}
-        tagState.fall[id] = counter
-        counter.hits = math.min(4, counter.hits + 1)
-        local now = RunSession.GetElapsed()
-        if counter.hits < 4 or now < counter.ready then return end
-        counter.hits, counter.ready = 0, now + 4
-        FallPayload(id, x, y, z, 0.65, model, scale, function()
-            if not stats or not stats.sets.bombardier or not RunSession.IsRunning() or not Alive(hero) then return end
-            ProcVisual(x, y, z, SurvivorConfig.meteorImpactModel, 0.45, id)
-            AreaHit({x = x, y = y, z = z, radius = radius * 0.7, slow = 0, weapon = id,
-                setProc = "tag", enemiesOnly = true}, damage * 0.4)
-        end, true)
     end
     local function MoveOrb(orb)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1376,13 +1015,13 @@ do
                         life = 0.2, isAnonymous = true, selfInteractions = ZoneLifetime,
                         lightning = AddLightningEx(orb.weapon == "thunderorb" and "CLPB" or "SPLK", true, px, py, pz, tx, ty, tz)}
                     CreateObject(bolt, SurvivorConfig.chainHitModel, 0.5)
-                    local damage = HomingDamage(orb, orb.damage) * orb.chainFraction
+                    local damage = Sets.HomingDamage(orb, orb.damage) * orb.chainFraction
                     Hit(target, damage, orb.weapon, nil, nil, orb.statusScale)
-                    if PrimaryTagAttack(orb, "연쇄") then
-                        RelayEnd(orb.weapon, Enemy(target) and target or primary, Enemy(target) and damage or HomingDamage(orb, orb.damage))
+                    if Sets.PrimaryTagAttack(orb, "연쇄") then
+                        Sets.RelayEnd(orb.weapon, Enemy(target) and target or primary, Enemy(target) and damage or Sets.HomingDamage(orb, orb.damage))
                     end
-                elseif PrimaryTagAttack(orb, "연쇄") then
-                    RelayEnd(orb.weapon, primary, HomingDamage(orb, orb.damage))
+                elseif Sets.PrimaryTagAttack(orb, "연쇄") then
+                    Sets.RelayEnd(orb.weapon, primary, Sets.HomingDamage(orb, orb.damage))
                 end
             end
         end
@@ -1401,16 +1040,7 @@ do
         local reach = w.summonKind == "archer" and w.range or w.summonKind == "banshee" and 210
             or w.summonKind == "brute" and 160 or 85
         if (tx - summon.x)^2 + (ty - summon.y)^2 > reach^2 then return false end
-        if stats.sets.commander and scale == 1 then
-            local counter = tagState.summon[summon.weapon] or {hits = 0, ready = 0}
-            tagState.summon[summon.weapon] = counter
-            counter.hits = math.min(6, counter.hits + 1)
-            local now = RunSession.GetElapsed()
-            if counter.hits >= 6 and now >= counter.ready then
-                counter.hits, counter.ready = 0, now + 2
-                damage = damage * 2
-            end
-        end
+        damage = Sets.SummonDamage(summon.weapon, damage, scale)
         BlzSetSpecialEffectYaw(summon.visual, Atan2(ty - summon.y, tx - summon.x))
         if BlzPlaySpecialEffect then BlzPlaySpecialEffect(summon.visual, ANIM_TYPE_ATTACK) end
         summon.motion = "attack"
@@ -1434,7 +1064,7 @@ do
         local dt = ALICE_Config.MIN_INTERVAL
         if not RunSession.IsRunning() or summon.cleaned then return dt end
         if not Alive(hero) or summon.life <= 0 then ALICE_Kill(summon); return dt end
-        local w = stats.extraWeapons[summon.weapon]
+        local w = stats.weapons[summon.weapon]
         if not w or not w.enabled then ALICE_Kill(summon); return dt end
         summon.life, summon.attackClock, summon.aiClock = summon.life - dt, summon.attackClock + dt, summon.aiClock - dt
         summon.animationTime = math.max(0, (summon.animationTime or 0) - dt)
@@ -1536,10 +1166,10 @@ do
                 -- Putress scythes curse on the way out and punish cursed enemies on the way back.
                 local status, damage = stats.status and stats.status[blade.weapon], blade.damage
                 if status and blade.returning then
-                    if CurseStacks(units[u]) > 0 then damage = damage * (1 + status.returnBonus) end
+                    if Status.CurseStacks(units[u]) > 0 then damage = damage * (1 + status.returnBonus) end
                     status = {cursedBonus = status.cursedBonus, maxCurseBonus = status.maxCurseBonus, poison = 0, curse = 0, reaction = 0}
                 end
-                Hit(u, PierceDamage(blade, u, damage), blade.weapon, nil, nil, blade.statusScale, status)
+                Hit(u, Sets.PierceDamage(blade, u, damage), blade.weapon, nil, nil, blade.statusScale, status)
             end
         end
         ReleaseCandidates(candidates)
@@ -1560,9 +1190,10 @@ do
         end
         return dt
     end
+    -- Profile-engine casts. shot is nil for the weapon's own cast and carries the
+    -- snapshot for a multicast extra attack.
     function SurvivorCombat.CastExtra(id, shot)
-        local stats = shot and shot.stats or stats
-        local w = stats.extraWeapons[id]
+        local w = shot and shot.weapon or stats.weapons[id]
         if not w or not w.enabled or not RunSession.IsRunning() or not Alive(hero) then return end
         local x, y, z = ImpactPoint(hero)
         local engine = SurvivorConfig.weapons[id].engine
@@ -1594,11 +1225,12 @@ do
         local tx, ty, tz = ImpactPoint(target)
         if engine == "field" or engine == "meteor" then tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot) end
         if not (shot and shot.index) and engine == "meteor" and Enemy(target) then
-            RecordFallingCast(id, tx, ty, tz, w.damage, w.radius, w.throwModel or SurvivorConfig.meteorModel,
+            Sets.RecordFallingCast(id, tx, ty, tz, w.damage, w.radius, w.throwModel or SurvivorConfig.meteorModel,
                 w.falling and (w.throwScale or 1) * 0.6 or 0.7 * w.size)
         end
         if w.falling then
-            local status = stats.status and stats.status[id]
+            -- Only the weapon's own cast splits jars; an extra attack's jar lands whole.
+            local status = not shot and stats.status and stats.status[id]
             local function Land(lx, ly, lz, scale, split)
                 CreateObject({identifier = "hsJarImpact", weapon = id, tint = false, x = lx, y = ly, z = lz, life = 0.5,
                     isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.jarExplosionModel, w.radius / 150)
@@ -1664,13 +1296,13 @@ do
             local u = hit.unit
             if AttackTarget(u) then
                 shard.hitTimes[u] = true
-                Hit(u, PierceDamage(shard, u, shard.damage), shard.weapon or "frostshard", false, shard.secondary, shard.statusScale)
+                Hit(u, Sets.PierceDamage(shard, u, shard.damage), shard.weapon or "frostshard", false, shard.secondary, shard.statusScale)
                 if shard.cleaned or not RunSession.IsRunning() then return dt end
-                if shard.slow > 0 then Slow(u, shard.slow, shard.slowDuration, "frostshard") end
-                if Enemy(u) and shard.evolution == "evolution14" and not shard.secondary then
+                if shard.slow > 0 then Status.Slow(u, shard.slow, shard.slowDuration, "frostshard") end
+                if Enemy(u) and shard.evolution == "lance" and not shard.secondary then
                     local record = units[u]
                     record.spearHits = math.min(3, (record.spearHits or 0) + 1)
-                    if record.spearHits >= 3 and Freeze(u, 0.8) then record.spearHits = 0 end
+                    if record.spearHits >= 3 and Status.Freeze(u, 0.8) then record.spearHits = 0 end
                 end
                 shard.pierces = shard.pierces - 1
                 if shard.pierces <= 0 then ALICE_Kill(shard); return dt end
@@ -1682,10 +1314,10 @@ do
         return dt
     end
     function SurvivorCombat.FireFrostShard(shot)
-        local stats = shot and shot.stats or stats
-        if not RunSession.IsRunning() or not Alive(hero) or not stats.frostEnabled then return end
+        local w = ShotWeapon(shot, "pierce")
+        if not RunSession.IsRunning() or not Alive(hero) or not w.enabled then return end
         local x, y, z = ImpactPoint(hero)
-        local target = ALICE_GetClosestObject(x, y, "hsEnemy", stats.frostRange,
+        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range,
             function(u) return AttackTarget(u) and SurvivorStage.LineClear(x, y, GetUnitX(u), GetUnitY(u)) end)
         if not target then return end
         local tx, ty, tz = ImpactPoint(target)
@@ -1693,25 +1325,25 @@ do
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance < 1 then local yaw = HeroYaw(); dx, dy, dz, distance = math.cos(yaw), math.sin(yaw), 0, 1 end
         dx, dy, dz = dx / distance, dy / distance, dz / distance
-        local count = stats.frostCount or 1
+        local count = w.count or 1
         for k = 1, count do
             -- Extra shards fan out horizontally around the aimed direction.
             local turn = (k - (count + 1) / 2) * 0.17
             local cos, sin = math.cos(turn), math.sin(turn)
             local sx, sy = dx * cos - dy * sin, dx * sin + dy * cos
-            local shard = {identifier = "hsFrostShard", weapon = stats.weaponId, statusScale = stats.statusScale, x = x, y = y, z = z, yaw = 0,
-                dx = sx, dy = sy, dz = dz, speed = stats.frostSpeed,
-                life = stats.frostLifetime, remaining = stats.frostRange, hitRadius = stats.frostHitRadius,
-                damage = stats.frostDamage, pierces = stats.frostPierce, hitTimes = {}, tagExtra = shot and shot.index ~= nil,
-                slow = stats.frostSlow, slowDuration = stats.frostSlowDuration, evolution = stats.frostEvolution,
+            local shard = {identifier = "hsFrostShard", weapon = w.weaponId, statusScale = w.statusScale, x = x, y = y, z = z, yaw = 0,
+                dx = sx, dy = sy, dz = dz, speed = w.speed,
+                life = w.lifetime, remaining = w.range, hitRadius = w.hitRadius,
+                damage = w.damage, pierces = w.pierce, hitTimes = {}, tagExtra = shot and shot.index ~= nil,
+                slow = w.slow, slowDuration = w.slowDuration, evolution = w.evolution,
                 isAnonymous = true, selfInteractions = MoveFrost}
-            CreateObject(shard, stats.model or SurvivorConfig.frostModel, stats.frostScale)
+            CreateObject(shard, w.model or SurvivorConfig.frostModel, w.scale)
             FaceMissile(shard, sx, sy, dz)
         end
     end
     Shatter = function(dead, record)
-        local now = RunSession.GetElapsed()
-        if hitSecondary or stats.frostEvolution ~= "evolution13" or now < shatterReady then return end
+        local now, frost = RunSession.GetElapsed(), stats.weapons.frostshard
+        if hitSecondary or frost.evolution ~= "shatter" or now < shatterReady then return end
         local slowed = false
         for _, slow in pairs(record.slows or {}) do if slow.expires > now then slowed = true end end
         if not slowed then return end
@@ -1738,9 +1370,9 @@ do
             local dx, dy, dz = tx - x, ty - y, tz - z
             local length = math.max(1, math.sqrt(dx^2 + dy^2 + dz^2))
             local shard = {identifier = "hsFrostShard", x = x, y = y, z = z, yaw = 0,
-                dx = dx/length, dy = dy/length, dz = dz/length, speed = stats.frostSpeed, life = 1.5, remaining = 450,
-                hitRadius = 28, damage = stats.frostDamage * 0.35, pierces = 1, hitTimes = {}, secondary = true,
-                slow = stats.frostSlow, slowDuration = 1, isAnonymous = true, selfInteractions = MoveFrost}
+                dx = dx/length, dy = dy/length, dz = dz/length, speed = frost.speed, life = 1.5, remaining = 450,
+                hitRadius = 28, damage = frost.damage * 0.35, pierces = 1, hitTimes = {}, secondary = true,
+                slow = frost.slow, slowDuration = 1, isAnonymous = true, selfInteractions = MoveFrost}
             CreateObject(shard, SurvivorConfig.frostModel, 0.7)
             FaceMissile(shard, dx, dy, dz)
         end
@@ -1749,15 +1381,11 @@ do
         local weapon = SurvivorConfig.weapons[id]
         return weapon and SurvivorConfig.weaponEngines[weapon.engine]
     end
-    -- An engine's own weapon reads stats directly; other weapons on it read stats.views[id].
-    local function ViewOf(id, engine)
-        return engine.weapon == id and stats or stats.views and stats.views[id]
-    end
+    -- shot is nil for the weapon's own cast, or an extra attack's {weapon = snapshot, index}.
     local function DispatchWeapon(id, shot)
         local engine = EngineOf(id)
         if engine.profile then SurvivorCombat.CastExtra(id, shot); return end
-        if not shot and engine.weapon ~= id then shot = {stats = ViewOf(id, engine)} end
-        SurvivorCombat[engine.cast](shot)
+        SurvivorCombat[engine.cast](shot or {weapon = stats.weapons[id]})
     end
     local function ExtraAttack(pending)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1771,67 +1399,29 @@ do
     end
     function SurvivorCombat.CastWeapon(id)
         if not RunSession.IsRunning() or not Alive(hero) then return end
-        local engine = EngineOf(id)
-        if not engine then return end
-        local view = not engine.profile and ViewOf(id, engine)
-        if engine.profile and (not stats.extraWeapons[id] or not stats.extraWeapons[id].enabled)
-            or not engine.profile and not (view and view[engine.enabled]) then return end
+        local engine, w = EngineOf(id), stats.weapons[id]
+        if not engine or not w or not w.enabled then return end
         if engine.volley then
             -- Spawn base and extra blades together; no delayed single-blade casts.
-            SurvivorCombat[engine.cast](view ~= stats and {stats = view} or nil)
+            SurvivorCombat[engine.cast]({weapon = w})
             return
         end
         DispatchWeapon(id)
         if not RunSession.IsRunning() or not stats or stats.multiCount == 0 then return end
+        -- Extra attacks fire from a snapshot: individual projectiles/strikes (single = 1),
+        -- never copies of an entire volley, applying half the status stacks (at least one).
         local snapshot = {}
-        if engine.profile then
-            local copy = {}
-            for key, value in pairs(stats.extraWeapons[id]) do copy[key] = value end
-            copy.damage = copy.damage * stats.multiDamage
-            copy.statusScale = 0.5 -- Extra attacks apply half the status stacks (at least one).
-            snapshot.extraWeapons = {[id] = copy}
-        elseif view ~= stats then
-            for key, value in pairs(view) do snapshot[key] = value end
-            snapshot[engine.damage] = snapshot[engine.damage] * stats.multiDamage
-            if engine.single then snapshot[engine.single] = 1 end
-            snapshot.statusScale = 0.5
-        else
-            for _, key in ipairs(engine.fields) do snapshot[key] = stats[key] end
-            snapshot[engine.damage] = snapshot[engine.damage] * stats.multiDamage
-            -- Add individual projectiles/strikes, not copies of an entire existing volley.
-            if engine.single then snapshot[engine.single] = 1 end
-        end
+        for key, value in pairs(stats.weapons[id]) do snapshot[key] = value end
+        snapshot.damage = snapshot.damage * stats.multiDamage
+        if engine.single then snapshot[engine.single] = 1 end
+        snapshot.statusScale = 0.5
         for i = 1, stats.multiCount do
             local pending = {identifier = "hsExtraAttack", x = GetUnitX(hero), y = GetUnitY(hero), z = 0,
-                weapon = id, shot = {stats = snapshot, index = i}, life = i * 0.18,
+                weapon = id, shot = {weapon = snapshot, index = i}, life = i * 0.18,
                 isAnonymous = true, selfInteractions = ExtraAttack, destroy = DestroyObject}
             objects[pending] = true
             ALICE_Create(pending)
         end
-    end
-    local function MoveEnemyMissile(missile)
-        local dt = ALICE_Config.MIN_INTERVAL
-        if not RunSession.IsRunning() or missile.cleaned then return dt end
-        if not Alive(hero) or not Enemy(missile.source) then ALICE_Kill(missile); return dt end
-        if HostileStopped(missile) then return dt end
-        missile.life = missile.life - dt
-        if missile.life <= 0 then ALICE_Kill(missile); return dt end
-        local hx, hy, hz = ImpactPoint(hero)
-        local dx, dy, dz = missile.vx * dt, missile.vy * dt, missile.vz * dt
-        if not SurvivorStage.LineClear(missile.x, missile.y, missile.x + dx, missile.y + dy) then ALICE_Kill(missile); return dt end
-        local length = dx * dx + dy * dy + dz * dz
-        local t = length > 0 and math.max(0, math.min(1,
-            ((hx - missile.x) * dx + (hy - missile.y) * dy + (hz - missile.z) * dz) / length)) or 0
-        local rx, ry, rz = hx - missile.x - dx * t, hy - missile.y - dy * t, hz - missile.z - dz * t
-        if rx * rx + ry * ry + rz * rz <= 45 * 45 then
-            local source, damage = missile.source, missile.damage
-            ALICE_Kill(missile)
-            HurtHero(source, damage, "원거리 사격", "발사 방향의 옆으로 이동하거나 지형 뒤에서 사선을 끊으세요.")
-            return dt
-        end
-        missile.x, missile.y, missile.z = missile.x + dx, missile.y + dy, missile.z + dz
-        BlzSetSpecialEffectPosition(missile.visual, missile.x, missile.y, missile.z)
-        return dt
     end
     -- Warcraft queues pathing per player, so one owner with hundreds of units stutters.
     -- Spread enemies over allied slots that borrow Neutral Hostile's color; all share one display name.
@@ -1865,421 +1455,11 @@ do
         record.moveX, record.moveY = x, y
         IssuePointOrder(unit, "move", x, y)
     end
-    local function FireEnemyMissile(source, profile)
-        local x, y, z = ImpactPoint(source)
-        local tx, ty, tz = ImpactPoint(hero)
-        local dx, dy, dz = tx - x, ty - y, tz - z
-        local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-        if distance < 1 then return end
-        local speed = profile.projectileSpeed / distance
-        local missile = {identifier = "hsEnemyMissile", x = x, y = y, z = z,
-            vx = dx * speed, vy = dy * speed, vz = dz * speed,
-            source = source, damage = profile.damage * units[source].damageScale, life = 4, yaw = 0,
-            isAnonymous = true, selfInteractions = MoveEnemyMissile}
-        CreateObject(missile, SurvivorConfig.enemyProjectileModel, 0.95)
-        BlzSetSpecialEffectColor(missile.visual, 255, 70, 180)
-        FaceMissile(missile, dx, dy, dz)
-        SetUnitAnimation(source, "attack")
-    end
-    local function ResolveBossBlast(blast)
-        local dt = ALICE_Config.MIN_INTERVAL
-        if not RunSession.IsRunning() or blast.cleaned then return dt end
-        if (not blast.environment and not Enemy(blast.source)) or not Alive(hero) then ALICE_Kill(blast); return dt end
-        if HostileStopped(blast) then return dt end
-        blast.life = blast.life - dt
-        if blast.life > 0 then
-            local c = SurvivorConfig
-            local fraction = 1 - math.min(1, blast.life / c.bossWarningBrightTime)
-            local alpha = math.floor(c.bossWarningAlpha + (c.bossWarningFinalAlpha - c.bossWarningAlpha) * fraction)
-            if blast.warningAlpha ~= alpha then
-                BlzSetSpecialEffectAlpha(blast.markers[1], alpha)
-                blast.warningAlpha = alpha
-            end
-            return dt
-        end
-        local source, x, y, z, radius, damage = blast.source, blast.x, blast.y, blast.z, blast.radius, blast.damage
-        ALICE_Kill(blast)
-        CreateObject({identifier = "hsBossImpact", x = x, y = y, z = z, life = 0.6,
-            isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.bossImpactModel, radius / 240)
-        local dx, dy = GetUnitX(hero) - x, GetUnitY(hero) - y
-        if dx * dx + dy * dy <= radius * radius then
-            HurtHero(source, damage, blast.environment and "지하 분출" or "보스 폭발", "폭발이 확정되기 전에 원 바깥으로 이동하세요.")
-        end
-        return dt
-    end
-    local function WarnBossBlast(x, y, radius, delay, environment)
-        warningUntil = math.max(warningUntil, RunSession.GetElapsed() + delay)
-        local blast = {identifier = "hsBossWarning", x = x, y = y, z = Height(x, y),
-            source = environment and hero or boss, environment = environment,
-            radius = radius, damage = (environment and 35 or SurvivorConfig.bossBlastDamage) * SurvivorConfig.stageDamage[stage] * difficulty.damage,
-            life = delay, markers = {}, isStationary = true, isAnonymous = true,
-            selfInteractions = ResolveBossBlast, destroy = DestroyObject}
-        objects[blast] = true
-        -- One red ground ring sized to the blast radius marks the whole danger area.
-        local marker = AddSpecialEffect(SurvivorConfig.warningRingModel, x, y)
-        blast.markers[1] = marker
-        BlzSetSpecialEffectZ(marker, blast.z + 5)
-        BlzSetSpecialEffectScale(marker, blast.radius / SurvivorConfig.warningRingRadius)
-        local color = SurvivorConfig.warningColors.danger
-        BlzSetSpecialEffectColor(marker, color[1], color[2], color[3])
-        blast.warningAlpha = SurvivorConfig.bossWarningAlpha
-        BlzSetSpecialEffectAlpha(marker, blast.warningAlpha)
-        TrackHostile(blast)
-        ALICE_Create(blast)
-    end
-    function SurvivorCombat.WarnLava()
-        if stage == 2 and RunSession.IsRunning() and Alive(hero) then
-            for _, point in ipairs(SurvivorStage.LavaPoints()) do WarnBossBlast(point.x, point.y, point.radius, 1.8, true) end
-        end
-    end
-    -- Length of the ray from (x, y) along unit (dx, dy) that stays inside the arena.
-    local function ArenaReach(x, y, dx, dy, length)
-        local reach = length
-        if dx > 0 then reach = math.min(reach, (bounds.maxX - 32 - x) / dx)
-        elseif dx < 0 then reach = math.min(reach, (bounds.minX + 32 - x) / dx) end
-        if dy > 0 then reach = math.min(reach, (bounds.maxY - 32 - y) / dy)
-        elseif dy < 0 then reach = math.min(reach, (bounds.minY + 32 - y) / dy) end
-        return math.max(0, reach)
-    end
-    local function SpawnRush(rush)
-        local c = SurvivorConfig.swarmRush
-        for row = 0, c.rows - 1 do
-            for column = 0, c.columns - 1 do
-                local along, side = -row * c.spacing, (column - (c.columns - 1) / 2) * c.spacing
-                local x = rush.ax + rush.ca * along - rush.sa * side
-                local y = rush.ay + rush.sa * along + rush.ca * side
-                if x > bounds.minX and x < bounds.maxX and y > bounds.minY and y < bounds.maxY
-                    and not IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) then
-                    local success, unit = SurvivorCombat.Spawn(false, "melee")
-                    if not success then return end
-                    local record = units[unit]
-                    SetUnitX(unit, x); SetUnitY(unit, y)
-                    SetUnitFacing(unit, rush.angle * bj_RADTODEG)
-                    SetUnitMoveSpeed(unit, c.speed)
-                    record.baseSpeed = GetUnitMoveSpeed(unit)
-                    -- Every rank travels the lane's full length, so the block keeps its shape.
-                    record.rush = {x = x, y = y, endX = x + rush.ca * rush.length, endY = y + rush.sa * rush.length}
-                    record.rushExpires = RunSession.GetElapsed() + c.life
-                    MoveEnemy(unit, record, record.rush.endX, record.rush.endY, 0, true)
-                end
-            end
-        end
-    end
-    local function StepRushWarning(warning)
-        local dt = ALICE_Config.MIN_INTERVAL
-        if not RunSession.IsRunning() or warning.cleaned then return dt end
-        if not Alive(hero) then ALICE_Kill(warning); return dt end
-        if HostileStopped(warning) then return dt end
-        warning.life = warning.life - dt
-        if warning.life > 0 then
-            local c = SurvivorConfig.swarmRush
-            if not warning.bright and warning.life <= c.brightTime then
-                warning.bright = true
-                BlzSetSpecialEffectAlpha(warning.markers[1], c.finalLaneAlpha)
-            end
-            return dt
-        end
-        ALICE_Kill(warning)
-        SpawnRush(warning)
-        return dt
-    end
-    -- The lane passes through the hero's position at warning time; the block starts off screen behind it.
-    function SurvivorCombat.WarnRush()
-        local c = SurvivorConfig.swarmRush
-        if not RunSession.IsRunning() or not Alive(hero) or boss ~= nil or bossDefeated then return false end
-        local cap = math.min(SurvivorConfig.maxEnemies, SurvivorConfig.stageEnemyCaps[stage])
-        if enemyCount + math.ceil(c.rows * c.columns / 2) >= cap then return false end
-        local hx, hy, best = GetUnitX(hero), GetUnitY(hero), nil
-        for _ = 1, 12 do
-            local angle = GetRandomReal(0, 2 * math.pi)
-            local ca, sa = math.cos(angle), math.sin(angle)
-            local back = ArenaReach(hx, hy, -ca, -sa, c.distance)
-            if back >= c.minDistance and not IsTerrainPathable(hx - ca * back, hy - sa * back, PATHING_TYPE_WALKABILITY)
-                and (not best or back > best.back) then
-                best = {angle = angle, back = back}
-                if back >= c.distance - 1 then break end
-            end
-        end
-        if not best then return false end
-        local angle = best.angle
-        local ca, sa = math.cos(angle), math.sin(angle)
-        local forward = ArenaReach(hx, hy, ca, sa, c.distance)
-        local ax, ay, bx, by = hx - ca * best.back, hy - sa * best.back, hx + ca * forward, hy + sa * forward
-        local warning = {identifier = "hsEnemyRushWarning", x = hx, y = hy, z = Height(hx, hy),
-            angle = angle, ca = ca, sa = sa, ax = ax, ay = ay, length = best.back + forward,
-            life = c.warning, markers = {}, isStationary = true, isAnonymous = true,
-            selfInteractions = StepRushWarning, destroy = DestroyObject}
-        objects[warning] = true
-        local danger, width = SurvivorConfig.warningColors.danger, (c.columns - 1) * c.spacing + 2 * c.hitRadius
-        WarningStrip(warning, ax, ay, bx, by, width, danger, c.laneAlpha)
-        for _, side in ipairs({-1, 1}) do
-            local offset = (width / 2 - 2.5) * side
-            local dx, dy = -sa * offset, ca * offset
-            WarningStrip(warning, ax + dx, ay + dy, bx + dx, by + dy, 5, danger, c.edgeAlpha, 6)
-        end
-        -- Arrows along the lane show where the block comes from and where it heads.
-        for distance = c.arrowSpacing / 2, warning.length, c.arrowSpacing do
-            local px, py = ax + ca * distance, ay + sa * distance
-            local arrow = AddSpecialEffect(SurvivorConfig.dashArrowModel, px, py)
-            warning.markers[#warning.markers + 1] = arrow
-            BlzSetSpecialEffectScale(arrow, SurvivorConfig.bossDashArrowScale)
-            BlzSetSpecialEffectYaw(arrow, angle)
-            BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
-        end
-        warningUntil = math.max(warningUntil, RunSession.GetElapsed() + c.warning)
-        SurvivorUI.Alert(c.warning + 1, "|cffff7060무리 돌진|r · 붉은 통로 바깥으로 벗어나세요", 55, "rush")
-        SurvivorUI.Cue("elite")
-        TrackHostile(warning)
-        ALICE_Create(warning)
-        return true
-    end
-    local function ReleaseSpecial(self)
-        local record = units[self.source]
-        if record and record.special == self then
-            record.special = nil
-            record.wasPaused = self.sourceWasPaused
-            if Alive(self.source) then
-                PauseUnit(self.source, frozen or UnitTimeStopped(self.source) or self.sourceWasPaused == true
-                    or (record.freezeUntil ~= nil and record.freezeUntil > RunSession.GetElapsed()))
-            end
-        end
-    end
-    local function SpecialMarker(self, x, y, green)
-        -- Red spell markers outline danger; green ones mark the safe gaps.
-        local effect = AddSpecialEffect(green and SurvivorConfig.specialSafeMarkerModel or SurvivorConfig.specialMarkerModel, x, y)
-        self.markers[#self.markers + 1] = effect
-        BlzSetSpecialEffectScale(effect, green and 0.55 or 0.38)
-        BlzSetSpecialEffectZ(effect, Height(x, y) + 5)
-        return effect
-    end
-    local function ClearMarkers(self)
-        for _, effect in ipairs(self.markers) do DestroyEffect(effect) end
-        self.markers = {}
-    end
-    local function DamageSpecial(self, factor)
-        local name = self.kind == "dash" and (factor < 1 and "돌진 잔불" or "돌진") or "냉기 파동"
-        HurtHero(self.source, self.damage * factor, name, self.kind == "dash" and "돌진 통로의 옆으로 피하고 잔불이 사라질 때까지 접근하지 마세요." or "초록색 표식 사이의 안전한 틈으로 이동하세요.")
-    end
-    local function StepSpecial(self)
-        local dt = ALICE_Config.MIN_INTERVAL
-        if not RunSession.IsRunning() or self.cleaned then return dt end
-        if not Alive(hero) or not Enemy(self.source) then ALICE_Kill(self); return dt end
-        if HostileStopped(self) then return dt end
-        local sourceRecord = units[self.source]
-        if sourceRecord.freezeUntil and sourceRecord.freezeUntil > RunSession.GetElapsed() then return dt end
-        self.elapsed = self.elapsed + dt
-        if self.elapsed < self.delay then return dt end
-        local hx, hy = GetUnitX(hero), GetUnitY(hero)
-        if self.kind == "dash" then
-            if not self.trail then
-                local fraction = math.min(1, (self.elapsed - self.delay) * 900 / self.distance)
-                local nx, ny = self.ax + (self.bx - self.ax) * fraction, self.ay + (self.by - self.ay) * fraction
-                if IsTerrainPathable(nx, ny, PATHING_TYPE_WALKABILITY) then
-                    self.bx, self.by = GetUnitX(self.source), GetUnitY(self.source)
-                    fraction = 1
-                end
-                local ox, oy = GetUnitX(self.source), GetUnitY(self.source)
-                if fraction < 1 or not IsTerrainPathable(nx, ny, PATHING_TYPE_WALKABILITY) then
-                    SetUnitX(self.source, nx); SetUnitY(self.source, ny)
-                end
-                if not self.dashHit and SegmentDistanceSquared(hx, hy, ox, oy, GetUnitX(self.source), GetUnitY(self.source)) <= self.width^2 then
-                    self.dashHit = true; DamageSpecial(self, 1)
-                    if self.cleaned or not Alive(hero) then return dt end
-                end
-                if fraction >= 1 then
-                    if self.elite or self.noTrail then ALICE_Kill(self); return dt end
-                    self.trail, self.expires = true, self.elapsed + 2
-                    ReleaseSpecial(self)
-                    ClearMarkers(self)
-                    for i = 0, 7 do
-                        local x, y = self.ax + (self.bx - self.ax) * i / 7, self.ay + (self.by - self.ay) * i / 7
-                        local effect = AddSpecialEffect([[Abilities\Spells\NightElf\Immolation\ImmolationTarget.mdl]], x, y)
-                        self.markers[#self.markers + 1] = effect
-                        BlzSetSpecialEffectScale(effect, 1.3)
-                    end
-                end
-            else
-                if self.elapsed >= self.expires then ALICE_Kill(self); return dt end
-                if not self.trailHit and SegmentDistanceSquared(hx, hy, self.ax, self.ay, self.bx, self.by) <= self.width^2 then
-                    self.trailHit = true; DamageSpecial(self, 0.5)
-                end
-            end
-        elseif self.kind == "wave" then
-            local radius = 120 + (self.elapsed - self.delay) * 340
-            if radius > self.waveMaxRadius then ALICE_Kill(self); return dt end
-            for i, angle in ipairs(self.angles) do
-                local x, y = self.ax + math.cos(angle) * radius, self.ay + math.sin(angle) * radius
-                BlzSetSpecialEffectPosition(self.markers[i], x, y, Height(x, y) + 55)
-            end
-            local dx, dy = hx - self.ax, hy - self.ay
-            local angle = Atan2(dy, dx) - self.gap
-            local outsideGap = math.abs(Atan2(math.sin(angle), math.cos(angle))) > self.gapWidth / 2
-            if not self.hit and outsideGap and math.abs(math.sqrt(dx * dx + dy * dy) - radius) <= self.width then
-                self.hit = true; DamageSpecial(self, 1)
-            end
-        else -- Three warned chain lanes; the spaces between the lanes stay safe.
-            local hit = false
-            for _, lane in ipairs(self.lanes) do
-                local dx, dy = lane.bx - lane.ax, lane.by - lane.ay
-                local projection = (hx - lane.ax) * dx + (hy - lane.ay) * dy
-                if projection >= 0 and projection <= dx * dx + dy * dy
-                    and SegmentDistanceSquared(hx, hy, lane.ax, lane.ay, lane.bx, lane.by) <= self.width^2 then hit = true end
-            end
-            local source, damage = self.source, self.damage
-            for _, lane in ipairs(self.lanes) do
-                for i = 0, 4 do
-                    local x, y = lane.ax + (lane.bx - lane.ax) * i / 4, lane.ay + (lane.by - lane.ay) * i / 4
-                    CreateObject({identifier = "hsBossChain", x = x, y = y, z = Height(x, y), life = 0.55,
-                        isAnonymous = true, selfInteractions = ZoneLifetime}, [[Doodads\Dungeon\Props\ChainPost\ChainPost.mdl]], 0.5)
-                end
-            end
-            ALICE_Kill(self)
-            if hit and Alive(hero) then HurtHero(source, damage, "사슬 봉쇄", "예고된 줄 사이로 이동하세요. 수색 완료 시 첫 봉쇄의 중앙 줄이 사라집니다.") end
-        end
-        return dt
-    end
-    local function StartSpecial(kind, record, source)
-        source = source or boss
-        local x, y, hx, hy = GetUnitX(source), GetUnitY(source), GetUnitX(hero), GetUnitY(hero)
-        local angle = Atan2(hy - y, hx - x)
-        local self = {identifier = "hsBossSpecial", kind = kind, source = source, elite = record.elite, ax = x, ay = y, x = x, y = y, z = Height(x, y),
-            damage = SurvivorConfig.bossBlastDamage * SurvivorConfig.stageDamage[stage] * difficulty.damage,
-            elapsed = 0, delay = SurvivorConfig.bossBlastDelay, width = kind == "dash" and 100 or 65,
-            markers = {}, isAnonymous = true, selfInteractions = StepSpecial,
-            destroy = function(object) ReleaseSpecial(object); DestroyObject(object) end}
-        if record.elite then self.damage, self.delay, self.width = 26 * record.damageScale, 1.2, 75 end
-        local informed = not record.elite and ((stage == 2 and kind == "dash") or (stage == 3 and kind == "wave") or (stage == 5 and kind == "chains"))
-            and SurvivorExpedition.UseAdvantage(stage)
-        self.noTrail = informed and stage == 2
-        warningUntil = math.max(warningUntil, RunSession.GetElapsed() + self.delay)
-        self.sourceWasPaused = IsUnitPaused(source)
-        record.special = self
-        objects[self] = true
-        IssueImmediateOrder(source, "stop")
-        PauseUnit(source, true)
-        SetUnitFacing(source, angle * bj_RADTODEG)
-        if kind == "dash" then
-            self.distance = math.max(200, math.min(750, math.sqrt((hx - x)^2 + (hy - y)^2)))
-            self.bx = math.max(bounds.minX + 32, math.min(bounds.maxX - 32, x + math.cos(angle) * self.distance))
-            self.by = math.max(bounds.minY + 32, math.min(bounds.maxY - 32, y + math.sin(angle) * self.distance))
-            self.distance = math.max(1, math.sqrt((self.bx - x)^2 + (self.by - y)^2))
-            -- Use the final, arena-clamped route so warnings never point beyond the real dash.
-            local c, dx, dy = SurvivorConfig, self.bx - x, self.by - y
-            local direction = Atan2(dy, dx)
-            local count = record.elite and math.max(1, math.floor((self.distance - c.dashArrowOffset) / c.dashArrowSpacing) + 1)
-                or math.max(1, math.ceil(self.distance / c.dashArrowSpacing))
-            for i = 1, count do
-                local distance = record.elite and math.min(self.distance, c.dashArrowOffset + (i - 1) * c.dashArrowSpacing)
-                    or self.distance * i / count
-                local px, py = x + dx * distance / self.distance, y + dy * distance / self.distance
-                local arrow = AddSpecialEffect(c.dashArrowModel, px, py)
-                self.markers[#self.markers + 1] = arrow
-                BlzSetSpecialEffectScale(arrow, record.elite and c.dashArrowScale or c.bossDashArrowScale)
-                BlzSetSpecialEffectYaw(arrow, direction)
-                BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
-            end
-        elseif kind == "wave" then
-            self.gap, self.gapWidth, self.angles = angle + math.pi / 2, math.pi / 2, {}
-            self.waveMaxRadius = 900
-            if informed and stage == 3 then self.gapWidth = math.pi end
-            for i = 0, 17 do
-                local a = self.gap + self.gapWidth / 2 + (2 * math.pi - self.gapWidth) * i / 17
-                self.angles[#self.angles + 1] = a
-                SpecialMarker(self, x + math.cos(a) * 120, y + math.sin(a) * 120, i == 0 or i == 17)
-            end
-            -- The two rays mark the full safe wedge, including the outer edge of the final wave.
-            for _, side in ipairs({-1, 1}) do
-                local a, reach = self.gap + side * self.gapWidth / 2, self.waveMaxRadius + self.width
-                WarningStrip(self, x, y, x + math.cos(a) * reach, y + math.sin(a) * reach,
-                    8, SurvivorConfig.warningColors.safe, 185, 8)
-            end
-        else
-            self.lanes = {}
-            for offset = -240, 240, 240 do
-                if not (informed and stage == 5 and offset == 0) then
-                    local cx, cy = hx - math.sin(angle) * offset, hy + math.cos(angle) * offset
-                    local lane = {ax = cx - math.cos(angle) * 450, ay = cy - math.sin(angle) * 450,
-                        bx = cx + math.cos(angle) * 450, by = cy + math.sin(angle) * 450}
-                    self.lanes[#self.lanes + 1] = lane
-                    local danger = SurvivorConfig.warningColors.danger
-                    WarningStrip(self, lane.ax, lane.ay, lane.bx, lane.by, self.width * 2, danger, 80)
-                    for _, side in ipairs({-1, 1}) do
-                        local offset = (self.width - 2.5) * side
-                        local dx, dy = -math.sin(angle) * offset, math.cos(angle) * offset
-                        WarningStrip(self, lane.ax + dx, lane.ay + dy, lane.bx + dx, lane.by + dy, 5, danger, 220, 6)
-                    end
-                end
-            end
-        end
-        warningUntil = math.max(warningUntil, RunSession.GetElapsed() + self.delay + 3)
-        TrackHostile(self)
-        ALICE_Create(self)
-    end
-    local function BossPattern(record)
-        local pattern = SurvivorConfig.encounters[stage].pattern
-        record.patternCount = (record.patternCount or 0) + 1
-        if pattern == "cycle" then pattern = ({"dash", "wave", "chains", "cross"})[(record.patternCount - 1) % 4 + 1] end
-        local x, y, delay = GetUnitX(hero), GetUnitY(hero), SurvivorConfig.bossBlastDelay
-        if stage == 4 and (record.patternCount - 1) % 4 == 0 then
-            if not SurvivorExpedition.UseAdvantage(stage) then
-                record.supportAt = RunSession.GetElapsed() + 2
-            end
-        end
-        if stage == 1 and pattern == "target" and SurvivorExpedition.UseAdvantage(stage) then delay = delay + 1 end
-        if pattern == "dash" or pattern == "wave" or pattern == "chains" then
-            StartSpecial(pattern, record)
-        elseif pattern == "target" then
-            WarnBossBlast(x, y, SurvivorConfig.bossBlastRadius, delay)
-        else
-            WarnBossBlast(x, y, 150, delay)
-            for i = 1, 4 do
-                local angle = i * math.pi / 2
-                WarnBossBlast(x + math.cos(angle) * 340, y + math.sin(angle) * 340, 150, delay + 0.4)
-            end
-        end
-    end
     local eliteTraits = {
         {id = "tracker", name = "추격자", color = {255, 145, 70}, model = [[Abilities\Spells\Orc\Bloodlust\BloodlustTarget.mdl]]},
         {id = "guardian", name = "결계지기", color = {90, 160, 255}, model = [[Abilities\Spells\Human\ManaShield\ManaShieldTarget.mdl]]},
         {id = "plague", name = "역병술사", color = {200, 100, 230}, model = [[Abilities\Spells\Undead\DiseaseCloud\DiseaseCloudTarget.mdl]]},
     }
-    local function PlagueStep(self)
-        local dt = ALICE_Config.MIN_INTERVAL
-        if not RunSession.IsRunning() or self.cleaned then return dt end
-        if not Enemy(self.source) or not Alive(hero) then ALICE_Kill(self); return dt end
-        if HostileStopped(self) then return dt end
-        self.elapsed = self.elapsed + dt
-        if self.elapsed < 1.2 then return dt end
-        if self.elapsed >= 6.2 then ALICE_Kill(self); return dt end
-        if not self.visual then
-            self.visual = AddSpecialEffect([[Abilities\Spells\Undead\PlagueCloud\PlagueCloudtarget.mdl]], self.x, self.y)
-            BlzSetSpecialEffectScale(self.visual, 1.5)
-        end
-        if self.elapsed >= self.nextHit then
-            self.nextHit = self.elapsed + 1
-            if (GetUnitX(hero) - self.x)^2 + (GetUnitY(hero) - self.y)^2 <= 160^2 then
-                HurtHero(self.source, self.damage, "역병 장판", "보라색 원 밖으로 이동하거나 역병술사를 먼저 처치하세요.")
-            end
-        end
-        return dt
-    end
-    local function WarnPlague(source, record)
-        local x, y = GetUnitX(hero), GetUnitY(hero)
-        local self = {identifier = "hsEnemyPlague", source = source, x = x, y = y, z = Height(x, y),
-            elapsed = 0, nextHit = 1.2, damage = 12 * record.damageScale, markers = {},
-            isStationary = true, isAnonymous = true, selfInteractions = PlagueStep, destroy = DestroyObject}
-        objects[self] = true
-        for i = 1, 12 do
-            local angle = i * 2 * math.pi / 12
-            local marker = AddSpecialEffect(SurvivorConfig.warningModel, x + math.cos(angle) * 160, y + math.sin(angle) * 160)
-            BlzSetSpecialEffectColor(marker, 230, 70, 220)
-            BlzSetSpecialEffectScale(marker, 0.4)
-            self.markers[#self.markers + 1] = marker
-        end
-        warningUntil = math.max(warningUntil, RunSession.GetElapsed() + 1.2)
-        TrackHostile(self)
-        ALICE_Create(self)
-    end
     function SurvivorCombat.Spawn(elite, kind)
         local c, elapsed = SurvivorConfig, RunSession.GetElapsed() - stageStarted
         local encounter = c.encounters[stage]
@@ -2368,7 +1548,7 @@ do
             color = trait.color
         end
         units[enemy].baseColor = {color[1], color[2], color[3], 255}
-        EnemyColor(enemy, units[enemy])
+        Status.Color(enemy, units[enemy])
         SetUnitMoveSpeed(enemy, math.min(330, (isBoss and c.bossMoveSpeed or profile and profile.speed or c.enemyMoveSpeed * encounter.meleeSpeed)
             * scaling.moveSpeed * difficulty.moveSpeed))
         units[enemy].baseSpeed = GetUnitMoveSpeed(enemy)
@@ -2389,7 +1569,7 @@ do
         SetUnitMoveSpeed(unit, 260); record.baseSpeed = 260
         BlzSetUnitName(unit, "수색 명령을 지닌 전령")
         record.baseColor = {235, 210, 100, 255}
-        EnemyColor(unit, record)
+        Status.Color(unit, record)
         BlzUnitDisableAbility(unit, FourCC("Aatk"), true, true)
         MoveEnemy(unit, record, points[2].x, points[2].y, 0, true)
         return unit
@@ -2398,9 +1578,7 @@ do
     local function ReleaseEnemy(unit)
         local record = units[unit]
         if not record then return end
-        statusUnits[unit] = nil
-        frostStackUnits[unit] = nil
-        poisonUnits[unit] = nil
+        Status.Forget(unit)
         if record.alive then enemyCount = enemyCount - 1; ALICE_RemoveIdentifier(unit, "hsEnemy") end
         if record.cosmetic then DestroyEffect(record.cosmetic) end
         units[unit] = nil
@@ -2564,8 +1742,8 @@ do
                     and not (record.freezeUntil and record.freezeUntil > elapsed) then
                     if record.trait and elapsed >= record.nextTrait then
                         record.nextTrait = elapsed + 8
-                        if record.trait == "tracker" then StartSpecial("dash", record, u)
-                        elseif record.trait == "plague" then WarnPlague(u, record) end
+                        if record.trait == "tracker" then Hazards.StartSpecial("dash", record, u)
+                        elseif record.trait == "plague" then Hazards.WarnPlague(u, record) end
                     end
                     if record.courier then
                         local point = record.courier[record.waypoint]
@@ -2600,7 +1778,7 @@ do
                             if elapsed >= record.nextShot then
                                 record.nextShot = elapsed + profile.interval / record.attackSpeed
                                 SetUnitFacing(u, Atan2(dy, dx) * bj_RADTODEG)
-                                FireEnemyMissile(u, profile)
+                                Hazards.FireEnemyMissile(u, profile)
                             end
                         end
                     else
@@ -2610,7 +1788,7 @@ do
                     if record.boss and elapsed >= record.nextBlast then
                         local enraged = stage == 5 and GetWidgetLife(u) <= BlzGetUnitMaxHP(u) * 0.5
                         record.nextBlast = elapsed + (enraged and 3.5 or SurvivorConfig.bossBlastInterval) / record.attackSpeed
-                        BossPattern(record)
+                        Hazards.BossPattern(record)
                     end
                     if record.boss and record.supportAt and elapsed >= record.supportAt then
                         record.supportAt = nil
@@ -2632,7 +1810,7 @@ do
     end
     function SurvivorCombat.MaintainInventoryPause()
         if not frozen or not inventoryVitals or not Alive(hero) then return end
-        -- Leave the hero's inventory abilities enabled. Freeze movement/vitals
+        -- Leave the hero's inventory abilities enabled. Status.Freeze movement/vitals
         -- separately so native equip/unequip orders still work during the pause.
         inventoryVitals.life = math.min(inventoryVitals.life, GetWidgetLife(hero), BlzGetUnitMaxHP(hero))
         inventoryVitals.mana = math.min(inventoryVitals.mana, GetUnitState(hero, UNIT_STATE_MANA), GetUnitState(hero, UNIT_STATE_MAX_MANA))
@@ -2725,10 +1903,8 @@ do
     local function RemoveEnemy(u)
         local record = units[u]
         if not record or not record.enemy then return end
-        if SurvivorConfig.UnitExists(u) then EnemyColor(u, record, false, true) end
-        statusUnits[u] = nil
-        frostStackUnits[u] = nil
-        poisonUnits[u] = nil
+        if SurvivorConfig.UnitExists(u) then Status.Color(u, record, false, true) end
+        Status.Forget(u)
         if record.cosmetic then DestroyEffect(record.cosmetic); record.cosmetic = nil end
         if record.alive then enemyCount = math.max(0, enemyCount - 1) end
         units[u] = nil
@@ -2826,8 +2002,7 @@ do
         SurvivorCombat.ClearBattlefield()
         stage, stageStarted, enemyCount, boss, bossDefeated, warningUntil = index, elapsed, 0, nil, false, 0
         bonusCount, nextBonusAt = 0, elapsed + SurvivorConfig.bonusProps.firstSpawn
-        stormHits, stormReady, bladeReady = 0, 0, 0
-        tagState = {summon = {}, fall = {}, relay = {}, burstHits = 0, burstReady = 0, meleeUntil = 0}
+        Sets.BeginStage()
         escapeReady = true
         recentDamage = {}
         for _, data in pairs(damageTotals) do data.stageDamage = 0 end
@@ -2839,6 +2014,14 @@ do
         if inventoryVitals then
             inventoryVitals.x, inventoryVitals.y, inventoryVitals.life = GetUnitX(hero), GetUnitY(hero), GetWidgetLife(hero)
         end
+    end
+    -- The extracted modules work on the current run's records, objects and stats.
+    local function AttachModules()
+        local run = {hero = hero, stats = stats, units = units, objects = objects,
+            damageTotals = damageTotals, difficulty = difficulty}
+        Status.Attach(run)
+        Sets.Attach(run)
+        Hazards.Attach(run)
     end
     function SurvivorCombat.Cleanup()
         local errors = {}
@@ -2863,7 +2046,8 @@ do
             if SurvivorConfig.ItemExists(item) then CleanupCall(errors, "bonus item", function() RemoveItem(item) end) end
         end
         local pendingObjects, pendingUnits = objects, units
-        objects, units, statusUnits, frostStackUnits, poisonUnits = {}, {}, {}, {}, {}
+        objects, units = {}, {}
+        AttachModules()
         for object in pairs(pendingObjects) do
             if not CleanupCall(errors, "actor", function() ALICE_Kill(object) end) then
                 -- ALICE_Kill clears its actor only after the object's destroy method.
@@ -2891,14 +2075,12 @@ do
         bonusCount, nextBonusAt = 0, 0
         stage, stageStarted, damageTotals, warningUntil, boss, bossDefeated = 1, 0, {}, 0, nil, false
         difficulty = SurvivorConfig.difficulties.normal
-        stormHits, stormReady, bladeReady = 0, 0, 0
-        tagState = {summon = {}, fall = {}, relay = {}, burstHits = 0, burstReady = 0, meleeUntil = 0}
         escapeReady, escapeUses, eliteSerial = true, 0, 0
         tagSecondary = false
         ward, wardUntil, damageContext, hitSecondary, shatterReady = 0, 0, nil, false, 0
-        -- Run time restarts at zero, so run-clock cooldowns must not survive a run.
-        soulReady, inStatusProc = 0, false
         recentDamage, stageEscapeUses = {}, {}
+        -- Release the old run's references; set and status state restarts with the run clock.
+        AttachModules()
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
     function SurvivorCombat.Init(unit, buildStats, arena, killCallback, deathCallback, difficultyId, bonusCallback)
@@ -2907,6 +2089,7 @@ do
         hero, stats, bounds, onKill, onDeath = unit, buildStats, arena, killCallback, deathCallback
         units[hero] = {enemy = false, alive = true}
         difficulty = assert(SurvivorConfig.difficulties[difficultyId or "normal"], "Invalid combat difficulty")
+        AttachModules()
         onBonus = bonusCallback
         moveOrder, attackOrder = OrderId("move"), OrderId("attack")
         bonusCount, nextBonusAt = 0, RunSession.GetElapsed() + SurvivorConfig.bonusProps.firstSpawn
@@ -2939,7 +2122,7 @@ do
                 if not RunSession.IsRunning() or now < escapeUntil then BlzSetEventDamage(0); return end
                 if UnitTimeStopped(source) then BlzSetEventDamage(0); return end
                 if SurvivorExpedition.RiskActive() and Enemy(source) then damage = damage * 1.25 end
-                if stats.sets.bulwark and now < tagState.meleeUntil then damage = damage * 0.85 end
+                if Sets.MeleeGuard(now) then damage = damage * 0.85 end
                 if ward > 0 and now < wardUntil then
                     local absorbed = math.min(ward, damage)
                     ward, damage = ward - absorbed, damage - absorbed
@@ -2990,10 +2173,8 @@ do
             record.alive = false
             timeStopUnits[dead] = nil
             if record.timeStopUntil then SetUnitTimeScale(dead, 1) end
-            if record.enemy then EnemyColor(dead, record, false) end
-            statusUnits[dead] = nil
-            frostStackUnits[dead] = nil
-            poisonUnits[dead] = nil
+            if record.enemy then Status.Color(dead, record, false) end
+            Status.Forget(dead)
             if record.cosmetic then DestroyEffect(record.cosmetic); record.cosmetic = nil end
             if record.bonus then
                 bonusCount = math.max(0, bonusCount - 1)
@@ -3011,7 +2192,7 @@ do
                 -- A failed death proc must not cancel this kill's reward; report it afterwards.
                 local procOk, procError = true, nil
                 if RunSession.IsRunning() and not purging then
-                    procOk, procError = pcall(function() Shatter(dead, record); StatusDeath(dead, record) end)
+                    procOk, procError = pcall(function() Shatter(dead, record); Sets.StatusDeath(dead, record) end)
                 end
                 -- Finish is deferred to Step; never tear down combat during a Hit loop.
                 -- Report kills while a teardown is pending too; the owner withholds rewards.
@@ -3023,4 +2204,23 @@ do
             end
         end))
     end
+    -- Primitives the extracted modules call. Values that change during a run are getters.
+    local primitives = {
+        Enemy = Enemy, GroundTarget = GroundTarget, UnitTimeStopped = UnitTimeStopped, HostileStopped = HostileStopped,
+        Hit = Hit, AreaHit = AreaHit, HurtHero = HurtHero, Residue = Residue,
+        Candidates = Candidates, AreaCandidates = AreaCandidates, ReleaseCandidates = ReleaseCandidates,
+        ImpactPoint = ImpactPoint, FaceMissile = FaceMissile, ProcVisual = ProcVisual, FallPayload = FallPayload,
+        CreateObject = CreateObject, DestroyObject = DestroyObject, TrackHostile = TrackHostile, ZoneLifetime = ZoneLifetime,
+        WarningStrip = WarningStrip, SegmentDistanceSquared = SegmentDistanceSquared, MoveEnemy = MoveEnemy,
+        TagSecondary = function() return tagSecondary end,
+        Stage = function() return stage end, Boss = function() return boss end,
+        BossDefeated = function() return bossDefeated end, Bounds = function() return bounds end,
+        Frozen = function() return frozen end, EnemyCount = function() return enemyCount end,
+        -- Friendly effects dim while any warning is pending.
+        ExtendWarning = function(untilTime) warningUntil = math.max(warningUntil, untilTime) end,
+    }
+    Status.Bind(primitives)
+    Sets.Bind(primitives)
+    Hazards.Bind(primitives)
+    SurvivorCombat.WarnLava, SurvivorCombat.WarnRush = Hazards.WarnLava, Hazards.WarnRush
 end
