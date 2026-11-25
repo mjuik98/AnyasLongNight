@@ -104,6 +104,51 @@ end
         return catalog;
     } finally { lua.lua_close(state); }
 }
+// Lua 5.3 allows at most 200 active locals per function (LUAI_MAXVARS). Every module's
+// do-block lives in the bundle's main chunk, so a large module can stop the whole map
+// from compiling. Numeric/generic for loops hold three hidden control locals.
+export const luaLocalLimit = 200, luaLocalBudget = 150;
+export function luaLocalPressure(ast) {
+    const results = [];
+    function visit(node) {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (node.type === 'FunctionDeclaration') { analyze(node); return; }
+        for (const key of Object.keys(node)) if (key !== 'loc' && key !== 'range') visit(node[key]);
+    }
+    function analyze(fn) {
+        const name = fn.identifier ? (fn.identifier.name ?? `${fn.identifier.base?.name}${fn.identifier.indexer}${fn.identifier.identifier?.name}`)
+            : '(anonymous)';
+        const entry = {name, line: fn.loc?.start.line ?? 0, max: fn.parameters?.length ?? 0};
+        results.push(entry);
+        block(fn.body, entry.max, entry);
+    }
+    function block(statements, active, entry) {
+        for (const s of statements) {
+            if (s.type === 'LocalStatement') { visit(s.init); active += s.variables.length; }
+            else if (s.type === 'FunctionDeclaration' && s.isLocal) { active += 1; analyze(s); }
+            else if (s.type === 'DoStatement') block(s.body, active, entry);
+            else if (s.type === 'WhileStatement') { visit(s.condition); block(s.body, active, entry); }
+            else if (s.type === 'RepeatStatement') { block(s.body, active, entry); visit(s.condition); }
+            else if (s.type === 'IfStatement') for (const clause of s.clauses) { visit(clause.condition); block(clause.body, active, entry); }
+            else if (s.type === 'ForNumericStatement') { visit([s.start, s.end, s.step]); block(s.body, active + 4, entry); }
+            else if (s.type === 'ForGenericStatement') { visit(s.iterators); block(s.body, active + 3 + s.variables.length, entry); }
+            else visit(s);
+            entry.max = Math.max(entry.max, active);
+        }
+    }
+    const main = {name: '(main chunk)', line: 1, max: 0};
+    results.push(main);
+    block(ast.body, 0, main);
+    return results.sort((a, b) => b.max - a.max);
+}
+function checkLocalBudget(name, text) {
+    const pressure = luaLocalPressure(luaparse.parse(text, {luaVersion: '5.3', locations: true}));
+    for (const entry of pressure) {
+        assert(entry.max <= luaLocalLimit, `${name}:${entry.line} ${entry.name} has ${entry.max} active locals (Lua limit ${luaLocalLimit})`);
+    }
+    return pressure.filter(entry => entry.max > luaLocalBudget).map(entry => `${name}:${entry.line} ${entry.name} ${entry.max}`);
+}
 export function collectSources({profile = 'playtest'} = {}) {
     assert(['development', 'playtest', 'release'].includes(profile), 'Invalid build profile');
     const orderPath = path.join(root, 'build/source-order.json');
@@ -111,7 +156,7 @@ export function collectSources({profile = 'playtest'} = {}) {
     const order = JSON.parse(orderBytes);
     assert.equal(new Set(order).size, order.length, 'Duplicate source');
     assert.equal(order.at(-1), 'src/00_bootstrap/AnyasLongNight.lua');
-    const snapshots = new Map([[orderPath, orderBytes]]);
+    const snapshots = new Map([[orderPath, orderBytes]]), crowded = [];
     const chunks = [firstMarker, `ANYAS_LONG_NIGHT_PROFILE = "${profile}"`,
         '-- Native objects/constants: assets/war3map.w3a, assets/war3map.w3t, assets/war3map.w3u, assets/war3mapMisc.txt.',
         talentLua(loadTalentCatalog(snapshots))];
@@ -120,11 +165,17 @@ export function collectSources({profile = 'playtest'} = {}) {
         const absolute = path.join(root, name), bytes = fs.readFileSync(absolute);
         snapshots.set(absolute, bytes);
         const text = bytes.toString('utf8').replaceAll('\r\n', '\n').trimEnd();
-        luaparse.parse(text, {luaVersion: '5.3'});
+        // Vendor libraries are kept as published; only the hard limit applies to them.
+        const pressure = checkLocalBudget(name, text);
+        if (!name.startsWith('src/05_vendor/')) crowded.push(...pressure);
         chunks.push('-- ===== BEGIN ' + name + ' =====', text, '-- ===== END ' + name + ' =====', '');
     }
     const bundle = chunks.join('\n');
     luaparse.parse(bundle, {luaVersion: '5.3'});
+    // Module do-blocks share the bundle's main chunk: enforce the hard limit there and
+    // report any module function past the headroom budget.
+    checkLocalBudget('bundle', bundle);
+    if (crowded.length) console.warn(`Lua local budget (${luaLocalBudget}/${luaLocalLimit}) exceeded; split the module:`, crowded.join(', '));
     return {bundle, snapshots, count: order.length, profile};
 }
 // Game-interface text overrides GlobalStrings.fdf keys from [FrameDef], the
@@ -1489,6 +1540,65 @@ export function installMapVersion(wts, info, version = mapVersion) {
     for (const [id, text] of strings) assert.equal(after.get(id), expected.get(id) ?? text, 'Map version readback differs: ' + id);
     return updated;
 }
+// The experience curve is owned by assets/war3mapMisc.txt and patched only on request;
+// otherwise the map must already carry it.
+function prepareExperienceCurve(map, snapshots, preparedAssets, options) {
+    const asset = path.join(root, 'assets/war3mapMisc.txt'), source = fs.readFileSync(asset);
+    snapshots.set(asset, source);
+    const constants = map.read('war3mapMisc.txt'), output = installExperienceCurve(constants, source);
+    if (!options.experience) {
+        assert.deepEqual(constants, output, 'Map experience curve differs from assets; run build with --experience-curve');
+        return {entries: new Map(), assets: new Map()};
+    }
+    return {entries: new Map([['war3mapMisc.txt', output]]), assets: new Map()};
+}
+const objectPair = (name, install) => read => new Map([[name, install(read(name), false)],
+    [name.replace('war3map.', 'war3mapSkin.'), install(read(name.replace('war3map.', 'war3mapSkin.')), true)]]);
+const readEntries = (read, names) => new Map(names.map(name => [name, read(name)]));
+// Every tool-managed map patch, in application order.
+// prepare(map, snapshots, preparedAssets, options): the test-map build applies the step and
+//   checks that the assets/ snapshot (as patched by earlier steps) gives the same result;
+//   it returns {entries, assets} for the map and the companion asset files.
+// base: sync:base also applies the step to the editor map through apply(read, map, snapshots),
+//   where read(name) returns the entry as patched by the earlier base steps.
+// option: the build flag that enables a test-map-only step.
+export const mapPatchSteps = [
+    // Normalize new pickup rows before migrations compare assets with the input.
+    // A locked primary can still lack the rows published with an alternate map.
+    {id: 'bonus items', prepare: prepareBonusItems, base: true, apply: objectPair('war3map.w3t', installBonusItems)},
+    {id: 'bonus props', prepare: prepareBonusUnits, base: true,
+        apply: objectPair('war3map.w3u', (bytes, skin) => installEnemyCombatFields(installBonusUnits(bytes, skin)))},
+    {id: 'portrait objects', option: 'portraits', prepare: preparePortraitObjects},
+    {id: 'experience curve', prepare: prepareExperienceCurve},
+    {id: 'gold removal', option: 'removeGold', prepare: prepareGoldRemoval},
+    {id: 'growth objects', prepare: prepareGrowthObjects, base: true,
+        apply: read => installGrowthObjects(readEntries(read, ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.w3t', 'war3mapSkin.w3t']))},
+    {id: 'item tooltips', prepare: prepareItemTooltipCleanup, base: true,
+        apply: read => cleanItemTooltipEntries(readEntries(read, ['war3map.w3t', 'war3mapSkin.w3t', 'war3map.wts']), loadItemTooltipCatalog())},
+    {id: 'UI resources', prepare: (map, snapshots) => ({entries: prepareUIResources(map, snapshots), assets: new Map()}),
+        base: true, apply: (read, map, snapshots) => prepareUIResources(map, snapshots)},
+    {id: 'interface tooltip', prepare: prepareInterfaceTooltip},
+    {id: 'stat details', prepare: prepareStatDetails},
+    {id: 'hero regeneration', prepare: prepareHeroRegeneration},
+    {id: 'native talents', prepare: prepareNativeTalents},
+    {id: 'weapon tooltips', prepare: prepareWeaponTooltips, base: true,
+        apply: read => cleanWeaponTooltipEntries(readEntries(read, ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.wts']), loadWeaponTooltipCatalog())},
+    {id: 'map version', prepare: map => ({entries: new Map([['war3map.wts', installMapVersion(map.read('war3map.wts'), map.read('war3map.w3i'))]]),
+        assets: new Map()}), base: true, apply: read => new Map([['war3map.wts', installMapVersion(read('war3map.wts'), read('war3map.w3i'))]])},
+];
+// Applies the enabled steps in order. Each step sees the assets already patched by the
+// earlier steps; the last version of every touched asset is a companion file of the build.
+export function applyMapPatches(patched, snapshots, options = {}) {
+    const preparedAssets = new Map(), entries = new Map();
+    for (const step of mapPatchSteps) {
+        if (step.option && !options[step.option]) continue;
+        const result = step.prepare(openMap(patched), snapshots, preparedAssets, options);
+        patched = openMap(patched).replace(result.entries);
+        for (const [asset, bytes] of result.assets) preparedAssets.set(asset, bytes);
+        entries.set(step.id, result.entries);
+    }
+    return {patched, entries, companionAssets: preparedAssets};
+}
 export function refreshBase(before, base, bundle) {
     const test = openMap(before), source = openMap(base), changes = new Map();
     assert(test.read('war3map.lua')?.toString('utf8').includes(firstMarker), 'Input must be a AnyasLongNight test map');
@@ -1706,48 +1816,10 @@ function main() {
     let patched = refreshed?.patched ?? map.replace(new Map([
         ['war3map.lua', Buffer.from(script)], ['war3map.wct', editorBundle(map.read('war3map.wct'), bundle)],
     ]));
-    // Normalize new pickup rows before migrations compare assets with the input.
-    // A locked primary can still lack the rows published with an alternate map.
-    const bonusPickups = prepareBonusItems(openMap(patched), snapshots);
-    patched = openMap(patched).replace(bonusPickups.entries);
-    const bonusProps = prepareBonusUnits(openMap(patched), snapshots);
-    patched = openMap(patched).replace(bonusProps.entries);
-    const portraitObjects = portraits ? preparePortraitObjects(openMap(patched), snapshots, bonusProps.assets) : null;
-    if (portraitObjects) patched = openMap(patched).replace(portraitObjects.entries);
-    const experienceAsset = path.join(root, 'assets/war3mapMisc.txt');
-    const experienceSource = fs.readFileSync(experienceAsset);
-    snapshots.set(experienceAsset, experienceSource);
-    const constants = openMap(patched).read('war3mapMisc.txt');
-    const experienceConstants = installExperienceCurve(constants, experienceSource);
-    if (experience) patched = openMap(patched).replace(new Map([['war3mapMisc.txt', experienceConstants]]));
-    else assert.deepEqual(constants, experienceConstants,
-        'Map experience curve differs from assets; run build with --experience-curve');
-    const goldRemoval = removeGold ? prepareGoldRemoval(openMap(patched), snapshots,
-        new Map([...bonusPickups.assets, ...bonusProps.assets, ...(portraitObjects?.assets ?? [])])) : null;
-    if (goldRemoval) patched = openMap(patched).replace(goldRemoval.entries);
-    const growth = prepareGrowthObjects(openMap(patched), snapshots, new Map([...bonusPickups.assets, ...(goldRemoval?.assets ?? [])]));
-    patched = openMap(patched).replace(growth.entries);
-    const grownAssets = new Map([...(goldRemoval?.assets ?? []), ...growth.assets]);
-    const itemTooltips = prepareItemTooltipCleanup(openMap(patched), snapshots, grownAssets);
-    patched = openMap(patched).replace(itemTooltips.entries);
-    const uiResources = prepareUIResources(openMap(patched), snapshots);
-    patched = openMap(patched).replace(uiResources);
-    const interfaceTooltip = prepareInterfaceTooltip(openMap(patched),snapshots,grownAssets);
-    patched = openMap(patched).replace(interfaceTooltip.entries);
-    const statDetails = prepareStatDetails(openMap(patched), snapshots, interfaceTooltip.assets);
-    patched = openMap(patched).replace(statDetails.entries);
-    const regeneration = prepareHeroRegeneration(openMap(patched), snapshots,
-        new Map([...bonusProps.assets, ...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? [])]));
-    patched = openMap(patched).replace(regeneration.entries);
-    const talents = prepareNativeTalents(openMap(patched), snapshots, statDetails.assets);
-    patched = openMap(patched).replace(talents.entries);
-    const weaponTooltips = prepareWeaponTooltips(openMap(patched),snapshots,new Map([...itemTooltips.assets,...talents.assets]));
-    patched = openMap(patched).replace(weaponTooltips.entries);
-    const versioned = openMap(patched);
-    const mapLabel = new Map([['war3map.wts', installMapVersion(versioned.read('war3map.wts'), versioned.read('war3map.w3i'))]]);
-    patched = versioned.replace(mapLabel);
-    const companionAssets = new Map([...bonusPickups.assets, ...bonusProps.assets, ...(portraitObjects?.assets ?? []), ...(goldRemoval?.assets ?? []), ...growth.assets,
-        ...itemTooltips.assets, ...interfaceTooltip.assets, ...statDetails.assets, ...regeneration.assets, ...talents.assets, ...weaponTooltips.assets]);
+    const steps = applyMapPatches(patched, snapshots, {portraits, removeGold, experience});
+    const {companionAssets} = steps;
+    patched = steps.patched;
+    const portraitObjects = steps.entries.get('portrait objects'), goldRemoval = steps.entries.get('gold removal');
     // replace() already compacts its own output; this also drops orphaned data an unchanged input carried in.
     const compactStats = {beforeBytes: patched.length};
     patched = openMap(patched).compact();
@@ -1757,10 +1829,8 @@ function main() {
     validatePortraitObjects(preparedMap, bundle);
     validateGoldRemoval(preparedMap);
     const changedEntries = [...new Set([...(refreshed?.entries ?? ['war3map.lua', 'war3map.wct']),
-        ...(portraitObjects?.entries.keys() ?? []), ...(goldRemoval?.entries.keys() ?? []), ...growth.entries.keys(),
-        ...itemTooltips.entries.keys(), ...uiResources.keys(), ...interfaceTooltip.entries.keys(), ...statDetails.entries.keys(), ...regeneration.entries.keys(), ...bonusProps.entries.keys(), ...talents.entries.keys(), ...weaponTooltips.entries.keys(), ...mapLabel.keys(), ...bonusPickups.entries.keys(),
-        ...(map.read('(listfile)').equals(preparedMap.read('(listfile)')) ? [] : ['(listfile)']),
-        ...(experience ? ['war3mapMisc.txt'] : [])])];
+        ...[...steps.entries.values()].flatMap(entries => [...entries.keys()]),
+        ...(map.read('(listfile)').equals(preparedMap.read('(listfile)')) ? [] : ['(listfile)'])])];
     const preserved = verifyPreserved(original, patched, changedEntries);
     assert.equal(preparedMap.read('war3map.lua').toString('utf8'), script);
     console.log(`Validated ${count} Lua sources; preserved ${preserved} unrelated map entries.`);
@@ -1820,8 +1890,8 @@ function main() {
                 bytes: Buffer.from(JSON.stringify({input, output: actual, profile,
                     inputSha256: digest(original), outputSha256: digest(patched), bundleSha256: digest(bundle),
                     ...(base ? {base: basePath, baseSha256: digest(base), refreshedEntries: refreshed.entries} : {}),
-                    ...(portraitObjects ? {portraitObjects: [...portraitObjects.entries.keys()]} : {}),
-                    ...(goldRemoval ? {goldRemoval: [...goldRemoval.entries.keys()]} : {}),
+                    ...(portraitObjects ? {portraitObjects: [...portraitObjects.keys()]} : {}),
+                    ...(goldRemoval ? {goldRemoval: [...goldRemoval.keys()]} : {}),
                     ...(experience ? {experienceCurve: 'war3mapMisc.txt'} : {}),
                     ...(compactStats.removedBytes ? {compaction: compactStats} : {}),
                     sources: Object.fromEntries([...snapshots].map(([p, b]) => [path.relative(root, p), digest(b)]))}, null, 2) + '\n')}];

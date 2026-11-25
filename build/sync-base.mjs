@@ -1,5 +1,6 @@
 // Synchronize the editor base map's runtime Lua and WCT with the playtest sources.
-// Gameplay unit fields, item RGB, catalog text and the map version label are synchronized too; unrelated entries stay intact.
+// Every map patch marked base in build.mjs mapPatchSteps is applied too, in the same
+// order as the test-map build; unrelated entries stay intact.
 // Usage: npm run sync:base            (back up, patch, compact and publish)
 //        npm run sync:base -- --check (report only; exit 1 if stale or carrying unused data)
 import fs from 'node:fs';
@@ -8,8 +9,7 @@ import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {openMap} from './mpq.mjs';
 import {root, baseMapPath, collectSources, replaceBundle, editorBundle, verifyPreserved, publishTransaction,
-    installBonusUnits, installEnemyCombatFields, installBonusItems, cleanItemTooltipEntries, loadItemTooltipCatalog,
-    cleanWeaponTooltipEntries, loadWeaponTooltipCatalog, installGrowthObjects, prepareUIResources, installMapVersion} from './build.mjs';
+    mapPatchSteps} from './build.mjs';
 
 export function syncBase(base, bundle, snapshots = new Map()) {
     const map = openMap(base);
@@ -18,22 +18,11 @@ export function syncBase(base, bundle, snapshots = new Map()) {
     const changes = new Map([
         ['war3map.lua', Buffer.from(replaceBundle(oldScript.toString('utf8'), bundle))],
         ['war3map.wct', editorBundle(map.read('war3map.wct'), bundle)],
-        ['war3map.w3u', installEnemyCombatFields(installBonusUnits(map.read('war3map.w3u')))],
-        ['war3mapSkin.w3u', installEnemyCombatFields(installBonusUnits(map.read('war3mapSkin.w3u'), true))],
-        ['war3map.w3t', installBonusItems(map.read('war3map.w3t'))],
-        ['war3mapSkin.w3t', installBonusItems(map.read('war3mapSkin.w3t'), true)],
     ]);
-    for (const [name, bytes] of prepareUIResources(map, snapshots)) changes.set(name, bytes);
-    const itemNames = ['war3map.w3t', 'war3mapSkin.w3t', 'war3map.wts'];
-    const items = cleanItemTooltipEntries(new Map(itemNames.map(name => [name, changes.get(name) ?? map.read(name)])), loadItemTooltipCatalog());
-    for (const [name, bytes] of items) changes.set(name, bytes);
-    const weaponNames = ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.wts'];
-    const growthNames = ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.w3t', 'war3mapSkin.w3t'];
-    for (const [name, bytes] of installGrowthObjects(new Map(growthNames.map(name => [name, changes.get(name) ?? map.read(name)]))))
-        changes.set(name, bytes);
-    const weapons = cleanWeaponTooltipEntries(new Map(weaponNames.map(name => [name, changes.get(name) ?? map.read(name)])), loadWeaponTooltipCatalog());
-    for (const [name, bytes] of weapons) changes.set(name, bytes);
-    changes.set('war3map.wts', installMapVersion(changes.get('war3map.wts') ?? map.read('war3map.wts'), map.read('war3map.w3i')));
+    const read = name => changes.get(name) ?? map.read(name);
+    for (const step of mapPatchSteps.filter(step => step.base)) {
+        for (const [name, bytes] of step.apply(read, map, snapshots)) changes.set(name, bytes);
+    }
     // replace() leaves an already-current archive untouched, so compact explicitly as well.
     const patched = openMap(map.replace(changes)).compact();
     const preserved = verifyPreserved(base, patched, [...changes.keys(),

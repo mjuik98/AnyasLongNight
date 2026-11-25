@@ -212,66 +212,57 @@ SurvivorConfig = {
     -- Bezier throws: control point height = distance * arc (clamped); flight time grows with distance.
     throw = {arc = 0.35, minHeight = 120, maxHeight = 320, minFlight = 0.55, maxFlight = 0.8, flightRange = 800,
         model = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
-    -- Core-engine Putress weapons override the engine base values below.
-    weaponBases = {
-        plaguedart = {frostDamage = 18, frostInterval = 1.4, frostSlow = 0, frostSlowDuration = 0},
-        plaguetrail = {zoneDamage = 6, zoneInterval = 4.0, zoneRadius = 200},
-        corrosion = {slashDamage = 30, slashInterval = 2.0, slashRange = 300},
-        deathcoil = {missileDamage = 34, missileInterval = 1.0},
-        soulchain = {chainDamage = 36, chainInterval = 2.4},
-        wraithguard = {bladeDamage = 24},
-        acidvials = {monsoonDamage = 40, monsoonInterval = 3.0, monsoonRadius = 130},
-    },
-    -- Engines name the derived stats fields they read. Profile engines read
-    -- stats.extraWeapons[id]; carry keeps overshoot time so zones never drift.
-    -- weapon = the engine's own weapon whose fields live flat on stats; any other
-    -- weapon on that engine reads the same field names from stats.views[id].
-    -- single = the count field reduced to 1 for each multicast extra attack.
+    -- Every weapon's derived stats live in stats.weapons[id] (SurvivorAugments.Calculate).
+    -- A core engine has its own growth formulas and a base: its reference weapon (Anya's)
+    -- uses the base as is and keeps the engine's default visuals; another weapon on that
+    -- engine overrides some base keys in weaponBases. Profile engines grow every weapon
+    -- from its weaponProfiles entry instead.
+    -- cast = the SurvivorCombat function; single = the count reduced to 1 for each
+    -- multicast extra attack; volley casts base and extra blades together (no snapshot);
+    -- carry keeps overshoot time so zones never drift.
     weaponEngines = {
-        missile = {weapon = "firebolt", cast = "FireMissile", enabled = "missileEnabled", interval = "missileInterval",
-            damage = "missileDamage", single = "missileCount",
-            fields = {"missileEnabled", "missileRange", "missileCount", "missileLifetime", "missileDamage", "missileSpeed", "missileHitRadius", "missileScale", "fireEvolution"}},
-        zone = {weapon = "flamefield", cast = "CreateZone", enabled = "zoneEnabled", interval = "zoneInterval", damage = "zoneDamage", carry = true,
-            fields = {"zoneEnabled", "zoneRadius", "zoneDuration", "zoneDamage", "zonePulse"}},
-        chain = {weapon = "chainlightning", cast = "CastChainLightning", enabled = "chainEnabled", interval = "chainInterval", damage = "chainDamage",
-            fields = {"chainEnabled", "chainDamage", "chainRange", "chainTargets", "chainJumpRange"}},
-        -- Orbit casts its base and extra blades as one volley, so it has no snapshot.
-        orbit = {weapon = "orbitblade", cast = "CastBlades", enabled = "bladeEnabled", interval = "bladeInterval", volley = true},
-        strike = {weapon = "monsoon", cast = "CastMonsoon", enabled = "monsoonEnabled", interval = "monsoonInterval",
-            damage = "monsoonDamage", single = "monsoonCount",
-            fields = {"monsoonEnabled", "monsoonRange", "monsoonCount", "monsoonRadius", "monsoonDelay", "monsoonSpacing", "monsoonDamage"}},
-        cone = {weapon = "frontslash", cast = "CastFrontSlash", enabled = "slashEnabled", interval = "slashInterval", damage = "slashDamage",
-            fields = {"slashEnabled", "slashAngle", "slashRange", "slashSweepTime", "slashDuration", "slashScale", "slashDamage"}},
-        pierce = {weapon = "frostshard", cast = "FireFrostShard", enabled = "frostEnabled", interval = "frostInterval", damage = "frostDamage",
-            fields = {"frostEnabled", "frostRange", "frostSpeed", "frostLifetime", "frostHitRadius", "frostDamage", "frostPierce", "frostSlow", "frostSlowDuration", "frostEvolution", "frostScale"}},
+        missile = {weapon = "firebolt", cast = "FireMissile", single = "count",
+            base = {interval = 0.8, damage = 40, speed = 850, range = 1000, lifetime = 5, hitRadius = 32}},
+        zone = {weapon = "flamefield", cast = "CreateZone", carry = true,
+            base = {interval = 4.0, duration = 3.0, radius = 230, damage = 12, pulse = 0.5}},
+        chain = {weapon = "chainlightning", cast = "CastChainLightning",
+            base = {interval = 2.2, damage = 45, range = 750, jumpRange = 350}},
+        orbit = {weapon = "orbitblade", cast = "CastBlades", volley = true,
+            base = {damage = 30, radius = 180, period = 2.4, hitRadius = 65, hitInterval = 0.45, interval = 5.0, duration = 3.0}},
+        strike = {weapon = "monsoon", cast = "CastMonsoon", single = "count",
+            base = {interval = 3.2, damage = 55, range = 800, radius = 150}},
+        cone = {weapon = "frontslash", cast = "CastFrontSlash",
+            base = {interval = 1.8, damage = 65, range = 320, angle = 100}},
+        pierce = {weapon = "frostshard", cast = "FireFrostShard",
+            base = {interval = 1.6, damage = 30, speed = 650, range = 900, lifetime = 2.0, hitRadius = 45, slow = 0.30, slowDuration = 2.0}},
         nova = {profile = true}, field = {profile = true}, meteor = {profile = true}, summon = {profile = true},
         orb = {profile = true}, boomerang = {profile = true},
     },
-    missileInterval = 0.8, missileDamage = 40, missileSpeed = 850, missileRange = 1000,
-    missileLifetime = 5,
+    -- Core-engine Putress weapons override their engine's base values.
+    weaponBases = {
+        plaguedart = {damage = 18, interval = 1.4, slow = 0, slowDuration = 0},
+        plaguetrail = {damage = 6, interval = 4.0, radius = 200},
+        corrosion = {damage = 30, interval = 2.0, range = 300},
+        deathcoil = {damage = 34, interval = 1.0},
+        soulchain = {damage = 36, interval = 2.4},
+        wraithguard = {damage = 24},
+        acidvials = {damage = 40, interval = 3.0, radius = 130},
+    },
     -- World Z = terrain Z + current fly height + model-relative height.
-    missileLaunchHeight = 70, missileImpactHeight = 60, missileHitRadius = 32,
+    missileLaunchHeight = 70, missileImpactHeight = 60,
     -- Optional rawcode -> body aim height overrides for differently sized models.
     missileImpactHeightByType = {},
     warningModel = [[Abilities\Weapons\FireBallMissile\FireBallMissile.mdl]],
     meteorModel = [[Abilities\Weapons\FireBallMissile\FireBallMissile.mdl]],
     meteorImpactModel = [[Objects\Spawnmodels\Other\NeutralBuildingExplosion\NeutralBuildingExplosion.mdl]],
     missileModel = [[Abilities\Weapons\SearingArrow\SearingArrowMissile.mdl]],
-    zoneInterval = 4.0, zoneDuration = 3.0, zoneRadius = 230, zoneDamage = 12, zonePulse = 0.5,
     zoneModel = "Abilities\\Spells\\Human\\FlameStrike\\FlameStrike1.mdl",
-    chainInterval = 2.2, chainDamage = 45, chainRange = 750, chainJumpRange = 350,
     chainFalloff = 0.85,
     chainHitModel = [[Abilities\Weapons\Bolt\BoltImpact.mdl]],
     chainHitScale = 0.8, chainHitDuration = 0.45,
-    bladeDamage = 30, bladeRadius = 180, bladePeriod = 2.4, bladeHitRadius = 65,
-    bladeHitInterval = 0.45, bladeInterval = 5.0, bladeDuration = 3.0,
     bladeModel = "Abilities\\Weapons\\GlaiveMissile\\GlaiveMissile.mdl",
-    monsoonInterval = 3.2, monsoonDamage = 55, monsoonRange = 800, monsoonRadius = 150,
     monsoonModel = "Abilities\\Spells\\Other\\Monsoon\\MonsoonBoltTarget.mdl",
-    slashInterval = 1.8, slashDamage = 65, slashRange = 320, slashAngle = 100,
     slashModel = "Abilities\\Spells\\Other\\Cleave\\CleaveDamageTarget.mdl",
-    frostInterval = 1.6, frostDamage = 30, frostSpeed = 650, frostRange = 900,
-    frostLifetime = 2.0, frostHitRadius = 45, frostSlow = 0.30, frostSlowDuration = 2.0,
     -- Per-stage multipliers are explicit so balancing does not change weapon rules.
     stageLife = {1, 2.6, 5.0, 8.5, 13.0}, stageDamage = {1, 1.25, 1.5, 1.8, 2.1},
     stageSpawnRates = {1, 1.35, 1.75, 2.2, 2.7}, stageXP = {1, 1.15, 1.3, 1.45, 1.6},
@@ -290,7 +281,8 @@ SurvivorConfig = {
         {ranged = 35, flying = 30, rangedStart = 0, flyingStart = 0,
             meleeSpeed = 1.1, meleeLife = 1.2, meleeName = "사슬 근위병", rangedName = "지배의 강령술사", flyingName = "하수구 망령", bossName = "사슬의 감시자", pattern = "cycle"},
     },
-    extraWeapons = {
+    -- Profile-engine weapons: base values for the shared profile growth formulas.
+    weaponProfiles = {
         banshee = {interval = 7.5, damage = 22, radius = 130, range = 600, duration = 6, speed = 300, pulse = 1.8, slow = 0.25, count = 1, cap = 3},
         shadowarcher = {interval = 7.5, damage = 30, radius = 24, range = 700, duration = 6, speed = 300, pulse = 1.1, slow = 0, count = 1, cap = 3},
         plaguezombie = {interval = 7.5, damage = 12, radius = 70, range = 550, duration = 6, speed = 280, pulse = 1.2, slow = 0, count = 2, cap = 4},
@@ -320,8 +312,13 @@ do
     for id in pairs(c.weapons) do assert(listed[id], "Weapon missing from cast order " .. id) end
     for id, weapon in pairs(c.weapons) do
         local engine = c.weaponEngines[weapon.engine]
-        assert((engine.profile == true) == (c.extraWeapons[id] ~= nil), "Profile engines need an extraWeapons profile " .. id)
+        assert((engine.profile == true) == (c.weaponProfiles[id] ~= nil), "Profile engines need a weaponProfiles entry " .. id)
         assert(engine.profile or engine.weapon == id or c.weaponBases[id], "Core-engine weapon needs base overrides " .. id)
+    end
+    for id, overrides in pairs(c.weaponBases) do
+        local engine = c.weaponEngines[c.weapons[id].engine]
+        assert(not engine.profile and engine.weapon ~= id, "Base overrides belong to a secondary core-engine weapon " .. id)
+        for key in pairs(overrides) do assert(engine.base[key] ~= nil, "Unknown base override " .. id .. "." .. key) end
     end
     for _, profile in pairs(c.heroes) do
         for _, id in ipairs(profile.startingWeapons) do

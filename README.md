@@ -88,6 +88,15 @@ npm run check:base
 
 태그 정의는 `SurvivorConfig.weapons[id].tags`에서 관리하고 `SurvivorAugments.WeaponTags`·`Description`을 통해 시작 선택·성장 카드·보유 툴팁에 반영합니다. 태그별 전용 강화 효과는 아직 없습니다. 투사체 속도 적용 여부는 별도 `projectile` 플래그로 관리합니다.
 
+### 무기 스탯과 진화
+
+모든 무기의 계산된 성능은 `stats.weapons[id]` 한 곳에 같은 필드 이름(`damage`·`interval`·`count`·`range`·`radius` 등)으로 둡니다. 성장 공식은 엔진별로 정해집니다.
+
+- **코어 엔진**(missile·zone·chain·orbit·strike·cone·pierce): 엔진 기준값은 `SurvivorConfig.weaponEngines[engine].base`에 있습니다. 같은 엔진을 쓰는 다른 무기는 `SurvivorConfig.weaponBases`에서 일부 값만 바꿉니다. 엔진의 기준 무기(안야 무기)는 엔진의 기본 연출을 씁니다.
+- **프로필 엔진**(nova·field·meteor·summon·orb·boomerang): 무기별 기준값은 `SurvivorConfig.weaponProfiles`에 있습니다.
+
+진화는 `SurvivorAugments`의 진화 목록에서 정의하며 ID는 `<무기>_<키>`(예: `firebolt_burst`)입니다. `multiply`·`add`·`set`은 해당 무기의 스탯 필드를 바꾸고, `status`는 퓨트리스 상태 효과를, `mode`는 전투 동작(`burst`·`focus`·`pulse`·`guard`·`shatter`·`lance`)을 지정합니다. 전투 코드는 진화 ID가 아니라 `mode`를 읽으므로 진화 순서를 바꿔도 동작이 바뀌지 않습니다.
+
 공격 태그의 글자색은 `SurvivorConfig.weaponTagColors`에서 관리합니다. 유도는 주황, 관통은 하늘색, 근접은 분홍, 장판은 연두, 낙하는 연보라, 폭발은 산호색, 연쇄는 노랑, 소환은 민트색을 사용합니다.
 
 ### 주요 공격 동작
@@ -106,7 +115,7 @@ npm run check:base
 | 역병 좀비 | 지상 근접·중독 |
 | 봉합 실험체 | 지상 범위 내려찍기 |
 
-개체 수 상한·수명·공격 주기는 `SurvivorConfig.extraWeapons`에서 관리합니다.
+개체 수 상한·수명·공격 주기는 `SurvivorConfig.weaponProfiles`에서 관리합니다.
 
 소환수는 유닛 모델을 사용하는 ALICE 공격 보조 배우입니다. 충돌·피격·탱킹 없이 가까운 적을 추적하고, 뒤처지면 영웅에게 합류합니다. 개별 수명이 있으며 반복 시전은 수명 갱신과 빈자리 보충으로 처리합니다. 추가 공격 효과는 기존 소환수의 추가 타격으로 적용합니다.
 
@@ -168,9 +177,11 @@ npm run check:base
 | `src/05_vendor` | ALICE·초기화(TotalInitialization)·디버그(DebugUtils)·핸들 타입(HandleType) 라이브러리 |
 | `src/20_system` | 성장·장비·세션·계측 |
 | `src/30_gameplay` | 전투·스테이지·스토리·수색·UI·네이티브 표시·정지 관리 |
+| `src/30_gameplay/SurvivorCombat*.lua` | 전투 본체(유닛·피해·무기·적 생성·시간 정지·생명주기)와 분리된 상태 이상(`Status`)·세트/태그 효과(`Sets`)·적 공격 패턴(`Hazards`) |
+| `src/30_gameplay/SurvivorUI.lua` 외 | UI 본체와 분리된 화면 효과(`SurvivorScreenEffects`)·기본 HUD 숨김(`SurvivorNativeHUD`)·피해 통계판(`SurvivorDamageBoard`)·자막/알림(`SurvivorSpeech`) |
 | `build/source-order.json` | Lua 소스 결합 순서 |
-| `build/build.mjs` | 소스 결합·문법 검사·테스트 맵 패치·프로필 출력 |
-| `build/check.mjs` | Lua 모의 실행·오브젝트·MPQ 보존 회귀 검사 |
+| `build/build.mjs` | 소스 결합·문법/지역 변수 검사·테스트 맵 패치(`mapPatchSteps`)·프로필 출력 |
+| `build/check.mjs` | 회귀 검사 진입점. `build/check/`의 하네스·Lua 모의(`mocks.mjs`)·주제별 스위트·빌드 도구 검사를 순서대로 실행 |
 | `build/sync-base.mjs` | 편집용 원본 동기화·검사 |
 | `build/mpq.mjs` | 프로젝트 내부 MPQ 읽기·선택 패치·압축 정리 |
 | `assets` | 오브젝트·스킨·문자열·상수·UI 및 지형 스냅샷 |
@@ -189,7 +200,9 @@ npm run check:base
 
 ### 일반 빌드와 원본 동기화
 
-일반 빌드는 기존 테스트 맵을 입력으로 실행 Lua·에디터 WCT와 도구가 관리하는 게임 오브젝트·툴팁을 갱신합니다. 원본 동기화도 Lua 외에 무기·성장 아이템·보급 상자·보상 아이템·적 사거리/충돌·장비 RGB·카탈로그 설명·맵 버전 표기를 처리합니다. 새로운 에셋 변경은 해당 도구의 반영 범위를 확인하고 필요한 양쪽 맵에 별도로 반영합니다.
+일반 빌드는 기존 테스트 맵을 입력으로 실행 Lua·에디터 WCT와 도구가 관리하는 게임 오브젝트·툴팁을 갱신합니다. 도구가 관리하는 맵 패치는 `build/build.mjs`의 `mapPatchSteps` 한 목록에 적용 순서대로 있습니다. 테스트 맵 빌드는 각 단계를 맵과 `assets` 스냅샷에 함께 적용해 결과가 같은지 확인하고, 원본 동기화는 `base: true`인 단계(보상 아이템·보급 상자/적 사거리·충돌·성장 오브젝트·아이템 설명·UI 리소스·무기 설명·맵 버전)를 같은 순서로 적용합니다. 새 패치는 이 목록에 추가하고 원본에도 필요하면 `base`와 `apply`를 지정합니다.
+
+통합 Lua의 모듈 `do` 블록은 모두 메인 청크 안에 있어, 한 블록의 활성 지역 변수가 Lua 한도 200을 넘으면 맵 전체가 컴파일되지 않습니다. 빌드는 한도를 넘으면 중단하고, 프로젝트 모듈이 150을 넘으면 경고합니다(외부 라이브러리는 한도만 검사). 경고가 나오면 해당 모듈을 나눕니다.
 
 작성된 지형·배치와 관계없는 MPQ 항목은 보존합니다. **일반 빌드와 원본 동기화는 항상 압축 정리**하며, `--compact`는 이전 명령과의 호환을 위해 허용합니다. 빈 World Editor 맵에서 프로젝트를 처음 생성하는 도구는 아닙니다.
 
@@ -257,7 +270,8 @@ release/development 빌드의 기본 입력은 정식 테스트 맵입니다. �
 6. 네이티브 String/Texture에 일반 프레임용 가시성 API를 적용하지 않습니다. 인벤토리 덮개·월드 렌더링 프레임과 선택 유닛별 세부 패널을 수동 가시성 복원 대상으로 추가하지 않습니다. 검정 배경의 실제 import 경로는 `AnyasLongNightUI\Black.tga`입니다.
 7. 장면 종료 시 선택 영웅 표시/선택 → 초상화 유닛 제거 → 카메라 복원 → 기본 UI 복원 순서를 유지합니다. 중복·지연 close 콜백이 새 장면을 정리하지 않도록 세대 번호를 확인합니다. Lua `pcall`은 엔진 메모리 오류를 복구하지 못합니다.
 8. 정적 검사·네이티브 모의 실행과 실제 Warcraft III/World Editor 검증을 구분합니다.
-9. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
+9. 새 Lua 모듈은 `build/source-order.json`에 의존 순서대로 추가하고, 그 모듈을 읽는 회귀 스위트의 소스 목록(`build/check/harness.mjs`의 `combat`·`uiModules` 등)에도 넣습니다.
+10. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
 
 AI 에이전트용 추가 지침은 [CLAUDE.md](CLAUDE.md)에 있습니다.
 
