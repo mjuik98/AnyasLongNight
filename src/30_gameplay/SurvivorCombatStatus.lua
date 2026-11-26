@@ -7,10 +7,11 @@ do
     local units, stats, damageTotals = {}, nil, {}
     -- Units whose status needs a tick update; poisoned units; set-frost stack holders.
     local statusUnits, frostStackUnits, poisonUnits = {}, {}, {}
-    local Enemy, Hit, ImpactPoint, ProcVisual, Residue, UnitTimeStopped
+    local Enemy, Hit, ImpactPoint, ProcVisual, Residue, UnitTimeStopped, SetUnitPause
     function SurvivorCombatStatus.Bind(combat)
         Enemy, Hit, ImpactPoint = combat.Enemy, combat.Hit, combat.ImpactPoint
         ProcVisual, Residue, UnitTimeStopped = combat.ProcVisual, combat.Residue, combat.UnitTimeStopped
+        SetUnitPause = combat.SetUnitPause
     end
     -- A run's unit records, derived stats and damage ledger; status bookkeeping restarts.
     function SurvivorCombatStatus.Attach(run)
@@ -79,14 +80,9 @@ do
         if now < (record.freezeImmuneUntil or 0) then return false end
         duration = record.boss and math.min(0.35, duration) or math.min(1, duration)
         record.freezeImmuneUntil = now + (record.boss and 8 or 5)
-        if not record.freezeUntil then
-            if record.special then record.freezeWasPaused = record.special.sourceWasPaused
-            elseif record.timeStopUntil then record.freezeWasPaused = record.timeStopWasPaused
-            else record.freezeWasPaused = IsUnitPaused(target) end
-        end
         record.freezeUntil = now + duration
         statusUnits[target] = true
-        PauseUnit(target, true)
+        SetUnitPause(target, record, "freeze", true)
         EnemyColor(target, record)
         return true
     end
@@ -210,8 +206,8 @@ do
                 frostStackUnits[u] = nil
             else
                 if record.freezeUntil and record.freezeUntil <= now then
-                    PauseUnit(u, UnitTimeStopped(u, now) or record.special ~= nil or record.freezeWasPaused == true)
-                    record.freezeUntil, record.freezeWasPaused = nil, nil
+                    record.freezeUntil = nil
+                    SetUnitPause(u, record, "freeze", false)
                 end
                 if record.slows and Enemy(u) then
                     local strongest, source = 0, nil

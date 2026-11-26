@@ -7,18 +7,19 @@ do
     local hero, units, objects, difficulty = nil, {}, {}, SurvivorConfig.difficulties.normal
     local Alive = SurvivorConfig.UnitLive
     local Height = SurvivorConfig.TerrainZ
-    local Enemy, HostileStopped, UnitTimeStopped, ImpactPoint, FaceMissile, HurtHero
+    local Enemy, HostileStopped, SetUnitPause, UnitTime, ImpactPoint, FaceMissile, HurtHero
     local CreateObject, DestroyObject, TrackHostile, ZoneLifetime, WarningStrip, SegmentDistanceSquared, MoveEnemy
-    local Stage, Boss, BossDefeated, Bounds, Frozen, EnemyCount, ExtendWarning
+    local Stage, Boss, BossDefeated, Bounds, EnemyCount, ExtendWarning
     function SurvivorCombatHazards.Bind(combat)
-        Enemy, HostileStopped, UnitTimeStopped = combat.Enemy, combat.HostileStopped, combat.UnitTimeStopped
+        Enemy, HostileStopped = combat.Enemy, combat.HostileStopped
+        SetUnitPause, UnitTime = combat.SetUnitPause, combat.UnitTime
         ImpactPoint, FaceMissile, HurtHero = combat.ImpactPoint, combat.FaceMissile, combat.HurtHero
         CreateObject, DestroyObject, TrackHostile = combat.CreateObject, combat.DestroyObject, combat.TrackHostile
         ZoneLifetime, WarningStrip, SegmentDistanceSquared = combat.ZoneLifetime, combat.WarningStrip, combat.SegmentDistanceSquared
         MoveEnemy = combat.MoveEnemy
         -- Values the combat owner changes during a run are read when needed.
         Stage, Boss, BossDefeated, Bounds = combat.Stage, combat.Boss, combat.BossDefeated, combat.Bounds
-        Frozen, EnemyCount, ExtendWarning = combat.Frozen, combat.EnemyCount, combat.ExtendWarning
+        EnemyCount, ExtendWarning = combat.EnemyCount, combat.ExtendWarning
     end
     -- A run's hero, unit records, owned objects and difficulty.
     function SurvivorCombatHazards.Attach(run)
@@ -146,7 +147,7 @@ do
                     record.baseSpeed = GetUnitMoveSpeed(unit)
                     -- Every rank travels the lane's full length, so the block keeps its shape.
                     record.rush = {x = x, y = y, endX = x + rush.ca * rush.length, endY = y + rush.sa * rush.length}
-                    record.rushExpires = RunSession.GetElapsed() + c.life
+                    record.rushExpires = UnitTime(record) + c.life
                     MoveEnemy(unit, record, record.rush.endX, record.rush.endY, 0, true)
                 end
             end
@@ -225,11 +226,7 @@ do
         local record = units[self.source]
         if record and record.special == self then
             record.special = nil
-            record.wasPaused = self.sourceWasPaused
-            if Alive(self.source) then
-                PauseUnit(self.source, Frozen() or UnitTimeStopped(self.source) or self.sourceWasPaused == true
-                    or (record.freezeUntil ~= nil and record.freezeUntil > RunSession.GetElapsed()))
-            end
+            SetUnitPause(self.source, record, "special", false, not Alive(self.source))
         end
     end
     local function SpecialMarker(self, x, y, green)
@@ -341,11 +338,10 @@ do
             and SurvivorExpedition.UseAdvantage(stage)
         self.noTrail = informed and stage == 2
         ExtendWarning(RunSession.GetElapsed() + self.delay)
-        self.sourceWasPaused = IsUnitPaused(source)
         record.special = self
         objects[self] = true
         IssueImmediateOrder(source, "stop")
-        PauseUnit(source, true)
+        SetUnitPause(source, record, "special", true)
         SetUnitFacing(source, angle * bj_RADTODEG)
         if kind == "dash" then
             self.distance = math.max(200, math.min(750, math.sqrt((hx - x)^2 + (hy - y)^2)))
@@ -412,7 +408,7 @@ do
         local x, y, delay = GetUnitX(hero), GetUnitY(hero), SurvivorConfig.bossBlastDelay
         if stage == 4 and (record.patternCount - 1) % 4 == 0 then
             if not SurvivorExpedition.UseAdvantage(stage) then
-                record.supportAt = RunSession.GetElapsed() + 2
+                record.supportAt = UnitTime(record) + 2
             end
         end
         if stage == 1 and pattern == "target" and SurvivorExpedition.UseAdvantage(stage) then delay = delay + 1 end

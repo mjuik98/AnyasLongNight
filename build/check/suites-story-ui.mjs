@@ -1787,7 +1787,7 @@ casts={}
 SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 0,0,0 end,
     SpawnBoss=function()return true end,Spawn=function()return true end,
     CastWeapon=function(id)casts[#casts+1]=id end,
-    UpdateWeapons=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
+    UpdateStatus=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
 `, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
 local step=Local(AnyasLongNight.BeginRun,'Step')
 SetLocal(step,'hero',CreateUnit(0,'hero',0,0,0))

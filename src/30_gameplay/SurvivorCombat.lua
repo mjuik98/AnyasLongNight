@@ -144,6 +144,32 @@ do
         local record = units[u]
         return record ~= nil and record.timeStopUntil ~= nil and record.timeStopUntil > (now or RunSession.GetElapsed())
     end
+    -- Each combat pause source names its reason (menu, timeStop, freeze, special, prop);
+    -- a unit stays paused while any holds. The native state from before the first
+    -- reason is restored once the last one ends, so outside pauses survive.
+    -- skipNative only records the reason (a dead unit keeps its last native state).
+    local function SetUnitPause(u, record, reason, active, skipNative)
+        local reasons = record.pauseReasons
+        if active then
+            if not reasons then
+                reasons = {}
+                record.pauseReasons = reasons
+                record.nativePaused = SurvivorConfig.UnitExists(u) and IsUnitPaused(u)
+            end
+            reasons[reason] = true
+        elseif reasons then
+            reasons[reason] = nil
+            if next(reasons) == nil then record.pauseReasons = nil end
+        end
+        if not skipNative and SurvivorConfig.UnitExists(u) then
+            PauseUnit(u, record.pauseReasons ~= nil or record.nativePaused == true)
+        end
+    end
+    -- A unit's own clock: run time minus the time stops it has sat through. Its attack,
+    -- trait, support and rush deadlines are kept on this clock, so a stop never shifts them.
+    local function UnitTime(record, now)
+        return (now or RunSession.GetElapsed()) - (record.stoppedFor or 0)
+    end
     local function HostileStopped(object)
         if not object.hostile then return false end
         -- Keep source-bound motion synchronized with the unit's pause state.
@@ -168,33 +194,25 @@ do
     local function StopUnitTime(u, record, deadline)
         local now = RunSession.GetElapsed()
         if deadline <= now or not Enemy(u) then return end
-        if not record.timeStopUntil then
-            record.timeStopStarted = now
-            if record.special then record.timeStopWasPaused = record.special.sourceWasPaused == true
-            elseif record.freezeUntil then record.timeStopWasPaused = record.freezeWasPaused == true
-            else record.timeStopWasPaused = IsUnitPaused(u) end
-        end
+        if not record.timeStopUntil then record.timeStopStarted = now end
         record.timeStopUntil = deadline
         timeStopUnits[u] = true
-        PauseUnit(u, true)
+        SetUnitPause(u, record, "timeStop", true)
         SetUnitTimeScale(u, 0)
         Status.Color(u, record, true)
         if record.cosmetic then BlzSetSpecialEffectTimeScale(record.cosmetic, 0) end
     end
     local function ReleaseUnitTime(u, record, now)
         local duration = math.max(0, math.min(now, record.timeStopUntil) - record.timeStopStarted)
-        for _, key in ipairs({"nextShot", "nextBlast", "nextTrait", "supportAt", "rushExpires"}) do
-            if record[key] then record[key] = record[key] + duration end
-        end
-        record.wasPaused = record.timeStopWasPaused
+        record.stoppedFor = (record.stoppedFor or 0) + duration
         if SurvivorConfig.UnitExists(u) then Status.Color(u, record, false) end
-        if Alive(u) then
-            PauseUnit(u, frozen or record.timeStopWasPaused == true or record.special ~= nil
-                or (record.freezeUntil ~= nil and record.freezeUntil > now))
+        local alive = Alive(u)
+        SetUnitPause(u, record, "timeStop", false, not alive)
+        if alive then
             SetUnitTimeScale(u, frozen and 0 or 1)
             if record.cosmetic then BlzSetSpecialEffectTimeScale(record.cosmetic, frozen and 0 or 1) end
         end
-        record.timeStopUntil, record.timeStopStarted, record.timeStopWasPaused = nil, nil, nil
+        record.timeStopUntil, record.timeStopStarted = nil, nil
         timeStopUnits[u] = nil
     end
     local function RefreshTimeStopFilter(immediate)
@@ -679,7 +697,7 @@ do
                 hitTimes = {}, isAnonymous = true, selfInteractions = MoveBlade}, w.model or SurvivorConfig.bladeModel, w.scale)
         end
     end
-    function SurvivorCombat.UpdateWeapons(dt)
+    function SurvivorCombat.UpdateStatus(dt)
         if not RunSession.IsRunning() or not Alive(hero) then return end
         if next(bonusItems) ~= nil then UpdateBonusItems(RunSession.GetElapsed()) end
         UpdateTimeStop(RunSession.GetElapsed())
@@ -1542,7 +1560,7 @@ do
             eliteSerial = eliteSerial + 1
             local trait = eliteTraits[(eliteSerial - 1) % #eliteTraits + 1]
             local record = units[enemy]
-            record.trait, record.nextTrait = trait.id, RunSession.GetElapsed() + 3
+            record.trait, record.nextTrait = trait.id, UnitTime(record) + 3
             record.cosmetic = AddSpecialEffectTarget(trait.model, enemy, "origin")
             BlzSetUnitName(enemy, "정예 " .. trait.name .. " · " .. encounter.meleeName)
             color = trait.color
@@ -1705,8 +1723,7 @@ do
                 BlzSetUnitMaxHP(prop, config.hits)
                 SetWidgetLife(prop, config.hits)
                 BlzSetUnitName(prop, config.name)
-                PauseUnit(prop, true)
-                units[prop].wasPaused = true
+                SetUnitPause(prop, units[prop], "prop", true) -- Supplies never move.
                 local marker = AddSpecialEffect(SurvivorConfig.specialSafeMarkerModel, x, y)
                 units[prop].cosmetic = marker
                 BlzSetSpecialEffectScale(marker, 0.55)
@@ -1740,8 +1757,9 @@ do
                 end
                 if record.alive and not record.special and not UnitTimeStopped(u, elapsed)
                     and not (record.freezeUntil and record.freezeUntil > elapsed) then
-                    if record.trait and elapsed >= record.nextTrait then
-                        record.nextTrait = elapsed + 8
+                    local clock = UnitTime(record, elapsed)
+                    if record.trait and clock >= record.nextTrait then
+                        record.nextTrait = clock + 8
                         if record.trait == "tracker" then Hazards.StartSpecial("dash", record, u)
                         elseif record.trait == "plague" then Hazards.WarnPlague(u, record) end
                     end
@@ -1761,7 +1779,7 @@ do
                             rushHits[#rushHits + 1] = u
                         end
                         rush.x, rush.y = x, y
-                        if elapsed >= record.rushExpires or (x - rush.endX)^2 + (y - rush.endY)^2 < 60^2 then
+                        if clock >= record.rushExpires or (x - rush.endX)^2 + (y - rush.endY)^2 < 60^2 then
                             -- A marcher hitting on this scan stays until its damage source is used below.
                             if crossed then record.releaseRush = true else ReleaseEnemy(u) end
                         else MoveEnemy(u, record, rush.endX, rush.endY, 0, true) end
@@ -1775,8 +1793,8 @@ do
                                 record.orderGroup == orderPhase)
                         else
                             if GetUnitCurrentOrder(u) ~= 0 then IssueImmediateOrder(u, "stop") end
-                            if elapsed >= record.nextShot then
-                                record.nextShot = elapsed + profile.interval / record.attackSpeed
+                            if clock >= record.nextShot then
+                                record.nextShot = clock + profile.interval / record.attackSpeed
                                 SetUnitFacing(u, Atan2(dy, dx) * bj_RADTODEG)
                                 Hazards.FireEnemyMissile(u, profile)
                             end
@@ -1785,12 +1803,12 @@ do
                         -- Reissuing an attack during its windup can interrupt the hit.
                         if GetUnitCurrentOrder(u) ~= attackOrder then IssueTargetOrder(u, "attack", hero) end
                     end
-                    if record.boss and elapsed >= record.nextBlast then
+                    if record.boss and clock >= record.nextBlast then
                         local enraged = stage == 5 and GetWidgetLife(u) <= BlzGetUnitMaxHP(u) * 0.5
-                        record.nextBlast = elapsed + (enraged and 3.5 or SurvivorConfig.bossBlastInterval) / record.attackSpeed
+                        record.nextBlast = clock + (enraged and 3.5 or SurvivorConfig.bossBlastInterval) / record.attackSpeed
                         Hazards.BossPattern(record)
                     end
-                    if record.boss and record.supportAt and elapsed >= record.supportAt then
+                    if record.boss and record.supportAt and clock >= record.supportAt then
                         record.supportAt = nil
                         for i = 1, 3 do SurvivorCombat.Spawn(false, i == 3 and "melee" or "ranged") end
                     end
@@ -1842,14 +1860,7 @@ do
         end
         for u, record in pairs(units) do
             if SurvivorConfig.UnitExists(u) then
-                if enable and not frozen then
-                    record.wasPaused = IsUnitPaused(u)
-                    if record.freezeUntil then record.wasPaused = record.freezeWasPaused end
-                    if record.timeStopUntil then record.wasPaused = record.timeStopWasPaused end
-                end
-                PauseUnit(u, (enable and not (interactiveHero and u == hero)) or record.wasPaused == true
-                    or record.special ~= nil or UnitTimeStopped(u)
-                    or (record.freezeUntil ~= nil and record.freezeUntil > RunSession.GetElapsed()))
+                SetUnitPause(u, record, "menu", enable and not (interactiveHero and u == hero))
                 local scale = (enable or UnitTimeStopped(u)) and 0 or 1
                 SetUnitTimeScale(u, scale)
                 if record.cosmetic then BlzSetSpecialEffectTimeScale(record.cosmetic, scale) end
@@ -2207,6 +2218,7 @@ do
     -- Primitives the extracted modules call. Values that change during a run are getters.
     local primitives = {
         Enemy = Enemy, GroundTarget = GroundTarget, UnitTimeStopped = UnitTimeStopped, HostileStopped = HostileStopped,
+        SetUnitPause = SetUnitPause, UnitTime = UnitTime,
         Hit = Hit, AreaHit = AreaHit, HurtHero = HurtHero, Residue = Residue,
         Candidates = Candidates, AreaCandidates = AreaCandidates, ReleaseCandidates = ReleaseCandidates,
         ImpactPoint = ImpactPoint, FaceMissile = FaceMissile, ProcVisual = ProcVisual, FallPayload = FallPayload,
@@ -2215,7 +2227,7 @@ do
         TagSecondary = function() return tagSecondary end,
         Stage = function() return stage end, Boss = function() return boss end,
         BossDefeated = function() return bossDefeated end, Bounds = function() return bounds end,
-        Frozen = function() return frozen end, EnemyCount = function() return enemyCount end,
+        EnemyCount = function() return enemyCount end,
         -- Friendly effects dim while any warning is pending.
         ExtendWarning = function(untilTime) warningUntil = math.max(warningUntil, untilTime) end,
     }

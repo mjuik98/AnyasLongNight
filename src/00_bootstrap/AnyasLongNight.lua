@@ -370,7 +370,7 @@ do
         -- A kill/death callback can request teardown mid-tick; stop advancing this tick.
         Fire(true)
         if not RunSession.IsRunning() then return end
-        SurvivorCombat.UpdateWeapons(dt)
+        SurvivorCombat.UpdateStatus(dt)
         if not RunSession.IsRunning() then return end
         enemyClock, hudClock = enemyClock + dt, hudClock + dt
         SpawnWave(dt, stageElapsed)
