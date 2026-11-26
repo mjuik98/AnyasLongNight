@@ -27,8 +27,10 @@ export const config = 'src/00_bootstrap/SurvivorConfig.lua';
 export const metrics = 'src/20_system/SurvivorMetrics.lua';
 export const augments = 'src/20_system/SurvivorAugments.lua';
 export const combat = ['src/30_gameplay/SurvivorCombatStatus.lua', 'src/30_gameplay/SurvivorCombatSets.lua',
-    'src/30_gameplay/SurvivorCombatHazards.lua', 'src/30_gameplay/SurvivorCombat.lua'];
+    'src/30_gameplay/SurvivorCombatHazards.lua', 'src/30_gameplay/SurvivorCombatSupplies.lua', 'src/30_gameplay/SurvivorCombatHero.lua',
+    'src/30_gameplay/SurvivorCombatEnemies.lua', 'src/30_gameplay/SurvivorCombat.lua'];
 export const uiModules = ['src/30_gameplay/SurvivorScreenEffects.lua', 'src/30_gameplay/SurvivorNativeHUD.lua',
-    'src/30_gameplay/SurvivorDamageBoard.lua', 'src/30_gameplay/SurvivorSpeech.lua', 'src/30_gameplay/SurvivorUI.lua'];
+    'src/30_gameplay/SurvivorDamageBoard.lua', 'src/30_gameplay/SurvivorSpeech.lua',
+    'src/30_gameplay/SurvivorNarrativeUI.lua', 'src/30_gameplay/SurvivorUI.lua'];
 
 export const equipment = 'src/20_system/SurvivorEquipment.lua';

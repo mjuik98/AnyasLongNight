@@ -187,18 +187,24 @@ function Up(fn,key,seen)
 end
 function Local(fn,key) local v,f=Up(fn,key); assert(f,"Missing upvalue "..key); return v end
 function SetLocal(fn,key,v) local _,f,i=Up(fn,key); assert(f,"Missing upvalue "..key); debug.setupvalue(f,i,v) end
+-- The current combat run table (SurvivorCombat's NewRun()): read or set its fields
+-- instead of reaching for individual module locals. Cleanup replaces the table, so
+-- call this again after a cleanup instead of keeping the old reference.
+function CombatRun() return Local(SurvivorCombat.Init,"run") end
+-- The lifecycle's current run record (AnyasLongNight's NewRun()); Start replaces it.
+function LifecycleRun() return Local(AnyasLongNight.NextStage,"run") end
 function NewCombat(weapon)
     world,actors,hits={}, {}, {}; state="RUNNING"; now=0
     local hero=CreateUnit(0,"hero",0,0,0)
     local build=SurvivorAugments.NewBuild(weapon,nil,SurvivorConfig.weapons[weapon].hero)
     SurvivorCombat.Init(hero,build.stats,{minX=-5000,maxX=5000,minY=-5000,maxY=5000},nil,nil,"normal")
     SurvivorCombat.TrackWeapons({weapon})
-    return hero,build,Local(SurvivorCombat.Init,"units")
+    return hero,build,CombatRun().units
 end
 function EnemyAt(units,x,y,fly)
     local u=CreateUnit(12,"enemy",x,y,0); u.flying=fly; u.flyHeight=fly and 300 or 0
     units[u]={enemy=true,alive=true,baseSpeed=220}
-    SetLocal(SurvivorCombat.Counts,"enemyCount",select(1,SurvivorCombat.Counts())+1)
+    CombatRun().enemyCount=select(1,SurvivorCombat.Counts())+1
     return u
 end
 `;

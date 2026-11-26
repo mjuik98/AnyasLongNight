@@ -573,7 +573,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     console.log('PASS fully transparent container texture is imported, listed, byte-verified and preserves unrelated map data');
 }
 {
-    const ui = fs.readFileSync(path.join(root, 'src/30_gameplay/SurvivorUI.lua'), 'utf8');
+    const ui = fs.readFileSync(path.join(root, 'src/30_gameplay/SurvivorNarrativeUI.lua'), 'utf8');
     const match = ui.match(/BlzFrameSetTexture\(introRoot,\s*"((?:\\.|[^"\\])*)"/);
     assert(match, 'The intro backdrop must declare its actual texture path');
     const texturePath = JSON.parse('"' + match[1] + '"');

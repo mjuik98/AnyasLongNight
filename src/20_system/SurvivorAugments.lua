@@ -861,8 +861,7 @@ do
             local label, value, decimals, suffix = row[1], row[2], row[3] or 0, row[4] or ""
             if label == "피해" then
                 suffix = ""
-                if id == "meteor" or id == "plaguejar" then label = "충돌 피해"
-                elseif SurvivorConfig.weapons[id].engine == "summon" then label = "소환 피해" end
+                label = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[id].engine].damageLabel or label
             end
             if level == 0 then
                 if core[row[1]] and type(value) == "number" and value > 0 then
