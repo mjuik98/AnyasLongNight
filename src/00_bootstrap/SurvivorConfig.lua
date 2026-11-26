@@ -10,7 +10,13 @@ SurvivorConfig = {
         {bossStart = 240, duration = 300},
         {bossStart = 240, duration = 300},
     },
-    escapeDuration = 2.5, escapeDistances = {400, 240, 120},
+    -- Shadow escape: a lethal hit instead leaves at least escapeLifeFloor of max HP.
+    escapeDuration = 2.5, escapeDistances = {400, 240, 120}, escapeLifeFloor = 0.30,
+    -- Search reward: heals this fraction of max HP; the overflow becomes a timed ward.
+    searchRecovery = {fraction = 0.25, wardDuration = 12},
+    -- Guardian elites shield nearby enemies; an active risk investigation hits harder and spawns more.
+    eliteGuardian = {radius = 400, damageTaken = 0.70},
+    riskChallenge = {enemyDamage = 1.25, spawnRate = 1.35},
     escapeDepartureModel = [[Abilities\Spells\NightElf\Blink\BlinkCaster.mdl]],
     escapeArrivalModel = [[Abilities\Spells\NightElf\Blink\BlinkTarget.mdl]],
     enemyLife = 100, enemyDamage = 8, enemyMoveSpeed = 220,
@@ -220,22 +226,26 @@ SurvivorConfig = {
     -- cast = the SurvivorCombat function; single = the count reduced to 1 for each
     -- multicast extra attack; volley casts base and extra blades together (no snapshot);
     -- carry keeps overshoot time so zones never drift.
+    -- rewardFields: the stats a boss reward must improve for this engine ("-" = lower is better);
+    -- see SurvivorEquipment HelpfulBossIndex. damageLabel renames 피해 on growth cards.
     weaponEngines = {
-        missile = {weapon = "firebolt", cast = "FireMissile", single = "count",
+        missile = {weapon = "firebolt", cast = "FireMissile", single = "count", rewardFields = {"damage", "count", "range", "-interval"},
             base = {interval = 0.8, damage = 40, speed = 850, range = 1000, lifetime = 5, hitRadius = 32}},
-        zone = {weapon = "flamefield", cast = "CreateZone", carry = true,
+        zone = {weapon = "flamefield", cast = "CreateZone", carry = true, rewardFields = {"damage", "radius", "duration", "-interval"},
             base = {interval = 4.0, duration = 3.0, radius = 230, damage = 12, pulse = 0.5}},
-        chain = {weapon = "chainlightning", cast = "CastChainLightning",
+        chain = {weapon = "chainlightning", cast = "CastChainLightning", rewardFields = {"damage", "targets", "range", "jumpRange", "-interval"},
             base = {interval = 2.2, damage = 45, range = 750, jumpRange = 350}},
-        orbit = {weapon = "orbitblade", cast = "CastBlades", volley = true,
+        orbit = {weapon = "orbitblade", cast = "CastBlades", volley = true, rewardFields = {"damage", "count", "radius", "duration", "-interval"},
             base = {damage = 30, radius = 180, period = 2.4, hitRadius = 65, hitInterval = 0.45, interval = 5.0, duration = 3.0}},
-        strike = {weapon = "monsoon", cast = "CastMonsoon", single = "count",
+        strike = {weapon = "monsoon", cast = "CastMonsoon", single = "count", rewardFields = {"damage", "count", "range", "radius", "-interval"},
             base = {interval = 3.2, damage = 55, range = 800, radius = 150}},
-        cone = {weapon = "frontslash", cast = "CastFrontSlash",
+        cone = {weapon = "frontslash", cast = "CastFrontSlash", rewardFields = {"damage", "range", "angle", "duration", "-interval"},
             base = {interval = 1.8, damage = 65, range = 320, angle = 100}},
-        pierce = {weapon = "frostshard", cast = "FireFrostShard",
+        pierce = {weapon = "frostshard", cast = "FireFrostShard", rewardFields = {"damage", "pierce", "slowDuration", "-interval"},
             base = {interval = 1.6, damage = 30, speed = 650, range = 900, lifetime = 2.0, hitRadius = 45, slow = 0.30, slowDuration = 2.0}},
-        nova = {profile = true}, field = {profile = true}, meteor = {profile = true}, summon = {profile = true},
+        nova = {profile = true}, field = {profile = true},
+        meteor = {profile = true, rewardFields = {"damage", "radius", "range", "-interval"}, damageLabel = "충돌 피해"},
+        summon = {profile = true, damageLabel = "소환 피해"},
         orb = {profile = true}, boomerang = {profile = true},
     },
     -- Core-engine Putress weapons override their engine's base values.
@@ -269,17 +279,34 @@ SurvivorConfig = {
     stageAttackSpeed = {1, 1.04, 1.08, 1.12, 1.16}, stageMoveSpeed = {1, 1.025, 1.05, 1.075, 1.10},
     stageBossLife = {1, 2.5, 4.5, 7.5, 11.0},
     -- Compositions change encounter roles without introducing unverified rawcodes.
+    -- Per-stage rules. Combat, hazards, expedition and stage layout read these fields
+    -- instead of branching on stage numbers:
+    --   search: expedition point layout (count; angles/distance override the spiral; landmark = one study point)
+    --   advantage: the boss mechanic softened by the stage's expedition finding (consumed once)
+    --   riskReward: risk-chest offers (epicChance % per card; 100 = epic only)
+    --   lava (hazard timing), meleeScale, enrage (boss life fraction, blast interval), bossSupport
     encounters = {
         {ranged = 15, flying = 0, rangedStart = 45, flyingStart = 90,
-            meleeSpeed = 1, meleeLife = 1, meleeName = "폐허 배회자", rangedName = "썩은 활잡이", flyingName = "폐허 가고일", bossName = "시체 수집자", pattern = "target"},
+            meleeSpeed = 1, meleeLife = 1, meleeName = "폐허 배회자", rangedName = "썩은 활잡이", flyingName = "폐허 가고일", bossName = "시체 수집자", pattern = "target",
+            search = {count = 3}, advantage = {pattern = "target", blastDelay = 1},
+            riskReward = {label = "희귀 이상", epicChance = 20}},
         {ranged = 45, flying = 10, rangedStart = 15, flyingStart = 90,
-            meleeSpeed = 1.15, meleeLife = 0.85, meleeName = "잿더미 구울", rangedName = "불씨 술사", flyingName = "잿빛 가고일", bossName = "불타는 도살자", pattern = "dash"},
+            meleeSpeed = 1.15, meleeLife = 0.85, meleeName = "잿더미 구울", rangedName = "불씨 술사", flyingName = "잿빛 가고일", bossName = "불타는 도살자", pattern = "dash",
+            search = {count = 4, angles = {2.95, 2.2, 0.95, 0.2}, distance = 1050}, advantage = {special = "dash", noTrail = true},
+            riskReward = {label = "희귀 이상", epicChance = 20}, lava = {first = 35, interval = 22, delay = 1.8}},
         {ranged = 15, flying = 45, rangedStart = 20, flyingStart = 10,
-            meleeSpeed = 1, meleeLife = 1, meleeName = "서리 망령", rangedName = "냉기 강령술사", flyingName = "서리날개 가고일", bossName = "납골당 파수꾼", pattern = "wave"},
+            meleeSpeed = 1, meleeLife = 1, meleeName = "서리 망령", rangedName = "냉기 강령술사", flyingName = "서리날개 가고일", bossName = "납골당 파수꾼", pattern = "wave",
+            search = {count = 1, landmark = true}, advantage = {special = "wave", gapWidth = math.pi},
+            riskReward = {label = "영웅 등급", epicChance = 100}},
         {ranged = 30, flying = 20, rangedStart = 10, flyingStart = 30,
-            meleeSpeed = 0.85, meleeLife = 1.6, meleeName = "해골 추적병", rangedName = "저주의 사수", flyingName = "비명 밴시", bossName = "추적대장", pattern = "cross"},
+            meleeSpeed = 0.85, meleeLife = 1.6, meleeName = "해골 추적병", rangedName = "저주의 사수", flyingName = "비명 밴시", bossName = "추적대장", pattern = "cross",
+            search = {count = 3}, advantage = {cancelsSupport = true}, meleeScale = 1.2,
+            bossSupport = {every = 4, delay = 2, kinds = {"ranged", "ranged", "melee"}},
+            riskReward = {label = "영웅 등급", epicChance = 100}},
         {ranged = 35, flying = 30, rangedStart = 0, flyingStart = 0,
-            meleeSpeed = 1.1, meleeLife = 1.2, meleeName = "사슬 근위병", rangedName = "지배의 강령술사", flyingName = "하수구 망령", bossName = "사슬의 감시자", pattern = "cycle"},
+            meleeSpeed = 1.1, meleeLife = 1.2, meleeName = "사슬 근위병", rangedName = "지배의 강령술사", flyingName = "하수구 망령", bossName = "사슬의 감시자", pattern = "cycle",
+            search = {count = 3}, advantage = {special = "chains", openCenterLane = true}, enrage = {life = 0.5, blastInterval = 3.5},
+            riskReward = {label = "영웅 등급", epicChance = 100}},
     },
     -- Profile-engine weapons: base values for the shared profile growth formulas.
     weaponProfiles = {
@@ -304,6 +331,11 @@ SurvivorConfig = {
 SurvivorConfig.heroes.anya.startingWeapons = SurvivorConfig.startingWeapons
 do
     local c, listed = SurvivorConfig, {}
+    -- Profile engines share one boss-reward stat list unless they name their own.
+    for _, engine in pairs(c.weaponEngines) do
+        engine.rewardFields = engine.rewardFields
+            or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"}
+    end
     for _, id in ipairs(c.weaponOrder) do
         local weapon = assert(c.weapons[id], "Unregistered weapon " .. id)
         assert(c.heroes[weapon.hero] and c.weaponEngines[weapon.engine], "Invalid weapon registry entry " .. id)

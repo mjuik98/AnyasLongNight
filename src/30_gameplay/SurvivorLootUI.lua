@@ -5,6 +5,12 @@ do
     local pendingNotice, lastPending
     local rows, triggers = {}, {}
     local familyIndex, familyButton = 1, nil
+    -- The family list follows the run's hero, so a stale index wraps into range.
+    local function KeepFamily()
+        local families = SurvivorEquipment.CleanupFamilies()
+        familyIndex = (familyIndex - 1) % #families + 1
+        return families[familyIndex]
+    end
     local page, expanded, inventoryOpen, preview = 1, false, false, nil
     local nativeDetailsVisible = false
     local rendered, lastRevision, bagList, bagCount, bagCapacity = {}, nil, {}, 0, 0
@@ -112,7 +118,7 @@ do
         Button(panel, 843, 0.126, 0.14, -0.230, "중복 정리", function()
             if CanManage() and expanded then preview = SurvivorEquipment.PreviewCleanup("duplicate") end
         end)
-        familyButton = Button(panel, 846, 0.126, 0.014, -0.258, "보존: 화염", function()
+        familyButton = Button(panel, 846, 0.126, 0.014, -0.258, "보존", function()
             if CanManage() and expanded then
                 familyIndex = familyIndex % #SurvivorEquipment.CleanupFamilies() + 1
                 preview = nil
@@ -120,7 +126,7 @@ do
         end)
         Button(panel, 847, 0.126, 0.14, -0.258, "나머지 정리", function()
             if CanManage() and expanded then
-                preview = SurvivorEquipment.PreviewCleanup("family", SurvivorEquipment.CleanupFamilies()[familyIndex])
+                preview = SurvivorEquipment.PreviewCleanup("family", KeepFamily())
             end
         end)
         confirm = Button(panel, 844, 0.18, 0.014, -0.286, "", function()
@@ -166,7 +172,7 @@ do
             lastRevision = revision
         end
         if not manage or not expanded then return end
-        Set(familyButton, "text", "보존: " .. SurvivorEquipment.CleanupFamilies()[familyIndex])
+        Set(familyButton, "text", "보존: " .. SurvivorEquipment.FamilyLabel(KeepFamily()))
         if not bagList then
             -- Rendering can run in the local inventory observer; never observe shared bag state here.
             bagList, bagCount, bagCapacity = SurvivorEquipment.ReadBagEntries()
@@ -187,7 +193,7 @@ do
         Set(confirm, "visible", preview ~= nil)
         Set(cancel, "visible", preview ~= nil)
         if preview then
-            Set(confirm, "text", string.format("%s %d개 삭제", preview.kind == "family" and (preview.keepFamily .. " 외") or preview.kind == "common" and "일반" or "중복", #preview.items))
+            Set(confirm, "text", string.format("%s %d개 삭제", preview.kind == "family" and (SurvivorEquipment.FamilyLabel(preview.keepFamily) .. " 외") or preview.kind == "common" and "일반" or "중복", #preview.items))
             Set(confirm, "enabled", #preview.items > 0)
         end
     end

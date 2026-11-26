@@ -452,14 +452,18 @@ do
         local y = vertical and (wall.y1 + wall.y2) / 2 or wall.y1 - 192
         return SurvivorStage.FindPoint(Atan2(y - cy, x - cx), math.sqrt((x - cx)^2 + (y - cy)^2), avoid)
     end
+    -- The one expedition route layout (encounters[index].search); the expedition and
+    -- the stage paths both read it. Without explicit angles/distance, points spiral
+    -- outward from the stage's own quadrant.
     function SurvivorStage.SearchPoints(index)
-        local points, count = {}, ({3, 4, 1, 3, 3})[index]
-        if not count then return points end
-        for i = 1, count do
-            local angle = index == 2 and ({2.95, 2.2, 0.95, 0.2})[i]
+        local points, encounter = {}, SurvivorConfig.encounters[index]
+        local search = encounter and encounter.search
+        if not search then return points end
+        for i = 1, search.count do
+            local angle = search.angles and search.angles[i]
                 or math.pi / 4 + (index - 1) * math.pi / 2 + (i - 1) * 0.85
-            local point = index == 3 and SurvivorStage.LandmarkApproach(points)
-                or SurvivorStage.FindPoint(angle, index == 2 and 1050 or 650 + (i - 1) * 200, points)
+            local point = search.landmark and SurvivorStage.LandmarkApproach(points)
+                or SurvivorStage.FindPoint(angle, search.distance or 650 + (i - 1) * 200, points)
             if point then points[#points + 1] = point end
         end
         return points

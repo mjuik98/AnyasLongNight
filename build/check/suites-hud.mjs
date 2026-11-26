@@ -91,7 +91,7 @@ function BlzCreateFrame(name,parent,priority,context)
 end
 AnyasLongNight.IsStorySummary=function()return false end
 SurvivorEquipment={UIRevision=function()return 1 end,PendingRewardCount=function()return 0 end,
-    PickupMode=function()return '전체'end,CleanupFamilies=function()return {'화염'}end,
+    PickupMode=function()return '전체'end,CleanupFamilies=function()return {'화염'}end,FamilyLabel=function(f)return f end,
     BagEntries=function()return {},0,9 end,ReadBagEntries=function()return {},0,9 end,
     Get=function(id)return {id=id,icon='icon',description='gear'}end,
     Name=function(id)return id end,Summary=function()return 'summary','set'end}

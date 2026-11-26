@@ -116,19 +116,19 @@ do
         "apothecary", "gravewarden", "apprentice", "plaguelab", "forsworn", "grandalchemy",
         "commander", "bombardier", "destroyer", "tracker", "pursuer", "bulwark", "mire", "conductor"}
     local sets = {
-        ember = {name = "스트라솔름 수비대의 유품", prefix = "스트라솔름 수비대의", flavor = "정화의 불길 속에서도 피난처를 지키던 수비대의 유품.", code = "He", weapons = {"firebolt", "flamefield", "meteor"},
+        ember = {name = "스트라솔름 수비대의 유품", prefix = "스트라솔름 수비대의", flavor = "정화의 불길 속에서도 피난처를 지키던 수비대의 유품.", code = "He", firstBonus = {damagePct = 0.15}, weapons = {"firebolt", "flamefield", "meteor"},
             existing = {Head = "Hs04", Chest = "Hs03", Gloves = "Hs05"},
             tiers = {{count = 2, text = "화염 계열 피해 +15%p", bonuses = {}},
                 {count = 4, text = "잿불 발자취 종료 시 장판 피해 200%로 폭발 (지상)", bonuses = {set = {ember = 1}}}}},
-        storm = {name = "성벽 파수꾼의 장구", prefix = "성벽 파수꾼의", flavor = "로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.", code = "Ht", weapons = {"chainlightning", "monsoon", "thunderorb"},
+        storm = {name = "성벽 파수꾼의 장구", prefix = "성벽 파수꾼의", flavor = "로데론 수도의 마지막 성벽을 떠나지 않았던 파수꾼의 장구.", code = "Ht", firstBonus = {speedPct = 0.15}, weapons = {"chainlightning", "monsoon", "thunderorb"},
             existing = {Head = "Hs06"},
             tiers = {{count = 2, text = "번개 계열 쿨다운 13.0% 감소", bonuses = {}},
                 {count = 4, text = "번개 6회 적중마다 추가 낙뢰: 해당 타격 피해 100% (재사용 2초)", bonuses = {set = {storm = 1}}}}},
-        frost = {name = "납골당 기록관의 유물", prefix = "납골당 기록관의", flavor = "스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.", code = "Hi", weapons = {"frostshard", "frostnova", "blizzard"},
+        frost = {name = "납골당 기록관의 유물", prefix = "납골당 기록관의", flavor = "스트라솔름 납골당의 얼어붙은 명부에 사라진 이들의 이름이 남아 있다.", code = "Hi", firstBonus = {slowDuration = 1}, weapons = {"frostshard", "frostnova", "blizzard"},
             existing = {Head = "Hs09", Chest = "Hs08"},
             tiers = {{count = 2, text = "냉기 계열 둔화 지속 +1초", bonuses = {}},
                 {count = 4, text = "둔화 중 냉기 4회 적중: 1초 빙결 (같은 대상은 5초 후 재발동)|n보스는 빙결 대신 해당 타격 피해 100% 추가", bonuses = {set = {frost = 1}}}}},
-        blade = {name = "하수구 순찰병의 장구", prefix = "하수구 순찰병의", flavor = "수도 아래 물길까지 살피던 경비대 순찰병의 장구.", code = "Hb", weapons = {"orbitblade", "frontslash", "returnblade"},
+        blade = {name = "하수구 순찰병의 장구", prefix = "하수구 순찰병의", flavor = "수도 아래 물길까지 살피던 경비대 순찰병의 장구.", code = "Hb", firstBonus = {damagePct = 0.15}, weapons = {"orbitblade", "frontslash", "returnblade"},
             existing = {Gloves = "Hs07", Boots = "Hs13"},
             tiers = {{count = 2, text = "칼날 계열 피해 +15%p", bonuses = {}},
                 {count = 4, text = "칼날 적중 시 원형 검격: 해당 타격 피해 150% (지상·재사용 8초)", bonuses = {set = {blade = 1}}}}},
@@ -259,8 +259,7 @@ do
         local set = sets[id]
         set.pieces = {}
         for _, weapon in ipairs(set.weapons) do
-            set.tiers[1].bonuses[weapon] = set.firstBonus or id == "storm" and {speedPct = 0.15}
-                or id == "frost" and {slowDuration = 1} or {damagePct = 0.15}
+            set.tiers[1].bonuses[weapon] = assert(set.firstBonus, "Set " .. id .. " needs a tier-1 firstBonus")
         end
         for i, part in ipairs(parts) do
             local entry = existingById[set.existing[part.key]]
@@ -417,7 +416,8 @@ do
     function SurvivorEquipment.RollRiskReward()
         local offers, used = {}, {}
         for slot = 1, 3 do
-            local tier = currentStage >= 3 and "epic" or (GetRandomInt(1, 100) <= 20 and "epic" or "rare")
+            local chance = SurvivorConfig.encounters[currentStage].riskReward.epicChance
+            local tier = chance >= 100 and "epic" or (GetRandomInt(1, 100) <= chance and "epic" or "rare")
             local pool = {}
             for _, entry in ipairs(catalog) do
                 if entry.rarity == tier and ForHero(entry) and not used[entry.id]
@@ -609,22 +609,13 @@ do
     -- Rank only the first boss card, after the existing rarity roll. Compare pure
     -- derived stats so cooldown caps and evolution conversions match real combat.
     -- Compared fields per engine; "-" marks a field where lower is better.
-    local rewardFields = {
-        missile = {"damage", "count", "range", "-interval"},
-        zone = {"damage", "radius", "duration", "-interval"},
-        chain = {"damage", "targets", "range", "jumpRange", "-interval"},
-        orbit = {"damage", "count", "radius", "duration", "-interval"},
-        strike = {"damage", "count", "range", "radius", "-interval"},
-        cone = {"damage", "range", "angle", "duration", "-interval"},
-        pierce = {"damage", "pierce", "slowDuration", "-interval"},
-    }
+    -- The stats a boss reward should improve: hero vitals, then each owned weapon's
+    -- engine rewardFields (SurvivorConfig.weaponEngines).
     local function RewardValues(stats)
         local values = {stats.equipmentLife, stats.moveSpeed, stats.regeneration}
         for _, weapon in ipairs(build.weapons) do
-            local fields = rewardFields[SurvivorConfig.weapons[weapon].engine]
             local source = stats.weapons[weapon]
-            for _, field in ipairs(fields or ((weapon == "meteor" or weapon == "plaguejar") and {"damage", "radius", "range", "-interval"}
-                or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"})) do
+            for _, field in ipairs(SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine].rewardFields) do
                 local lower = field:sub(1, 1) == "-"
                 local value = source[lower and field:sub(2) or field] or 0
                 values[#values + 1] = lower and -value or value
@@ -778,10 +769,28 @@ do
         SurvivorEquipment.Reconcile()
         return true
     end
-    local families = {"화염", "번개", "얼음", "칼날", "공용"}
-    function SurvivorEquipment.CleanupFamilies() return families end
+    -- Keep-family choices: the current hero's weapon elements in weapon order, then 공용.
+    function SurvivorEquipment.CleanupFamilies()
+        local heroId, families, seen = build and build.hero or SurvivorConfig.defaultHero, {}, {}
+        for _, weapon in ipairs(SurvivorConfig.weaponOrder) do
+            local profile = SurvivorConfig.weapons[weapon]
+            if profile.hero == heroId and not seen[profile.element] then
+                seen[profile.element] = true
+                families[#families + 1] = profile.element
+            end
+        end
+        families[#families + 1] = "공용"
+        return families
+    end
+    -- Gear wording for a family (얼음 reads 냉기 on equipment).
+    function SurvivorEquipment.FamilyLabel(family)
+        local school = SurvivorConfig.elements[family]
+        return school and school.label or family
+    end
     function SurvivorEquipment.Family(id)
         local entry = assert(byId[id], "Unknown equipment family")
+        -- Attack-tag sets serve both heroes' tagged weapons, whatever their element.
+        if entry.set and sets[entry.set].shared then return "공용" end
         if entry.set then return SurvivorAugments.Get(sets[entry.set].weapons[1]).element end
         for scope in pairs(entry.bonuses) do
             if scope ~= "all" and scope ~= "set" then return SurvivorAugments.Get(scope).element end
@@ -791,7 +800,7 @@ do
     function SurvivorEquipment.PreviewCleanup(kind, keepFamily)
         local result = {kind = kind, keepFamily = keepFamily, items = {}}
         local validFamily = false
-        for _, name in ipairs(families) do if keepFamily == name then validFamily = true end end
+        for _, name in ipairs(SurvivorEquipment.CleanupFamilies()) do if keepFamily == name then validFamily = true end end
         if not hero or (kind ~= "common" and kind ~= "duplicate" and kind ~= "family")
             or (kind == "family" and not validFamily) then return result end
         local kept = {}

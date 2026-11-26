@@ -4,7 +4,7 @@ Warcraft III Lua 기반의 1인용 생존 액션 커스텀 맵입니다. 플레�
 
 스트라솔름 폐허에서 이름 모를 언데드의 흔적을 따라 로데론 수도 하수구까지 수색하고, 그를 지하로 이송하는 하룻밤을 그립니다. 가렉이 깨어나는 포세이큰 왕국 본편으로 이어지는 **창작 외전**이며, 수색 여정·대사·이송 경위를 공식 캠페인의 확정 사건으로 다루지 않습니다.
 
-이 문서는 작업 중인 0.1e 변경(무리 돌진·피격 비네트)까지 반영한 구성과 개발 절차를 정리합니다. 맵에 표시되는 버전은 `build/build.mjs`의 `mapVersion`에서 관리합니다. 플레이어 대상 변경 내역은 [PATCH_NOTES.md](PATCH_NOTES.md)에 기록하고, 과거 구현·검증 이력은 Git 이력에서 확인합니다.
+이 문서는 작업 중인 0.1e 변경(무리 돌진·피격 비네트)까지 반영한 구성과 개발 절차를 정리합니다. 맵에 표시되는 버전은 `build/lib/project.mjs`의 `mapVersion`에서 관리합니다. 플레이어 대상 변경 내역은 [PATCH_NOTES.md](PATCH_NOTES.md)에 기록하고, 과거 구현·검증 이력은 Git 이력에서 확인합니다.
 
 ## 빠른 시작
 
@@ -177,10 +177,11 @@ npm run check:base
 | `src/05_vendor` | ALICE·초기화(TotalInitialization)·디버그(DebugUtils)·핸들 타입(HandleType) 라이브러리 |
 | `src/20_system` | 성장·장비·세션·계측 |
 | `src/30_gameplay` | 전투·스테이지·스토리·수색·UI·네이티브 표시·정지 관리 |
-| `src/30_gameplay/SurvivorCombat*.lua` | 전투 본체(유닛·피해·무기·적 생성·시간 정지·생명주기)와 분리된 상태 이상(`Status`)·세트/태그 효과(`Sets`)·적 공격 패턴(`Hazards`) |
-| `src/30_gameplay/SurvivorUI.lua` 외 | UI 본체와 분리된 화면 효과(`SurvivorScreenEffects`)·기본 HUD 숨김(`SurvivorNativeHUD`)·피해 통계판(`SurvivorDamageBoard`)·자막/알림(`SurvivorSpeech`) |
+| `src/30_gameplay/SurvivorCombat*.lua` | 전투 본체(실행 상태 테이블·객체·피해 판정·무기·시간 정지·생명주기)와 분리된 상태 이상(`Status`)·세트/태그 효과(`Sets`)·적 공격 패턴(`Hazards`)·보급 상자(`Supplies`)·영웅 생존(피해 기록·그림자 탈출·보호막, `Hero`)·적 생성/조종(`Enemies`) |
+| `src/30_gameplay/SurvivorUI.lua` 외 | UI 본체와 분리된 화면 효과(`SurvivorScreenEffects`)·기본 HUD 숨김(`SurvivorNativeHUD`)·피해 통계판(`SurvivorDamageBoard`)·자막/알림(`SurvivorSpeech`)·스토리 장면/수색 준비(`SurvivorNarrativeUI`) |
 | `build/source-order.json` | Lua 소스 결합 순서 |
-| `build/build.mjs` | 소스 결합·문법/지역 변수 검사·테스트 맵 패치(`mapPatchSteps`)·프로필 출력 |
+| `build/build.mjs` | 빌드 CLI(테스트 맵·프로필 출력). `build/lib`의 공개 함수를 다시 내보냄 |
+| `build/lib/*.mjs` | 프로젝트 상수·버전(`project`)·Lua 카탈로그(`catalog`)·소스 결합과 지역 변수 검사(`bundle`)·오브젝트 데이터(`object-data`)·지형/맵 정보(`map-info`)·오브젝트/텍스트 패치(`object-patches`·`text-patches`)·패치 목록(`map-patches`의 `mapPatchSteps`)·원본 지형 가져오기(`base-map`)·게시(`publish`) |
 | `build/check.mjs` | 회귀 검사 진입점. `build/check/`의 하네스·Lua 모의(`mocks.mjs`)·주제별 스위트·빌드 도구 검사를 순서대로 실행 |
 | `build/sync-base.mjs` | 편집용 원본 동기화·검사 |
 | `build/mpq.mjs` | 프로젝트 내부 MPQ 읽기·선택 패치·압축 정리 |
@@ -200,7 +201,7 @@ npm run check:base
 
 ### 일반 빌드와 원본 동기화
 
-일반 빌드는 기존 테스트 맵을 입력으로 실행 Lua·에디터 WCT와 도구가 관리하는 게임 오브젝트·툴팁을 갱신합니다. 도구가 관리하는 맵 패치는 `build/build.mjs`의 `mapPatchSteps` 한 목록에 적용 순서대로 있습니다. 테스트 맵 빌드는 각 단계를 맵과 `assets` 스냅샷에 함께 적용해 결과가 같은지 확인하고, 원본 동기화는 `base: true`인 단계(보상 아이템·보급 상자/적 사거리·충돌·성장 오브젝트·아이템 설명·UI 리소스·무기 설명·맵 버전)를 같은 순서로 적용합니다. 새 패치는 이 목록에 추가하고 원본에도 필요하면 `base`와 `apply`를 지정합니다.
+일반 빌드는 기존 테스트 맵을 입력으로 실행 Lua·에디터 WCT와 도구가 관리하는 게임 오브젝트·툴팁을 갱신합니다. 도구가 관리하는 맵 패치는 `build/lib/map-patches.mjs`의 `mapPatchSteps` 한 목록에 적용 순서대로 있습니다. 테스트 맵 빌드는 각 단계를 맵과 `assets` 스냅샷에 함께 적용해 결과가 같은지 확인하고, 원본 동기화는 `base: true`인 단계(보상 아이템·보급 상자/적 사거리·충돌·성장 오브젝트·아이템 설명·UI 리소스·무기 설명·맵 버전)를 같은 순서로 적용합니다. 새 패치는 이 목록에 추가하고 원본에도 필요하면 `base`와 `apply`를 지정합니다.
 
 통합 Lua의 모듈 `do` 블록은 모두 메인 청크 안에 있어, 한 블록의 활성 지역 변수가 Lua 한도 200을 넘으면 맵 전체가 컴파일되지 않습니다. 빌드는 한도를 넘으면 중단하고, 프로젝트 모듈이 150을 넘으면 경고합니다(외부 라이브러리는 한도만 검사). 경고가 나오면 해당 모듈을 나눕니다.
 
@@ -271,7 +272,9 @@ release/development 빌드의 기본 입력은 정식 테스트 맵입니다. �
 7. 장면 종료 시 선택 영웅 표시/선택 → 초상화 유닛 제거 → 카메라 복원 → 기본 UI 복원 순서를 유지합니다. 중복·지연 close 콜백이 새 장면을 정리하지 않도록 세대 번호를 확인합니다. Lua `pcall`은 엔진 메모리 오류를 복구하지 못합니다.
 8. 정적 검사·네이티브 모의 실행과 실제 Warcraft III/World Editor 검증을 구분합니다.
 9. 새 Lua 모듈은 `build/source-order.json`에 의존 순서대로 추가하고, 그 모듈을 읽는 회귀 스위트의 소스 목록(`build/check/harness.mjs`의 `combat`·`uiModules` 등)에도 넣습니다.
-10. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
+10. 한 판에 속한 상태는 모듈 지역 변수로 흩지 않고 실행 상태 테이블에 둡니다. 전투는 `SurvivorCombat`의 `NewRun()`, 생명주기는 `AnyasLongNight`의 `NewRun()`·`ResetStageClocks`가 기본값의 유일한 출처이며, 분리된 전투 모듈은 같은 테이블을 `Attach`로 받습니다. 회귀 스위트는 개별 지역 변수 대신 `CombatRun()`·`LifecycleRun()`으로 이 테이블을 읽고 씁니다.
+11. 스테이지별 규칙(수색 지점 배치·보스 약화 단서·위험 보상 등급·용암 주기·광폭화·지원군·근접 크기)은 `SurvivorConfig.encounters[stage]`에 두고 코드에서 스테이지 번호로 분기하지 않습니다.
+12. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
 
 AI 에이전트용 추가 지침은 [CLAUDE.md](CLAUDE.md)에 있습니다.
 
@@ -314,6 +317,6 @@ AI 에이전트용 추가 지침은 [CLAUDE.md](CLAUDE.md)에 있습니다.
 | 로딩 화면 부제목 | 포세이큰 왕국 이전의 하룻밤 `<mapVersion>` |
 | 로딩 화면 문구 | 우클릭으로 이동하고, 무기는 자동으로 공격합니다. 레벨업마다 성장을 선택하고, 수색으로 단서를 모아 다섯 구역을 돌파하세요. |
 
-표의 `<mapVersion>`은 `build/build.mjs`의 `mapVersion` 값으로 채워집니다. 버전을 올릴 때는 이 값만 바꾸고 `build`·`sync:base`를 실행하면 원본·테스트 맵의 `war3map.wts`가 함께 갱신되며, 배포 맵은 다음 `build:release`에서 반영됩니다. 맵 이름·부제목 문구 자체를 World Editor에서 바꾸면 도구가 해당 문자열을 찾지 못해 중단하므로 `installMapVersion`의 패턴도 함께 고칩니다.
+표의 `<mapVersion>`은 `build/lib/project.mjs`의 `mapVersion` 값으로 채워집니다. 버전을 올릴 때는 이 값만 바꾸고 `build`·`sync:base`를 실행하면 원본·테스트 맵의 `war3map.wts`가 함께 갱신되며, 배포 맵은 다음 `build:release`에서 반영됩니다. 맵 이름·부제목 문구 자체를 World Editor에서 바꾸면 도구가 해당 문자열을 찾지 못해 중단하므로 `installMapVersion`의 패턴도 함께 고칩니다.
 
 미리보기·로딩 이미지는 아직 준비가 필요합니다. 이 맵의 안야·퓨트리스·지하 관문 등으로 제작하며, 상위 폴더의 다른 맵용 ‘로딩스크린, 프리뷰’ 공식 아트는 사용하지 않습니다. 콘테스트의 고해상도 그래픽 기준을 고려해 화면을 확인하고, 최종 `build:release`·`check:release` 후 `dist/submission`의 파일을 제출합니다.

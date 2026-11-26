@@ -1509,7 +1509,7 @@ SurvivorEquipment={
     PendingRewardCount=function()pendingReads=pendingReads+1;return pending end,
     PickupMode=function()return mode end,
     CyclePickup=function()mode='끔';revision=revision+1 end,
-    CleanupFamilies=function()return {'화염','번개','얼음','칼날','공용'}end,
+    CleanupFamilies=function()return {'화염','번개','얼음','칼날','공용'}end,FamilyLabel=function(f)return f end,
     -- BagEntries also observes shared bag state; local rendering must use ReadBagEntries.
     BagEntries=function()bagReads,observedReads=bagReads+1,observedReads+1;return {{item='item',id='Hs15',locked=locked}},1,6 end,
     ReadBagEntries=function()bagReads=bagReads+1;return {{item='item',id='Hs15',locked=locked}},1,6 end,
@@ -1629,9 +1629,9 @@ function OrderId(order)return order end
 `, [config,metrics,augments,combat,'src/30_gameplay/SurvivorStory.lua',uiModules], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 local hero,build,units=NewCombat('orbitblade')
-SetLocal(SurvivorCombat.BossStatus,'stage',4)
+CombatRun().stage=4
 local unit=EnemyAt(units,500,0,false);units[unit].boss=true
-SetLocal(SurvivorCombat.BossStatus,'boss',unit)
+CombatRun().boss=unit
 now=2
 SurvivorCombatHazards.BossPattern(units[unit])
 SurvivorUI.UpdateSpeech()
@@ -1639,7 +1639,7 @@ local record=units[unit]
 assert(record.patternCount==1 and record.supportAt==4,'Checkpoint reinforcements keep their actual two-second delay')
 assert(#actors>=5 and not frames.HSNotice.visible,'Cross pattern retains its visible ground warnings')
 assert(#Local(SurvivorUI.Alert,'alerts')==0,'Monster ability descriptions must not open a notice')
-local spawns=0;SurvivorCombat.Spawn=function(elite,kind)spawns=spawns+1;return true end
+local spawns=0;SurvivorCombatEnemies.Spawn=function(elite,kind)spawns=spawns+1;return true end
 record.nextBlast,record.attackSpeed=100,1
 now=3.9;SurvivorCombat.UpdateEnemies(now);assert(spawns==0)
 now=4;SurvivorCombat.UpdateEnemies(now);assert(spawns==3 and not record.supportAt)
@@ -1790,18 +1790,18 @@ SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 
     UpdateStatus=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
 `, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
 local step=Local(AnyasLongNight.BeginRun,'Step')
-SetLocal(step,'hero',CreateUnit(0,'hero',0,0,0))
-SetLocal(step,'stats',{weapons={flamefield={enabled=true,interval=.05},firebolt={enabled=true,interval=.05},
-    orbitblade={enabled=true,interval=.05},meteor={enabled=true,interval=.05},blizzard={enabled=false,interval=.01}}})
+LifecycleRun().hero=CreateUnit(0,'hero',0,0,0)
+LifecycleRun().stats={weapons={flamefield={enabled=true,interval=.05},firebolt={enabled=true,interval=.05},
+    orbitblade={enabled=true,interval=.05},meteor={enabled=true,interval=.05},blizzard={enabled=false,interval=.01}}}
 SetLocal(step,'selectedDifficulty','normal');SetLocal(step,'RefreshDamageBoard',function()end)
-SetLocal(step,'stage',1);SetLocal(step,'stageStarted',0);SetLocal(step,'bossStarted',false);SetLocal(step,'nextElite',45)
+LifecycleRun().stage=1;LifecycleRun().stageStarted=0;LifecycleRun().bossStarted=false;LifecycleRun().nextElite=45
 state='RUNNING'
 now=.03;step(.03,now)
 assert(#casts==1 and casts[1]=='upkeep','Nothing fires before its interval')
 casts={};now=.06;step(.03,now)
 local order=table.concat(casts,',')
 assert(order=='meteor,orbitblade,upkeep,firebolt,flamefield','Unexpected cast order '..order)
-local clocks=Local(step,'weaponClocks')
+local clocks=LifecycleRun().weaponClocks
 assert(math.abs(clocks.flamefield-.01)<1e-9 and clocks.firebolt==0 and clocks.meteor==0 and clocks.blizzard==0,
     'Zones carry overshoot; other weapons restart and unowned weapons stay idle')
 `);
@@ -1891,7 +1891,7 @@ local function Waiting(index)
     assert(select(2,SurvivorNativeLoadout.TalentStatus())==index,'Each actual preparation grants its own stage point exactly once')
     assert(RunSession.GetState()=='STAGE_CLEAR'and halted and expeditionPaused
         and SurvivorUI.IsCombatPreparationVisible()and SurvivorUI.IsNarrativeVisible())
-    local current=Local(AnyasLongNight.BeginRun,'hero')
+    local current=LifecycleRun().hero
     assert(current.visible and selectedUnit==current and not current.removed
         and cameraNative.x==current.x and cameraNative.y==current.y)
     assert(frames.HSCombatPreparation.visible and frames.HSCombatPreparationStart.visible
@@ -1940,9 +1940,9 @@ for _,kind in ipairs({'DIFFICULTY','WEAPON','TRINKET'})do
     ClickFrame(frames[kind=='DIFFICULTY'and'AnyasLongNightSetupOption2'or'AnyasLongNightSetupOption1'])
 end
 ClickFrame(frames.AnyasLongNightSetupStart);ClickFrame(frames.AnyasLongNightSetupStart)
-local hero=Local(AnyasLongNight.BeginRun,'hero')
+local hero=LifecycleRun().hero
 assert(hero and not hero.removed and RunSession.GetState()=='STAGE_CLEAR'and halted and expeditionPaused)
-local build=Local(AnyasLongNight.BeginRun,'build')
+local build=LifecycleRun().build
 assert(build.weapons[1]=='firebolt'and build.trinkets[1]=='power'
     and Local(AnyasLongNight.BeginRun,'selectedDifficulty')=='normal',
     'Exercise the reported firebolt and increased-damage trinket combination through actual preparation controls')
@@ -1984,7 +1984,7 @@ hero.level=3;periodic()
 assert(RunSession.GetState()=='CHOOSING'and halted and expeditionPaused and frames.AnyasLongNightChoiceRoot.visible,
     'Two actual hero levels open the growth controls and pause combat')
 local choiceTime=RunSession.GetElapsed()
-local pendingOffers=Local(AnyasLongNight.BeginRun,'offers')
+local pendingOffers=LifecycleRun().offers
 local details=frames.SimpleStatDetailsPanel
 details.visible=true;AdvanceVisualTime(.05)
 assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
@@ -1992,18 +1992,18 @@ assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
     'The real native details observer hides cards without consuming their queued offers')
 details.visible=false;AdvanceVisualTime(.05)
 assert(DeliverInventorySync()==1 and RunSession.GetState()=='CHOOSING'and halted
-    and frames.AnyasLongNightChoiceRoot.visible and Local(AnyasLongNight.BeginRun,'offers')==pendingOffers
+    and frames.AnyasLongNightChoiceRoot.visible and LifecycleRun().offers==pendingOffers
     and RunSession.GetElapsed()==choiceTime,'Closing details restores the same live card controls')
-local rerolls=Local(AnyasLongNight.BeginRun,'rerollsRemaining')
+local rerolls=LifecycleRun().rerollsRemaining
 assert(frames.AnyasLongNightReroll2.enabled);ClickFrame(frames.AnyasLongNightReroll2)
-assert(Local(AnyasLongNight.BeginRun,'rerollsRemaining')==rerolls-1 and RunSession.GetState()=='CHOOSING')
-local excluded=Local(AnyasLongNight.BeginRun,'offers')[2]
+assert(LifecycleRun().rerollsRemaining==rerolls-1 and RunSession.GetState()=='CHOOSING')
+local excluded=LifecycleRun().offers[2]
 assert(frames.AnyasLongNightExclude2.enabled);ClickFrame(frames.AnyasLongNightExclude2)
 assert(build.excluded[excluded]and build.excludesRemaining==SurvivorConfig.excludesPerRun-1
-    and Local(AnyasLongNight.BeginRun,'rerollsRemaining')==rerolls-1,
+    and LifecycleRun().rerollsRemaining==rerolls-1,
     'Real exclusion replaces the candidate without consuming another reroll or level')
 for remaining=1,0,-1 do
-    local id=Local(AnyasLongNight.BeginRun,'offers')[1]
+    local id=LifecycleRun().offers[1]
     local previous=SurvivorAugments.Level(build,id)
     ClickFrame(frames.AnyasLongNightCard1)
     assert(SurvivorAugments.Level(build,id)==previous+1,'Each card click grants exactly one queued growth reward')
@@ -2019,12 +2019,12 @@ for index=2,5 do
     assert(RunSession.BeginStageClear())
     if index==2 then
         -- Reproduce the same hero/stage/run guard values while the defeated-boss cleanup owns the transition.
-        SetLocal(AnyasLongNight.NextStage,'stageTransition',true)
+        LifecycleRun().stageTransition=true
         local resumed=resumeCount
         assert(not firstCanStart()and not firstReady()and resumeCount==resumed
             and RunSession.GetState()=='STAGE_CLEAR'and SurvivorCombat.Counts()==3,
             'A consumed preparation callback cannot reactivate during the same stage boss pause')
-        SetLocal(AnyasLongNight.NextStage,'stageTransition',false)
+        LifecycleRun().stageTransition=false
     end
     assert(AnyasLongNight.NextStage())
     assert(appliedStage==index and equipmentStage==index and expeditionStage==index and expeditionHero==hero)
@@ -2036,7 +2036,7 @@ for index=2,5 do
     local currentText=frames.HSCombatPreparationTitle.text
     assert(not firstReady()and frames.HSCombatPreparationTitle.text==currentText and RunSession.GetState()=='STAGE_CLEAR',
         'An earlier stage start callback cannot resume a later stage preparation')
-    StartCountdown();assert(Local(AnyasLongNight.BeginRun,'stage')==index and selectedUnit==hero)
+    StartCountdown();assert(LifecycleRun().stage==index and selectedUnit==hero)
 end
 assert(RunSession.Finish('test')and hero.removed and not halted and periodic==nil)
 local cast=SurvivorCombat.CastWeapon
@@ -2044,7 +2044,7 @@ SurvivorCombat.CastWeapon=function(id)lastFirstCast=id;return cast(id)end
 for _,id in ipairs(SurvivorConfig.startingWeapons)do
     AnyasLongNight.Start();assert(AnyasLongNight.OpenSetup('WEAPON')and AnyasLongNight.SelectSetup('WEAPON',id))
     ClickFrame(frames.AnyasLongNightSetupStart)
-    local nextHero=Local(AnyasLongNight.BeginRun,'hero')
+    local nextHero=LifecycleRun().hero
     assert(RunSession.GetState()=='STAGE_CLEAR'and nextHero and not nextHero.removed,
         'Every supported starting weapon reaches the initial narrative')
     SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
@@ -2099,7 +2099,7 @@ AnyasLongNight.Start();assert(AnyasLongNight.OpenSetup('HERO')and AnyasLongNight
 for _,id in ipairs(SurvivorConfig.heroes.putress.startingWeapons)do
     AnyasLongNight.Start();assert(AnyasLongNight.OpenSetup('WEAPON')and AnyasLongNight.SelectSetup('WEAPON',id))
     ClickFrame(frames.AnyasLongNightSetupStart)
-    local nextHero=Local(AnyasLongNight.BeginRun,'hero')
+    local nextHero=LifecycleRun().hero
     assert(RunSession.GetState()=='STAGE_CLEAR'and nextHero and GetUnitTypeId(nextHero)==SurvivorConfig.heroes.putress.unitId,
         'Selecting Putress creates the Putress hero unit')
     assert(nextHero.properName=='퓨트리스','The Putress hero is named Putress, not Anya')

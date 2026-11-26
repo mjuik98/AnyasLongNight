@@ -52,6 +52,18 @@ do
                 insight = "가운데로! 풀어 둔 사슬 쪽이다.", reply = "발자국이 하나뿐이군. 거의 다 따라잡았어.",
                 riskLine = "감시자들이 눈치챘군. 조금만 버티면 돼."}},
     }
+    -- The route layout lives in encounters[].search; each chapter's text and mode must match it.
+    for index, chapter in ipairs(chapters) do
+        local search = assert(SurvivorConfig.encounters[index].search, "Missing search layout for chapter " .. index)
+        assert(search.count == chapter.count and (search.landmark == true) == (chapter.mode == "study"),
+            "Chapter " .. index .. " disagrees with its search layout")
+    end
+    -- Risk challenge text, e.g. "적 피해 +25% · 출현량 +35%" (SurvivorConfig.riskChallenge).
+    local function RiskPenalty(separator)
+        local challenge = SurvivorConfig.riskChallenge
+        local function Percent(multiplier) return math.floor((multiplier - 1) * 100 + 0.5) end
+        return string.format("적 피해 +%d%%%s출현량 +%d%%", Percent(challenge.enemyDamage), separator, Percent(challenge.spawnRate))
+    end
     -- Lines outside a chapter, per hero; a hero without an entry speaks the Anya text.
     local heroLines = {anya = {riskDone = "챙겼어. 이제 빠지자."}, putress = {riskDone = "회수했다. 이제 물러나지."}}
     -- combat is the run owner's port {grantRecovery, spawnCourier, releaseCourier};
@@ -117,9 +129,9 @@ do
         local opens, closes = RiskWindow()
         if age < opens or age >= closes or not Near(hero, risk, 140) then return nil end
         local chapter = chapters[stage]
-        local reward = stage <= 2 and "희귀 이상" or "영웅 등급"
+        local reward = SurvivorConfig.encounters[stage].riskReward.label
         return {name = chapter.relic, remaining = math.ceil(closes - age), seconds = 30,
-            text = chapter.relic .. "\n30초 생존: " .. reward .. " 장비 택 1\n적 피해 +25% · 출현량 +35%\n장소를 벗어나도 도전은 유지됩니다."}
+            text = chapter.relic .. "\n30초 생존: " .. reward .. " 장비 택 1\n" .. RiskPenalty(" · ") .. "\n장소를 벗어나도 도전은 유지됩니다."}
     end
     function SurvivorExpedition.AcceptRisk()
         if not SurvivorExpedition.RiskOffer() then return false end
@@ -164,16 +176,7 @@ do
         pulse = 0
         records[stage] = {risk = "미참여"}
         local chapter = chapters[stage]
-        local points = SurvivorStage.SearchPoints and SurvivorStage.SearchPoints(stage) or {}
-        if #points ~= chapter.count then
-            points = {}
-            for i = 1, chapter.count do
-                local angle = stage == 2 and ({2.95, 2.2, 0.95, 0.2})[i] or math.pi / 4 + (stage - 1) * math.pi / 2 + (i - 1) * 0.85
-                local point = chapter.mode == "study" and SurvivorStage.LandmarkApproach(points)
-                    or SurvivorStage.FindPoint(angle, stage == 2 and 1050 or 650 + (i - 1) * 200, points)
-                if point then points[#points + 1] = point end
-            end
-        end
+        local points = SurvivorStage.SearchPoints(stage)
         objective = #points == chapter.count and {points = points, index = 1, x = points[1].x, y = points[1].y} or nil
         risk = Place(math.pi * 1.25 + (stage - 1) * math.pi / 2)
         if objective then objective.progress, objective.state = 0, "waiting" end
@@ -284,10 +287,11 @@ do
             local _, closes = RiskWindow()
             lines[#lines + 1] = "|cffeb82f5위험: " .. chapter.relic .. "|r · " .. Locate(risk)
             lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, closes - (RunSession.GetElapsed() - started))), stage <= 2 and "희귀 이상" or "영웅 등급")
-            lines[#lines + 1] = "수락 후 30초: 적 피해 +25% · 출현량 +35%"
+            lines[#lines + 1] = "수락 후 30초: " .. RiskPenalty(" · ")
             lines[#lines + 1] = "장소를 벗어나도 도전은 유지됩니다."
         elseif SurvivorExpedition.RiskActive() then
-            lines[#lines + 1] = string.format("|cffeb82f5봉인 경보 %d초|r · 적 피해 +25%% / 출현량 +35%%", math.ceil(math.max(0, risk.untilTime - RunSession.GetElapsed())))
+            lines[#lines + 1] = string.format("|cffeb82f5봉인 경보 %d초|r · %s", math.ceil(math.max(0, risk.untilTime - RunSession.GetElapsed())),
+                RiskPenalty(" / "))
         end
         return table.concat(lines, "\n")
     end

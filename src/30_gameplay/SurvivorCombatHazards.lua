@@ -113,9 +113,9 @@ do
         ALICE_Create(blast)
     end
     function SurvivorCombatHazards.WarnLava()
-        local stage = Stage()
-        if stage == 2 and RunSession.IsRunning() and Alive(hero) then
-            for _, point in ipairs(SurvivorStage.LavaPoints()) do WarnBossBlast(point.x, point.y, point.radius, 1.8, true) end
+        local lava = SurvivorConfig.encounters[Stage()].lava
+        if lava and RunSession.IsRunning() and Alive(hero) then
+            for _, point in ipairs(SurvivorStage.LavaPoints()) do WarnBossBlast(point.x, point.y, point.radius, lava.delay, true) end
         end
     end
     -- Length of the ray from (x, y) along unit (dx, dy) that stays inside the arena.
@@ -334,9 +334,11 @@ do
             markers = {}, isAnonymous = true, selfInteractions = StepSpecial,
             destroy = function(object) ReleaseSpecial(object); DestroyObject(object) end}
         if record.elite then self.damage, self.delay, self.width = 26 * record.damageScale, 1.2, 75 end
-        local informed = not record.elite and ((stage == 2 and kind == "dash") or (stage == 3 and kind == "wave") or (stage == 5 and kind == "chains"))
+        -- The stage's expedition finding softens one boss special (see encounters[].advantage).
+        local advantage = SurvivorConfig.encounters[stage].advantage
+        local informed = not record.elite and advantage ~= nil and advantage.special == kind
             and SurvivorExpedition.UseAdvantage(stage)
-        self.noTrail = informed and stage == 2
+        self.noTrail = informed and advantage.noTrail == true
         ExtendWarning(RunSession.GetElapsed() + self.delay)
         record.special = self
         objects[self] = true
@@ -366,7 +368,7 @@ do
         elseif kind == "wave" then
             self.gap, self.gapWidth, self.angles = angle + math.pi / 2, math.pi / 2, {}
             self.waveMaxRadius = 900
-            if informed and stage == 3 then self.gapWidth = math.pi end
+            if informed and advantage.gapWidth then self.gapWidth = advantage.gapWidth end
             for i = 0, 17 do
                 local a = self.gap + self.gapWidth / 2 + (2 * math.pi - self.gapWidth) * i / 17
                 self.angles[#self.angles + 1] = a
@@ -381,7 +383,7 @@ do
         else
             self.lanes = {}
             for offset = -240, 240, 240 do
-                if not (informed and stage == 5 and offset == 0) then
+                if not (informed and advantage.openCenterLane and offset == 0) then
                     local cx, cy = hx - math.sin(angle) * offset, hy + math.cos(angle) * offset
                     local lane = {ax = cx - math.cos(angle) * 450, ay = cy - math.sin(angle) * 450,
                         bx = cx + math.cos(angle) * 450, by = cy + math.sin(angle) * 450}
@@ -402,16 +404,18 @@ do
     end
     local function BossPattern(record)
         local stage = Stage()
-        local pattern = SurvivorConfig.encounters[stage].pattern
+        local encounter = SurvivorConfig.encounters[stage]
+        local pattern, advantage, support = encounter.pattern, encounter.advantage, encounter.bossSupport
         record.patternCount = (record.patternCount or 0) + 1
         if pattern == "cycle" then pattern = ({"dash", "wave", "chains", "cross"})[(record.patternCount - 1) % 4 + 1] end
         local x, y, delay = GetUnitX(hero), GetUnitY(hero), SurvivorConfig.bossBlastDelay
-        if stage == 4 and (record.patternCount - 1) % 4 == 0 then
-            if not SurvivorExpedition.UseAdvantage(stage) then
-                record.supportAt = UnitTime(record) + 2
-            end
+        if support and (record.patternCount - 1) % support.every == 0 then
+            local cancelled = advantage and advantage.cancelsSupport and SurvivorExpedition.UseAdvantage(stage)
+            if not cancelled then record.supportAt = UnitTime(record) + support.delay end
         end
-        if stage == 1 and pattern == "target" and SurvivorExpedition.UseAdvantage(stage) then delay = delay + 1 end
+        if advantage and advantage.blastDelay and advantage.pattern == pattern and SurvivorExpedition.UseAdvantage(stage) then
+            delay = delay + advantage.blastDelay
+        end
         if pattern == "dash" or pattern == "wave" or pattern == "chains" then
             StartSpecial(pattern, record)
         elseif pattern == "target" then
