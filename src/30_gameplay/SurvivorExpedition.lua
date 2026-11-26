@@ -286,7 +286,7 @@ do
         if risk and risk.state == "offered" then
             local _, closes = RiskWindow()
             lines[#lines + 1] = "|cffeb82f5위험: " .. chapter.relic .. "|r · " .. Locate(risk)
-            lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, closes - (RunSession.GetElapsed() - started))), stage <= 2 and "희귀 이상" or "영웅 등급")
+            lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, closes - (RunSession.GetElapsed() - started))), SurvivorConfig.encounters[stage].riskReward.label)
             lines[#lines + 1] = "수락 후 30초: " .. RiskPenalty(" · ")
             lines[#lines + 1] = "장소를 벗어나도 도전은 유지됩니다."
         elseif SurvivorExpedition.RiskActive() then
