@@ -71,7 +71,7 @@ do
     end
     function SurvivorCombatSets.PierceDamage(object, target, damage)
         if not stats.sets.tracker or object.secondary or object.tagExtra or object.statusScale and object.statusScale < 1
-            or not HasTag(object.weapon or "frostshard", "관통") or not Enemy(target) then return damage end
+            or not HasTag(object.weapon, "관통") or not Enemy(target) then return damage end
         object.pierceTargets = object.pierceTargets or {}
         local count = object.pierceCount or 0
         if not object.pierceTargets[target] then

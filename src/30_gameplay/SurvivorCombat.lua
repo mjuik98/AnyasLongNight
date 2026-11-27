@@ -18,8 +18,8 @@ do
             onKill = nil, onDeath = nil, onBonus = nil,
             damageTrigger = nil, deathTrigger = nil, bonusPickupTrigger = nil, queryGroup = nil,
             units = {}, objects = {}, hostileObjects = {}, candidatePool = {}, summonCounts = {}, damageTotals = {},
-            -- Stage progress and pause state.
-            stage = 1, stageStarted = 0, enemyCount = 0, boss = nil, bossDefeated = false, eliteSerial = 0,
+            -- Stage progress and pause state; weaponClocks[id] = cooldown time since the last cast.
+            stage = 1, stageStarted = 0, enemyCount = 0, boss = nil, bossDefeated = false, eliteSerial = 0, weaponClocks = {},
             frozen = false, inventoryFrozen = false, inventoryVitals = nil, warningUntil = 0, friendlyAlpha = 140,
             -- Breakable supplies and their dropped pickups.
             bonusCount = 0, nextBonusAt = 0, bonusItems = {},
@@ -404,26 +404,27 @@ do
         -- The swept step reaches the sphere: no XY-only hits on overhead targets.
         if distance <= step + hitRadius then
             local target, damage, evolution = missile.target, Sets.HomingDamage(missile, missile.damage), missile.evolution
+            local mode, weapon = missile.modeValues, missile.weapon
             local x, y, z = ImpactPoint(target)
             ALICE_Kill(missile)
             if evolution == "focus" then
                 local record, now = run.units[target], RunSession.GetElapsed()
                 local stacks = now < (record.fireFocusUntil or 0) and (record.fireFocus or 0) or 0
-                damage = damage * (1 + math.min(4, stacks) * 0.15)
-                record.fireFocus, record.fireFocusUntil = math.min(4, stacks + 1), now + 3
+                damage = damage * (1 + math.min(mode.stacks, stacks) * mode.damage)
+                record.fireFocus, record.fireFocusUntil = math.min(mode.stacks, stacks + 1), now + mode.duration
             end
-            Hit(target, damage, missile.weapon, nil, nil, missile.statusScale)
+            Hit(target, damage, weapon, nil, nil, missile.statusScale)
             if evolution == "burst" and RunSession.IsRunning() then
                 CreateObject({identifier = "hsFireBurst", x = x, y = y, z = z, life = 0.4,
                     isAnonymous = true, selfInteractions = ZoneLifetime}, SurvivorConfig.fireBurstModel, 0.14)
-                local victims = {}
-                local candidates = Candidates(x, y, x, y, 140, "firebolt.area")
+                local victims, radius = {}, mode.radius
+                local candidates = Candidates(x, y, x, y, radius, weapon .. ".area")
                 for _, u in ipairs(candidates) do
-                    if u ~= target and Enemy(u) and (GetUnitX(u) - x)^2 + (GetUnitY(u) - y)^2 <= 140^2 then victims[#victims + 1] = u end
+                    if u ~= target and Enemy(u) and (GetUnitX(u) - x)^2 + (GetUnitY(u) - y)^2 <= radius^2 then victims[#victims + 1] = u end
                 end
                 ReleaseCandidates(candidates)
                 table.sort(victims, function(a, b) return GetHandleId(a) < GetHandleId(b) end)
-                for i = 1, math.min(12, #victims) do Hit(victims[i], damage * 0.30, "firebolt", true) end
+                for i = 1, math.min(mode.targets, #victims) do Hit(victims[i], damage * mode.damage, weapon, true) end
             end
             return dt
         end
@@ -487,7 +488,7 @@ do
             local missile = {identifier = "hsMissile", weapon = w.weaponId, statusScale = w.statusScale,
                 x = x - math.sin(yaw) * offset, y = y + math.cos(yaw) * offset, z = z, yaw = yaw,
                 owner = SurvivorConfig.Owner(), target = target, life = w.lifetime, damage = w.damage, tagExtra = extra,
-                speed = w.speed, hitRadius = w.hitRadius, remaining = w.range, evolution = w.evolution,
+                speed = w.speed, hitRadius = w.hitRadius, remaining = w.range, evolution = w.evolution, modeValues = w.modeValues,
                 selfInteractions = MoveMissile, isAnonymous = true}
             CreateObject(missile, w.model or SurvivorConfig.missileModel, w.scale)
             local tx, ty, tz = ImpactPoint(target)
@@ -1117,41 +1118,63 @@ do
         end
         return dt
     end
-    -- Profile-engine casts. shot is nil for the weapon's own cast and carries the
-    -- snapshot for a multicast extra attack.
-    function SurvivorCombat.CastExtra(id, shot)
-        local w = shot and shot.weapon or run.stats.weapons[id]
-        if not w or not w.enabled or not RunSession.IsRunning() or not Alive(run.hero) then return end
-        local x, y, z = ImpactPoint(run.hero)
-        local engine = SurvivorConfig.weapons[id].engine
-        if engine == "summon" then CastSummon(id, w, shot); return end
-        if engine == "nova" then
-            -- Reservoir sampling gives every living enemy in range the same chance.
-            local target, count = nil, 0
-            local candidates = AreaCandidates(x, y, w.range, "frostnovaSelection")
-            for _, u in ipairs(candidates) do
-                if AttackTarget(u) then
-                    local dx, dy = GetUnitX(u) - x, GetUnitY(u) - y
-                    if dx * dx + dy * dy <= w.range * w.range then
-                        count = count + 1
-                        if GetRandomInt(1, count) == 1 then target = u end
-                    end
+    -- Profile-engine casts: engines[name].cast(id, shot). shot is nil for the weapon's own
+    -- cast and carries the snapshot for a multicast extra attack. deliver(id, w, shot, x, y, z)
+    -- receives the live weapon (or snapshot) and the hero's impact point.
+    local function ProfileCast(deliver)
+        return function(id, shot)
+            local w = shot and shot.weapon or run.stats.weapons[id]
+            if not w or not w.enabled or not RunSession.IsRunning() or not Alive(run.hero) then return end
+            deliver(id, w, shot, ImpactPoint(run.hero))
+        end
+    end
+    -- The closest target in range and its impact point; nil when none is in range.
+    local function ProfileTarget(w, x, y, filter)
+        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, filter)
+        if not target then return nil end
+        return target, ImpactPoint(target)
+    end
+    local engines = SurvivorConfig.weaponEngines
+    engines.summon.cast = ProfileCast(CastSummon)
+    engines.nova.cast = ProfileCast(function(id, w, _, x, y, z)
+        -- Reservoir sampling gives every living enemy in range the same chance.
+        local target, count = nil, 0
+        local candidates = AreaCandidates(x, y, w.range, "frostnovaSelection")
+        for _, u in ipairs(candidates) do
+            if AttackTarget(u) then
+                local dx, dy = GetUnitX(u) - x, GetUnitY(u) - y
+                if dx * dx + dy * dy <= w.range * w.range then
+                    count = count + 1
+                    if GetRandomInt(1, count) == 1 then target = u end
                 end
             end
-            ReleaseCandidates(candidates)
-            if not target then return end
-            x, y, z = ImpactPoint(target)
-            CreateObject({identifier = "hsNova", weapon = id, x = x, y = y, z = Height(x, y) + GetUnitFlyHeight(target), life = 0.6,
-                isAnonymous = true, selfInteractions = ZoneLifetime}, w.model or [[Abilities\Spells\Undead\FrostNova\FrostNovaTarget.mdl]], w.radius / 150)
-            AreaHit({x = x, y = y, z = z, radius = w.radius, slow = w.slow, statusScale = w.statusScale,
-                slowDuration = w.duration + (w.slowDurationBonus or 0), weapon = id}, w.damage)
+        end
+        ReleaseCandidates(candidates)
+        if not target then return end
+        x, y, z = ImpactPoint(target)
+        CreateObject({identifier = "hsNova", weapon = id, x = x, y = y, z = Height(x, y) + GetUnitFlyHeight(target), life = 0.6,
+            isAnonymous = true, selfInteractions = ZoneLifetime}, w.model or [[Abilities\Spells\Undead\FrostNova\FrostNovaTarget.mdl]], w.radius / 150)
+        AreaHit({x = x, y = y, z = z, radius = w.radius, slow = w.slow, statusScale = w.statusScale,
+            slowDuration = w.duration + (w.slowDurationBonus or 0), weapon = id}, w.damage)
+    end)
+    -- A field lands on the target (spread for an extra attack); thrown fields arc there first.
+    engines.field.cast = ProfileCast(function(id, w, shot, x, y, z)
+        local target, tx, ty, tz = ProfileTarget(w, x, y, AttackTarget)
+        if not target then return end
+        tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot)
+        if w.thrown then
+            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() NewZone(id, tx, ty, w, w.damage) end,
+                w.throwScale, w.throwModel, id)
             return
         end
-        local target = ALICE_GetClosestObject(x, y, "hsEnemy", w.range, engine == "boomerang" and GroundTarget or AttackTarget)
+        NewZone(id, tx, ty, w, w.damage)
+    end)
+    -- A meteor (or a falling jar) drops on the target point and hits once on impact.
+    engines.meteor.cast = ProfileCast(function(id, w, shot, x, y, z)
+        local target, tx, ty, tz = ProfileTarget(w, x, y, AttackTarget)
         if not target then return end
-        local tx, ty, tz = ImpactPoint(target)
-        if engine == "field" or engine == "meteor" then tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot) end
-        if not (shot and shot.index) and engine == "meteor" and Enemy(target) then
+        tx, ty = SpreadPoint(tx, ty, w.radius * 0.8, shot)
+        if not (shot and shot.index) and Enemy(target) then
             Sets.RecordFallingCast(id, tx, ty, tz, w.damage, w.radius, w.throwModel or SurvivorConfig.meteorModel,
                 w.falling and (w.throwScale or 1) * 0.6 or 0.7 * w.size)
         end
@@ -1172,18 +1195,13 @@ do
             FallPayload(id, tx, ty, tz, w.delay, w.throwModel, w.throwScale or 1, function() Land(tx, ty, tz, 1, true) end)
             return
         end
-        if w.thrown then
-            Throw(x, y, z, tx, ty, tz, w.speed, 0, function() NewZone(id, tx, ty, w, w.damage) end,
-                w.throwScale, w.throwModel, id)
-            return
-        end
-        if engine == "field" then NewZone(id, tx, ty, w, w.damage); return end
-        if engine == "meteor" then
-            CreateObject({identifier = "hsMeteor", x = tx, y = ty, z = tz + 750, groundZ = tz,
-                profile = w, life = w.delay, delay = w.delay, isAnonymous = true, selfInteractions = FallMeteor}, SurvivorConfig.meteorModel, 1.8 * w.size)
-            return
-        end
-        local orb = engine == "orb"
+        CreateObject({identifier = "hsMeteor", x = tx, y = ty, z = tz + 750, groundZ = tz,
+            profile = w, life = w.delay, delay = w.delay, isAnonymous = true, selfInteractions = FallMeteor}, SurvivorConfig.meteorModel, 1.8 * w.size)
+    end)
+    -- Orbs chase their target in 3D; returning blades fly flat to range and back.
+    local function LaunchProjectile(id, w, shot, x, y, z, filter, orb)
+        local target, tx, ty, tz = ProfileTarget(w, x, y, filter)
+        if not target then return end
         local dx, dy, dz = tx - x, ty - y, orb and tz - z or 0
         local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance < 1 then local yaw = HeroYaw(); dx, dy, dz, distance = math.cos(yaw), math.sin(yaw), 0, 1 end
@@ -1198,6 +1216,12 @@ do
         CreateObject(object, w.model or (orb and [[Abilities\Spells\Orc\LightningShield\LightningShieldTarget.mdl]] or SurvivorConfig.bladeModel),
             w.size * (w.modelScale or 1))
     end
+    engines.orb.cast = ProfileCast(function(id, w, shot, x, y, z) LaunchProjectile(id, w, shot, x, y, z, AttackTarget, true) end)
+    engines.boomerang.cast = ProfileCast(function(id, w, shot, x, y, z) LaunchProjectile(id, w, shot, x, y, z, GroundTarget, false) end)
+    -- Any engine's cast by weapon id; shot as for the engine casts above.
+    function SurvivorCombat.CastExtra(id, shot)
+        return engines[SurvivorConfig.weapons[id].engine].cast(id, shot)
+    end
     local function MoveFrost(shard)
         local dt = ALICE_Config.MIN_INTERVAL
         if not RunSession.IsRunning() or shard.cleaned then return dt end
@@ -1206,7 +1230,7 @@ do
         local dx, dy, dz = shard.dx * step, shard.dy * step, shard.dz * step
         if not SurvivorStage.LineClear(shard.x, shard.y, shard.x + dx, shard.y + dy) then ALICE_Kill(shard); return dt end
         local length, hits = dx * dx + dy * dy + dz * dz, {}
-        local candidates = Candidates(shard.x, shard.y, shard.x + dx, shard.y + dy, shard.hitRadius, shard.weapon or "frostshard")
+        local candidates = Candidates(shard.x, shard.y, shard.x + dx, shard.y + dy, shard.hitRadius, shard.weapon)
         for _, u in ipairs(candidates) do
             if AttackTarget(u) and not shard.hitTimes[u] then
                 local tx, ty, tz = ImpactPoint(u)
@@ -1223,13 +1247,13 @@ do
             local u = hit.unit
             if AttackTarget(u) then
                 shard.hitTimes[u] = true
-                Hit(u, Sets.PierceDamage(shard, u, shard.damage), shard.weapon or "frostshard", false, shard.secondary, shard.statusScale)
+                Hit(u, Sets.PierceDamage(shard, u, shard.damage), shard.weapon, false, shard.secondary, shard.statusScale)
                 if shard.cleaned or not RunSession.IsRunning() then return dt end
-                if shard.slow > 0 then Status.Slow(u, shard.slow, shard.slowDuration, "frostshard") end
+                if shard.slow > 0 then Status.Slow(u, shard.slow, shard.slowDuration, shard.weapon) end
                 if Enemy(u) and shard.evolution == "lance" and not shard.secondary then
-                    local record = run.units[u]
-                    record.spearHits = math.min(3, (record.spearHits or 0) + 1)
-                    if record.spearHits >= 3 and Status.Freeze(u, 0.8) then record.spearHits = 0 end
+                    local record, lance = run.units[u], shard.modeValues
+                    record.spearHits = math.min(lance.hits, (record.spearHits or 0) + 1)
+                    if record.spearHits >= lance.hits and Status.Freeze(u, lance.freeze) then record.spearHits = 0 end
                 end
                 shard.pierces = shard.pierces - 1
                 if shard.pierces <= 0 then ALICE_Kill(shard); return dt end
@@ -1262,31 +1286,41 @@ do
                 dx = sx, dy = sy, dz = dz, speed = w.speed,
                 life = w.lifetime, remaining = w.range, hitRadius = w.hitRadius,
                 damage = w.damage, pierces = w.pierce, hitTimes = {}, tagExtra = shot and shot.index ~= nil,
-                slow = w.slow, slowDuration = w.slowDuration, evolution = w.evolution,
+                slow = w.slow, slowDuration = w.slowDuration, evolution = w.evolution, modeValues = w.modeValues,
                 isAnonymous = true, selfInteractions = MoveFrost}
             CreateObject(shard, w.model or SurvivorConfig.frostModel, w.scale)
             FaceMissile(shard, sx, sy, dz)
         end
     end
+    -- A slowed enemy's death bursts into shards from the weapon evolved into "shatter"
+    -- (its modeValues give range, count, damage and shard shape); the shards are its damage.
     Shatter = function(dead, record)
-        local now, frost = RunSession.GetElapsed(), run.stats.weapons.frostshard
-        if run.hitSecondary or frost.evolution ~= "shatter" or now < run.shatterReady then return end
+        if run.hitSecondary then return end
+        local id, frost
+        for _, weapon in ipairs(SurvivorConfig.weaponOrder) do
+            local w = run.stats.weapons[weapon]
+            if w and w.evolution == "shatter" then id, frost = weapon, w; break end
+        end
+        local now = RunSession.GetElapsed()
+        if not frost or now < run.shatterReady then return end
         local slowed = false
         for _, slow in pairs(record.slows or {}) do if slow.expires > now then slowed = true end end
         if not slowed then return end
-        run.shatterReady = now + 0.12 -- Bound dense-wave secondary effects; secondary kills never repeat it.
+        local mode = frost.modeValues
+        local range, count = mode.range, mode.targets
+        run.shatterReady = now + mode.cooldown -- Bound dense-wave secondary effects; secondary kills never repeat it.
         local x, y, z = ImpactPoint(dead)
-        local candidates, nearest = Candidates(x, y, x, y, 450, "shatter.area"), {}
+        local candidates, nearest = Candidates(x, y, x, y, range, "shatter.area"), {}
         for _, u in ipairs(candidates) do
             local tx, ty = GetUnitX(u), GetUnitY(u)
             local distance = (tx - x)^2 + (ty - y)^2
-            if Enemy(u) and distance <= 450^2 and SurvivorStage.LineClear(x, y, tx, ty) then
+            if Enemy(u) and distance <= range^2 and SurvivorStage.LineClear(x, y, tx, ty) then
                 local handle, position = GetHandleId(u), 1
                 while nearest[position] and (nearest[position].distance < distance
                     or nearest[position].distance == distance and nearest[position].handle < handle) do position = position + 1 end
-                if position <= 3 then
+                if position <= count then
                     table.insert(nearest, position, {unit = u, x = tx, y = ty, distance = distance, handle = handle})
-                    nearest[4] = nil
+                    nearest[count + 1] = nil
                 end
             end
         end
@@ -1296,23 +1330,34 @@ do
             local tx, ty, tz = target.x, target.y, Height(target.x, target.y) + GetUnitFlyHeight(target.unit) + offset
             local dx, dy, dz = tx - x, ty - y, tz - z
             local length = math.max(1, math.sqrt(dx^2 + dy^2 + dz^2))
-            local shard = {identifier = "hsFrostShard", x = x, y = y, z = z, yaw = 0,
-                dx = dx/length, dy = dy/length, dz = dz/length, speed = frost.speed, life = 1.5, remaining = 450,
-                hitRadius = 28, damage = frost.damage * 0.35, pierces = 1, hitTimes = {}, secondary = true,
-                slow = frost.slow, slowDuration = 1, isAnonymous = true, selfInteractions = MoveFrost}
-            CreateObject(shard, SurvivorConfig.frostModel, 0.7)
+            local shard = {identifier = "hsFrostShard", weapon = id, x = x, y = y, z = z, yaw = 0,
+                dx = dx/length, dy = dy/length, dz = dz/length, speed = frost.speed, life = mode.life, remaining = range,
+                hitRadius = mode.hitRadius, damage = frost.damage * mode.damage, pierces = 1, hitTimes = {}, secondary = true,
+                slow = frost.slow, slowDuration = mode.slowDuration, isAnonymous = true, selfInteractions = MoveFrost}
+            CreateObject(shard, SurvivorConfig.frostModel, mode.scale)
             FaceMissile(shard, dx, dy, dz)
         end
     end
+    -- Core-engine casts take a shot ({weapon = stats or snapshot, index}); their own cast
+    -- fires the weapon's live stats.
+    local function CoreCast(fire)
+        return function(id, shot) fire(shot or {weapon = run.stats.weapons[id]}) end
+    end
+    engines.missile.cast = CoreCast(SurvivorCombat.FireMissile)
+    engines.zone.cast = CoreCast(SurvivorCombat.CreateZone)
+    engines.chain.cast = CoreCast(SurvivorCombat.CastChainLightning)
+    engines.orbit.cast = CoreCast(SurvivorCombat.CastBlades)
+    engines.strike.cast = CoreCast(SurvivorCombat.CastMonsoon)
+    engines.cone.cast = CoreCast(SurvivorCombat.CastFrontSlash)
+    engines.pierce.cast = CoreCast(SurvivorCombat.FireFrostShard)
+    for name, engine in pairs(engines) do assert(engine.cast, "Weapon engine needs a cast " .. name) end
     local function EngineOf(id)
         local weapon = SurvivorConfig.weapons[id]
-        return weapon and SurvivorConfig.weaponEngines[weapon.engine]
+        return weapon and engines[weapon.engine]
     end
     -- shot is nil for the weapon's own cast, or an extra attack's {weapon = snapshot, index}.
     local function DispatchWeapon(id, shot)
-        local engine = EngineOf(id)
-        if engine.profile then SurvivorCombat.CastExtra(id, shot); return end
-        SurvivorCombat[engine.cast](shot or {weapon = run.stats.weapons[id]})
+        EngineOf(id).cast(id, shot)
     end
     local function ExtraAttack(pending)
         local dt = ALICE_Config.MIN_INTERVAL
@@ -1328,13 +1373,9 @@ do
         if not RunSession.IsRunning() or not Alive(run.hero) then return end
         local engine, w = EngineOf(id), run.stats.weapons[id]
         if not engine or not w or not w.enabled then return end
-        if engine.volley then
-            -- Spawn base and extra blades together; no delayed single-blade casts.
-            SurvivorCombat[engine.cast]({weapon = w})
-            return
-        end
         DispatchWeapon(id)
-        if not RunSession.IsRunning() or not run.stats or run.stats.multiCount == 0 then return end
+        -- A volley spawns base and extra blades together; no delayed single-blade casts.
+        if engine.volley or not RunSession.IsRunning() or not run.stats or run.stats.multiCount == 0 then return end
         -- Extra attacks fire from a snapshot: individual projectiles/strikes (single = 1),
         -- never copies of an entire volley, applying half the status stacks (at least one).
         local snapshot = {}
@@ -1349,6 +1390,29 @@ do
             run.objects[pending] = true
             ALICE_Create(pending)
         end
+    end
+    -- Advance every weapon's cooldown clock by one lifecycle tick and return the weapons
+    -- now due, in cast order, split by engine phase: early (fired before status upkeep)
+    -- and late (fired after the tick's spawns). An unowned weapon has no cooldown
+    -- accumulation and cannot fire; a carry engine keeps its overshoot.
+    function SurvivorCombat.TickWeapons(dt)
+        local early, late = {}, {}
+        for _, id in ipairs(SurvivorConfig.weaponOrder) do
+            local engine, weapon = EngineOf(id), run.stats.weapons[id]
+            local enabled = weapon and weapon.enabled
+            local clock = enabled and (run.weaponClocks[id] or 0) + dt or 0
+            local interval = enabled and weapon.interval
+            if enabled and clock >= interval then
+                clock = engine.carry and clock - interval or 0
+                local due = engine.phase == "early" and early or late
+                due[#due + 1] = id
+            end
+            run.weaponClocks[id] = clock
+        end
+        return early, late
+    end
+    function SurvivorCombat.CastWeapons(ids)
+        for _, id in ipairs(ids) do SurvivorCombat.CastWeapon(id) end
     end
     function SurvivorCombat.BossDefeated() return run.bossDefeated end
     function SurvivorCombat.BossStatus()
@@ -1549,6 +1613,7 @@ do
         assert(Alive(run.hero) and index >= 1 and index <= SurvivorConfig.stages, "Invalid stage transition")
         SurvivorCombat.ClearBattlefield()
         run.stage, run.stageStarted, run.enemyCount, run.boss, run.bossDefeated, run.warningUntil = index, elapsed, 0, nil, false, 0
+        run.weaponClocks = {}
         run.bonusCount, run.nextBonusAt = 0, elapsed + SurvivorConfig.bonusProps.firstSpawn
         Sets.BeginStage()
         run.escapeReady = true

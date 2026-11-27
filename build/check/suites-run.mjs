@@ -731,7 +731,7 @@ local function Kill(u)
 end
 local function Burst(units,build)
     build.stats.sets.gravewarden=true
-    local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.CastExtra,'Hit')
+    local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.FireMissile,'Hit')
     local near=EnemyAt(units,100,100,false);near.life=100000
     local cursed=EnemyAt(units,100,0,false);cursed.life=100000
     apply(cursed,'plaguedart',{curse=cfg.curseMax},1);hit(cursed,40,'plaguedart',false,false,1,{})
@@ -839,7 +839,7 @@ local _,_,units=NewCombat('plaguedart')
 assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
     finish=function(reason)finished=reason;SurvivorCombat.Cleanup()end}))
 CombatRun().onKill=function()killed=killed+1 end
-local hit=Local(SurvivorCombat.CastExtra,'Hit')
+local hit=Local(SurvivorCombat.FireMissile,'Hit')
 local enemy=EnemyAt(units,100,0,false);enemy.life=10
 onDamage=function(u)
     if u.life>0 then return end
@@ -911,7 +911,7 @@ local _,_,units=NewCombat('plaguedart')
 assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
     finish=function(reason)finished=reason;SurvivorCombat.Cleanup()end}))
 CombatRun().onKill=function()error('injected kill reward failure')end
-local hit=Local(SurvivorCombat.CastExtra,'Hit')
+local hit=Local(SurvivorCombat.FireMissile,'Hit')
 local enemy=EnemyAt(units,100,0,false);enemy.life=10
 onDamage=function(u)
     if u.life>0 then return end
@@ -953,7 +953,7 @@ local _,build,units=NewCombat('plaguedart')
 local kills=0
 CombatRun().onKill=function()kills=kills+1 end
 build.stats.sets.gravewarden=true
-local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.CastExtra,'Hit')
+local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.FireMissile,'Hit')
 local near=EnemyAt(units,100,100,false);near.life=100000
 local cursed=EnemyAt(units,100,0,false);cursed.life=100000
 now=10 -- Past the initial soul-burst cooldown; the curse is applied at this time.
@@ -1266,8 +1266,8 @@ local function actor(host)
     a.isGlobal,a.isAnonymous=true,true;a.alreadyDestroyed=nil;a.references[host]=true;registry[host]=a;return a
 end
 local selfActor=actor();SetLocal(makePair,'SELF_INTERACTION_ACTOR',selfActor)
-local hero,build,units=NewCombat('firebolt');local create=Local(SurvivorCombat.CastExtra,'CreateObject')
-local lifetime=Local(SurvivorCombat.CastExtra,'ZoneLifetime');local originalCreate=ALICE_Create
+local hero,build,units=NewCombat('firebolt');local create=Local(SurvivorCombat.FireMissile,'CreateObject')
+local lifetime=Local(SurvivorCombat.FireMissile,'ZoneLifetime');local originalCreate=ALICE_Create
 local function effect(life)
     local e={identifier='hsSnow',x=0,y=0,z=0,life=life,isAnonymous=true,selfInteractions=lifetime}
     ALICE_Create=function()end;create(e,SurvivorConfig.slashModel,1);ALICE_Create=originalCreate
@@ -1793,7 +1793,7 @@ suite('putress set effects spread poison, burst cursed deaths and strengthen rea
 function AddLightningEx()return {}end
 `, [config, metrics, augments, combat], String.raw`
 local hero,build,units=NewCombat('plaguedart')
-local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.CastExtra,'Hit')
+local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.FireMissile,'Hit')
 local cfg=SurvivorConfig.status
 local function Kill(u)
     u.life=0;GetTriggerUnit=function()return u end

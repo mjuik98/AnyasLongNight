@@ -120,12 +120,18 @@ do
     -- status adjusts Putress status (poison/curse add stacks, reactionMul multiplies,
     -- other keys set flags read by combat). mode names a combat behaviour that
     -- SurvivorCombat reads from the weapon's evolution field (a weapon on the same
-    -- engine may reuse its reference weapon's mode).
+    -- engine may reuse its reference weapon's mode); modeValues holds that behaviour's
+    -- numbers (stats.weapons[weapon].modeValues), and its damage counts for the weapon:
+    --   burst: explosion radius, max targets, damage fraction of the hit
+    --   focus: max stacks, damage per stack, stack duration (s)
+    --   shatter: shard search range, shard count, damage fraction, retrigger cooldown (s),
+    --     shard life (s), hit radius, slow duration (s) and model scale
+    --   lance: hits on one enemy that freeze it, freeze duration (s)
     local evolutions = {
         {weapon = "firebolt", key = "burst", name = "폭렬 화살", text = "발사 수 +2 · 피해 -15% · 적중 시 주변 범위에 30% 폭발 피해(최대 12명)",
-            multiply = {damage = 0.85}, add = {count = 2}, mode = "burst"},
+            multiply = {damage = 0.85}, add = {count = 2}, mode = "burst", modeValues = {radius = 140, targets = 12, damage = 0.30}},
         {weapon = "firebolt", key = "judgment", name = "심판의 불꽃", text = "피해 +25% · 쿨다운 20% 증가 · 같은 적 연속 적중 시 피해 +15%씩 최대 60%(3초 유지)",
-            multiply = {damage = 1.25, interval = 1.2}, mode = "focus"},
+            multiply = {damage = 1.25, interval = 1.2}, mode = "focus", modeValues = {stacks = 4, damage = 0.15, duration = 3}},
         {weapon = "flamefield", key = "inferno", name = "불바다", text = "반경 +45% · 피해 -10%", multiply = {radius = 1.45, damage = 0.9}},
         {weapon = "flamefield", key = "furnace", name = "지옥의 화로", text = "타격 간격 -35% · 반경 -15%", multiply = {pulse = 0.65, radius = 0.85}},
         {weapon = "chainlightning", key = "stormnet", name = "폭풍 그물", text = "연쇄 대상 +4 · 전이 거리 +35%",
@@ -142,9 +148,11 @@ do
         {weapon = "frontslash", key = "crescent", name = "반월참", text = "각도 180도 · 베기 거리 +35%", multiply = {range = 1.35}, set = {angle = 180}},
         {weapon = "frontslash", key = "focus", name = "집중 일섬", text = "피해 +100% · 각도 60도 고정", multiply = {damage = 2}, set = {angle = 60}},
         {weapon = "frostshard", key = "glacier", name = "빙하 관통", text = "관통 +4 · 크기 +25% · 둔화된 적 처치 시 파편 3개(35% 피해) · 파편 연쇄 생성 없음",
-            multiply = {hitRadius = 1.25, scale = 1.25}, add = {pierce = 4}, mode = "shatter"},
+            multiply = {hitRadius = 1.25, scale = 1.25}, add = {pierce = 4}, mode = "shatter",
+            modeValues = {range = 450, targets = 3, damage = 0.35, cooldown = 0.12,
+                life = 1.5, hitRadius = 28, slowDuration = 1, scale = 0.7}},
         {weapon = "frostshard", key = "lance", name = "서리 창", text = "피해 +140% · 관통 1명 · 같은 적 3회 적중 시 빙결 0.8초(보스 0.35초/면역 8초)",
-            multiply = {damage = 2.4}, set = {pierce = 1}, mode = "lance"},
+            multiply = {damage = 2.4}, set = {pierce = 1}, mode = "lance", modeValues = {hits = 3, freeze = 0.8}},
         {weapon = "frostnova", key = "ring", name = "혹한의 고리", text = "반경 +40% · 둔화 지속 +50%", multiply = {radius = 1.4, duration = 1.5}},
         {weapon = "frostnova", key = "pulse", name = "빙결 파동", text = "쿨다운 40% 감소 · 반경 -15%", multiply = {interval = 0.6, radius = 0.85}},
         {weapon = "blizzard", key = "whiteout", name = "백색 폭풍", text = "반경 +40% · 지속 +30%", multiply = {radius = 1.4, duration = 1.3}},
@@ -211,7 +219,7 @@ do
         catalog[id] = {kind = "evolution", weapon = weapon, name = definition.name, text = definition.text,
             icon = catalog[weapon].icon, element = catalog[weapon].element,
             multiply = definition.multiply or {}, add = definition.add or {}, set = definition.set or {},
-            status = definition.status or {}, mode = definition.mode}
+            status = definition.status or {}, mode = definition.mode, modeValues = definition.modeValues}
         order[#order + 1] = id
         evolutionIds[weapon] = evolutionIds[weapon] or {}
         table.insert(evolutionIds[weapon], id)
@@ -224,19 +232,9 @@ do
         local ids = assert(evolutionIds[weapon], "Unknown evolution weapon")
         return {ids[1], ids[2]}
     end
-    -- Growth tables cover levels 1..7; the seventh level unlocks evolution.
-    local missilePower = {1, 1.25, 1.5, 1.875, 2.25, 2.6, 3}
-    local missileCount = {1, 1, 2, 2, 3, 3, 4}
-    local zonePower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
-    local zoneRadius = {1, 1, 1.15, 1.15, 1.3, 1.3, 1.45}
-    local zoneDuration = {0, 0, 0, 1, 1, 1, 1.5}
-    local chainPower = {1, 1.3, 1.6, 1.9, 2.3, 2.6, 3}
-    local chainTargets = {3, 4, 5, 6, 7, 8, 9}
-    local bladePower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
-    local bladeCount = {2, 2, 3, 3, 4, 4, 5}
-    local monsoonPower, monsoonCount = {1, 1.3, 1.6, 1.9, 2.3, 2.6, 3}, {1, 1, 2, 2, 3, 3, 4}
-    local slashPower = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}
-    local frostPower, frostPierce = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, {2, 3, 3, 4, 5, 5, 6}
+    -- Engine growth tables (SurvivorConfig.weaponEngines[engine].levels) cover levels 1..7;
+    -- the seventh level unlocks evolution.
+    local engines = SurvivorConfig.weaponEngines
     local bonusKeys = {
         set = {ember = true, storm = true, frost = true, blade = true, apothecary = true, gravewarden = true, apprentice = true,
             commander = true, bombardier = true, destroyer = true, tracker = true,
@@ -303,61 +301,77 @@ do
         end
     end
     -- Weapons list shared stats in a fixed order (count, damage, range, area, duration, cooldown),
-    -- followed by weapon-specific stats and notes.
+    -- followed by weapon-specific stats and notes. engines[name].rows(w, hit, weapon, id)
+    -- returns the engine's rows and notes; hit is the target-type suffix for damage.
+    function engines.missile.rows(w, hit)
+        return {{"투사체 수", w.count}, {"피해", w.damage, 1, hit},
+            {"거리", w.range}, {"범위", w.hitRadius},
+            {"지속 시간", w.lifetime, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
+            {"투사체 속도", w.speed}}
+    end
+    function engines.zone.rows(w, hit)
+        return {{"피해", w.damage, 1, hit}, {"범위", w.radius},
+            {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
+            {"타격 간격", w.pulse, 2, "초"}}
+    end
+    function engines.chain.rows(w, hit)
+        return {{"최대 대상", w.targets}, {"피해", w.damage, 1, hit},
+            {"거리", w.range}, {"쿨다운", w.interval, 2, "초"},
+            {"연쇄 거리", w.jumpRange}}, {"전이마다 피해 -15%"}
+    end
+    function engines.orbit.rows(w, hit, _, id)
+        return {{"투사체 수", w.count}, {"피해", w.damage, 1, hit},
+            {"범위", w.radius}, {"지속 시간", w.duration, 2, "초"},
+            {"쿨다운", w.interval, 2, "초"}, {"타격 간격", w.hitInterval, 2, "초"}},
+            {id == engines.orbit.weapon and "새 칼날은 기존 칼날과 중첩" or "새 망령은 기존 망령과 중첩"}
+    end
+    function engines.strike.rows(w, hit, weapon)
+        return {{weapon.thrown and "약병 수" or "낙뢰 수", w.count}, {"피해", w.damage, 1, hit},
+            {"거리", w.range}, {"범위", w.radius}, {"쿨다운", w.interval, 2, "초"}}
+    end
+    function engines.cone.rows(w, hit)
+        return {{"피해", w.damage, 1, hit}, {"거리", w.range},
+            {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
+            {"각도", w.angle, 0, "도"}}, {"대상별 1회 타격"}
+    end
+    function engines.pierce.rows(w, hit)
+        local rows = {{"투사체 수", (w.count or 1) > 1 and w.count or 0},
+            {"최대 관통", w.pierce}, {"피해", w.damage, 1, hit},
+            {"거리", w.range}, {"범위", w.hitRadius},
+            {"지속 시간", w.lifetime, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
+            {"투사체 속도", w.speed}}
+        if w.slow > 0 then
+            rows[#rows + 1] = {"둔화", string.format("-%.0f%% · %s초", w.slow * 100, StatNumber(w.slowDuration, 2))}
+        end
+        return rows
+    end
+    -- Profile engines share damage, range, area, duration (unless instant) and cooldown rows.
+    local function ProfileRows(w, hit, instant)
+        local rows = {{"피해", w.damage, 1, hit}, {"거리", w.range}, {"범위", w.radius}}
+        if not instant then rows[#rows + 1] = {"지속 시간", w.duration, 2, "초"} end
+        rows[#rows + 1] = {"쿨다운", w.interval, 2, "초"}
+        return rows
+    end
+    function engines.nova.rows(w, hit) return ProfileRows(w, hit) end
+    function engines.field.rows(w, hit) return ProfileRows(w, hit) end
+    function engines.meteor.rows(w, hit) return ProfileRows(w, hit, true) end
+    function engines.summon.rows(w, hit)
+        local rows = ProfileRows(w, hit)
+        rows[#rows + 1] = {"소환 수", math.min(w.cap, w.count)}
+        rows[#rows + 1] = {"소환 상한", w.cap}
+        rows[#rows + 1] = {"공격 간격", w.pulse, 2, "초"}
+        return rows
+    end
+    function engines.orb.rows(w, hit)
+        return ProfileRows(w, hit),
+            {string.format("전이: 피해 %.0f%% · 주변 적 1명 · 간격 %.1f초 · 재전이 없음", w.chainFraction * 100, w.chainInterval)}
+    end
+    function engines.boomerang.rows(w, hit) return ProfileRows(w, hit), {"귀환 후 남은 시간 동안 재발사"} end
     local function WeaponRows(id, entry, stats)
         local kind, target = entry.text:match("^(.*) · (지상.*)$")
         assert(kind, "Weapon text must end with its target type")
-        local hit = " (" .. target .. ")"
-        local rows, notes
         local weapon = SurvivorConfig.weapons[id]
-        local engine, w = weapon.engine, stats.weapons[id]
-        if engine == "missile" then
-            rows = {{"투사체 수", w.count}, {"피해", w.damage, 1, hit},
-                {"거리", w.range}, {"범위", w.hitRadius},
-                {"지속 시간", w.lifetime, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
-                {"투사체 속도", w.speed}}
-        elseif engine == "zone" then
-            rows = {{"피해", w.damage, 1, hit}, {"범위", w.radius},
-                {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
-                {"타격 간격", w.pulse, 2, "초"}}
-        elseif engine == "chain" then
-            rows = {{"최대 대상", w.targets}, {"피해", w.damage, 1, hit},
-                {"거리", w.range}, {"쿨다운", w.interval, 2, "초"},
-                {"연쇄 거리", w.jumpRange}}
-            notes = {"전이마다 피해 -15%"}
-        elseif engine == "orbit" then
-            rows = {{"투사체 수", w.count}, {"피해", w.damage, 1, hit},
-                {"범위", w.radius}, {"지속 시간", w.duration, 2, "초"},
-                {"쿨다운", w.interval, 2, "초"}, {"타격 간격", w.hitInterval, 2, "초"}}
-            notes = {id == "orbitblade" and "새 칼날은 기존 칼날과 중첩" or "새 망령은 기존 망령과 중첩"}
-        elseif engine == "strike" then
-            rows = {{weapon.thrown and "약병 수" or "낙뢰 수", w.count}, {"피해", w.damage, 1, hit},
-                {"거리", w.range}, {"범위", w.radius}, {"쿨다운", w.interval, 2, "초"}}
-        elseif engine == "cone" then
-            rows = {{"피해", w.damage, 1, hit}, {"거리", w.range},
-                {"지속 시간", w.duration, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
-                {"각도", w.angle, 0, "도"}}
-            notes = {"대상별 1회 타격"}
-        elseif engine == "pierce" then
-            rows = {{"투사체 수", (w.count or 1) > 1 and w.count or 0},
-                {"최대 관통", w.pierce}, {"피해", w.damage, 1, hit},
-                {"거리", w.range}, {"범위", w.hitRadius},
-                {"지속 시간", w.lifetime, 2, "초"}, {"쿨다운", w.interval, 2, "초"},
-                {"투사체 속도", w.speed}}
-            if w.slow > 0 then
-                rows[#rows + 1] = {"둔화", string.format("-%.0f%% · %s초", w.slow * 100, StatNumber(w.slowDuration, 2))}
-            end
-        else
-            rows = {{"피해", w.damage, 1, hit}, {"거리", w.range}, {"범위", w.radius}}
-            if id ~= "meteor" and id ~= "plaguejar" then rows[#rows + 1] = {"지속 시간", w.duration, 2, "초"} end
-            rows[#rows + 1] = {"쿨다운", w.interval, 2, "초"}
-            if engine == "summon" then
-                rows[#rows + 1] = {"소환 수", math.min(w.cap, w.count)}
-                rows[#rows + 1] = {"소환 상한", w.cap}
-                rows[#rows + 1] = {"공격 간격", w.pulse, 2, "초"}
-            elseif engine == "orb" then notes = {string.format("전이: 피해 %.0f%% · 주변 적 1명 · 간격 %.1f초 · 재전이 없음", w.chainFraction * 100, w.chainInterval)}
-            elseif engine == "boomerang" then notes = {"귀환 후 남은 시간 동안 재발사"} end
-        end
+        local rows, notes = engines[weapon.engine].rows(stats.weapons[id], " (" .. target .. ")", weapon, id)
         local status = stats.status and stats.status[id]
         if status then
             rows[#rows + 1] = {"중독", status.poison, 0, "스택/타격"}
@@ -434,6 +448,124 @@ do
             bases[id] = base
         end
     end
+    -- Engine growth: engines[name].fields(g, id, level, base) builds stats.weapons[id] from
+    -- the weapon's base (core) or weaponProfiles entry (profile). g is one Calculate call's
+    -- growth context: the build plus its shared multipliers.
+    -- Core engines also scale damage, cooldown and area by the weapon's own bonuses.
+    local function CoreScales(g, id)
+        return math.max(0.1, 1 + g.power + Bonus(g.build, id, "damagePct")),
+            math.max(0.1, 1 + g.speed + Bonus(g.build, id, "speedPct")),
+            math.max(0.1, 1 + g.area + Bonus(g.build, id, "areaPct"))
+    end
+    function engines.missile.fields(g, id, level, b)
+        local on, grow = level > 0, engines.missile.levels
+        local damageScale, haste, areaBonus = CoreScales(g, id)
+        return {enabled = on,
+            speed = math.min(4000, b.speed * g.projectileSpeed),
+            scale = 0.8 * g.projectileSize, hitRadius = b.hitRadius * g.projectileSize,
+            lifetime = math.min(20, b.lifetime * g.projectileLife),
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            interval = math.max(0.15, b.interval / haste),
+            count = on and math.min(12, math.max(1, grow.count[level]
+                + math.floor(Bonus(g.build, "all", "extraProjectiles") + Bonus(g.build, id, "extraProjectiles")))) or 0,
+            range = math.min(2500, b.range * g.projectileRange * areaBonus)}
+    end
+    function engines.zone.fields(g, id, level, b)
+        local on, grow = level > 0, engines.zone.levels
+        local damageScale, haste, areaBonus = CoreScales(g, id)
+        return {enabled = on,
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            interval = math.max(0.5, b.interval / haste),
+            pulse = math.max(0.1, b.pulse),
+            radius = math.min(900, b.radius * g.weaponSize * g.weaponRange * (on and grow.radius[level] or 1) * areaBonus),
+            duration = math.max(0.5, (b.duration + (on and grow.duration[level] or 0)
+                + Bonus(g.build, "all", "duration") + Bonus(g.build, id, "duration")) * g.weaponLife)}
+    end
+    function engines.chain.fields(g, id, level, b)
+        local on, grow = level > 0, engines.chain.levels
+        local damageScale, haste, areaBonus = CoreScales(g, id)
+        return {enabled = on,
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            targets = on and math.min(20, math.ceil(grow.targets[level] * g.weaponLife)) or 0,
+            interval = math.max(0.4, b.interval / haste),
+            range = math.min(2500, b.range * g.weaponRange * areaBonus),
+            jumpRange = math.min(1200, b.jumpRange * g.weaponSize * g.weaponRange * areaBonus)}
+    end
+    function engines.orbit.fields(g, id, level, b)
+        local on, grow = level > 0, engines.orbit.levels
+        local damageScale, haste, areaBonus = CoreScales(g, id)
+        return {enabled = on,
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            count = on and grow.count[level] or 0,
+            hitRadius = b.hitRadius * g.weaponSize, scale = 0.85 * g.weaponSize,
+            hitInterval = b.hitInterval,
+            interval = math.max(1, b.interval / haste),
+            duration = b.duration * g.weaponLife,
+            radius = math.min(450, b.radius * g.weaponRange * areaBonus),
+            period = math.max(0.6, b.period)}
+    end
+    function engines.strike.fields(g, id, level, b)
+        local on, grow = level > 0, engines.strike.levels
+        local damageScale, haste, areaBonus = CoreScales(g, id)
+        return {enabled = on,
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            count = on and math.min(8, math.max(1, math.ceil((grow.count[level]
+                + math.floor(Bonus(g.build, id, "extraStrikes"))) * g.weaponLife))) or 0,
+            interval = math.max(0.5, b.interval / haste),
+            delay = 0.12, spacing = 0.18,
+            range = math.min(2500, b.range * g.weaponRange * areaBonus),
+            radius = math.min(600, b.radius * g.weaponSize * areaBonus)}
+    end
+    function engines.cone.fields(g, id, level, b)
+        local on, grow = level > 0, engines.cone.levels
+        local damageScale, haste, areaBonus = CoreScales(g, id)
+        return {enabled = on,
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            interval = math.max(0.3, b.interval / haste),
+            scale = g.weaponSize, sweepTime = 0.24,
+            duration = math.max(0, 0.6 * (g.weaponLife - 1)),
+            range = math.min(750, b.range * g.weaponSize * g.weaponRange * areaBonus),
+            angle = math.min(180, math.max(20, b.angle + math.max(0, level - 1) * 10 + Bonus(g.build, id, "angle")))}
+    end
+    function engines.pierce.fields(g, id, level, b)
+        local on, grow = level > 0, engines.pierce.levels
+        local damageScale, haste = CoreScales(g, id)
+        return {enabled = on,
+            damage = on and b.damage * grow.power[level] * damageScale or 0,
+            pierce = on and math.min(12, math.max(1, grow.pierce[level] + math.floor(Bonus(g.build, id, "extraPierce")))) or 0,
+            interval = math.max(0.25, b.interval / haste),
+            speed = math.min(4000, b.speed * g.projectileSpeed), scale = g.projectileSize,
+            range = math.min(2500, b.range * g.projectileRange), hitRadius = b.hitRadius * g.projectileSize,
+            lifetime = math.min(20, b.lifetime * g.projectileLife), slow = b.slow, count = 1,
+            slowDuration = math.max(0.1, (b.slowDuration + Bonus(g.build, id, "slowDuration")) * g.weaponLife)}
+    end
+    -- Profile engines: shared growth from each weapon's weaponProfiles entry.
+    local function ProfileFields(g, id, level, profile)
+        local weapon = SurvivorConfig.weapons[id]
+        local engine = engines[weapon.engine]
+        local size = math.max(0.1, g.weaponSize * (1 + g.area + Bonus(g.build, id, "areaPct")))
+        return {
+            enabled = level > 0,
+            damage = level > 0 and profile.damage * (1 + 0.35 * (level - 1)) * math.max(0.1, 1 + g.power + Bonus(g.build, id, "damagePct")) or 0,
+            interval = math.max(0.5, profile.interval / math.max(0.1, 1 + g.speed + Bonus(g.build, id, "speedPct"))),
+            radius = math.min(900, profile.radius * size * (engine.radiusRange and g.weaponRange or 1)),
+            range = math.min(2500, profile.range * g.weaponRange), size = g.weaponSize,
+            duration = math.min(20, math.max(0.1, profile.duration + Bonus(g.build, "all", "duration") + Bonus(g.build, id, "duration")) * g.weaponLife),
+            speed = profile.speed * (weapon.projectile and g.projectileSpeed or 1),
+            summonKind = weapon.summonKind,
+            count = profile.count and math.min(profile.cap, profile.count + (profile.countGrowth or 1) * math.floor(math.max(0, level - 1) / 6)) or 0,
+            cap = profile.cap or 0,
+            chainInterval = profile.chainInterval, chainRange = profile.chainRange, chainFraction = profile.chainFraction,
+            modelScale = weapon.modelScale, opaque = weapon.opaque,
+            pulse = math.max(0.1, profile.pulse / (engine.pulseHaste and math.max(0.1, 1 + g.speed + Bonus(g.build, id, "speedPct")) or 1)),
+            slow = profile.slow, delay = 0.8,
+            slowDurationBonus = Bonus(g.build, id, "slowDuration"),
+        }
+    end
+    for name, engine in pairs(engines) do
+        if engine.profile then engine.fields = ProfileFields end
+        assert(engine.fields and engine.rows, "Weapon engine needs growth fields and tooltip rows " .. name)
+    end
     local function Calculate(build)
         if not build.equipmentTotals then
             build = {levels = build.levels, evolutions = build.evolutions,
@@ -451,97 +583,10 @@ do
         local projectileSize = math.min(3, math.max(0.1, 1 + (levels.magnitude or 0) * catalog.magnitude.amount + Bonus(build, "all", "projectileSizePct") + Bonus(build, "all", "sizePct")))
         local projectileRange = math.max(0.1, 1 + (levels.reach or 0) * catalog.reach.amount + Bonus(build, "all", "projectileRangePct") + Bonus(build, "all", "rangePct"))
         local projectileLife = math.max(0.1, 1 + (levels.longevity or 0) * catalog.longevity.amount + Bonus(build, "all", "projectileDurationPct") + Bonus(build, "all", "durationPct"))
-        -- Core engines: one formula set per engine serves every weapon on that engine.
-        local function EngineFields(engine, id, level, b)
-            local on = level > 0
-            local damageScale = math.max(0.1, 1 + power + Bonus(build, id, "damagePct"))
-            local haste = math.max(0.1, 1 + speed + Bonus(build, id, "speedPct"))
-            local areaBonus = math.max(0.1, 1 + area + Bonus(build, id, "areaPct"))
-            if engine == "missile" then
-                return {enabled = on,
-                    speed = math.min(4000, b.speed * projectileSpeed),
-                    scale = 0.8 * projectileSize, hitRadius = b.hitRadius * projectileSize,
-                    lifetime = math.min(20, b.lifetime * projectileLife),
-                    damage = on and b.damage * missilePower[level] * damageScale or 0,
-                    interval = math.max(0.15, b.interval / haste),
-                    count = on and math.min(12, math.max(1, missileCount[level]
-                        + math.floor(Bonus(build, "all", "extraProjectiles") + Bonus(build, id, "extraProjectiles")))) or 0,
-                    range = math.min(2500, b.range * projectileRange * areaBonus)}
-            elseif engine == "zone" then
-                return {enabled = on,
-                    damage = on and b.damage * zonePower[level] * damageScale or 0,
-                    interval = math.max(0.5, b.interval / haste),
-                    pulse = math.max(0.1, b.pulse),
-                    radius = math.min(900, b.radius * weaponSize * weaponRange * (on and zoneRadius[level] or 1) * areaBonus),
-                    duration = math.max(0.5, (b.duration + (on and zoneDuration[level] or 0)
-                        + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife)}
-            elseif engine == "chain" then
-                return {enabled = on,
-                    damage = on and b.damage * chainPower[level] * damageScale or 0,
-                    targets = on and math.min(20, math.ceil(chainTargets[level] * weaponLife)) or 0,
-                    interval = math.max(0.4, b.interval / haste),
-                    range = math.min(2500, b.range * weaponRange * areaBonus),
-                    jumpRange = math.min(1200, b.jumpRange * weaponSize * weaponRange * areaBonus)}
-            elseif engine == "orbit" then
-                return {enabled = on,
-                    damage = on and b.damage * bladePower[level] * damageScale or 0,
-                    count = on and bladeCount[level] or 0,
-                    hitRadius = b.hitRadius * weaponSize, scale = 0.85 * weaponSize,
-                    hitInterval = b.hitInterval,
-                    interval = math.max(1, b.interval / haste),
-                    duration = b.duration * weaponLife,
-                    radius = math.min(450, b.radius * weaponRange * areaBonus),
-                    period = math.max(0.6, b.period)}
-            elseif engine == "strike" then
-                return {enabled = on,
-                    damage = on and b.damage * monsoonPower[level] * damageScale or 0,
-                    count = on and math.min(8, math.max(1, math.ceil((monsoonCount[level]
-                        + math.floor(Bonus(build, id, "extraStrikes"))) * weaponLife))) or 0,
-                    interval = math.max(0.5, b.interval / haste),
-                    delay = 0.12, spacing = 0.18,
-                    range = math.min(2500, b.range * weaponRange * areaBonus),
-                    radius = math.min(600, b.radius * weaponSize * areaBonus)}
-            elseif engine == "cone" then
-                return {enabled = on,
-                    damage = on and b.damage * slashPower[level] * damageScale or 0,
-                    interval = math.max(0.3, b.interval / haste),
-                    scale = weaponSize, sweepTime = 0.24,
-                    duration = math.max(0, 0.6 * (weaponLife - 1)),
-                    range = math.min(750, b.range * weaponSize * weaponRange * areaBonus),
-                    angle = math.min(180, math.max(20, b.angle + math.max(0, level - 1) * 10 + Bonus(build, id, "angle")))}
-            end
-            assert(engine == "pierce", "Unknown core engine")
-            return {enabled = on,
-                damage = on and b.damage * frostPower[level] * damageScale or 0,
-                pierce = on and math.min(12, math.max(1, frostPierce[level] + math.floor(Bonus(build, id, "extraPierce")))) or 0,
-                interval = math.max(0.25, b.interval / haste),
-                speed = math.min(4000, b.speed * projectileSpeed), scale = projectileSize,
-                range = math.min(2500, b.range * projectileRange), hitRadius = b.hitRadius * projectileSize,
-                lifetime = math.min(20, b.lifetime * projectileLife), slow = b.slow, count = 1,
-                slowDuration = math.max(0.1, (b.slowDuration + Bonus(build, id, "slowDuration")) * weaponLife)}
-        end
-        -- Profile engines: shared growth from each weapon's weaponProfiles entry.
-        local function ProfileFields(id, level, profile)
-            local weapon = c.weapons[id]
-            local size = math.max(0.1, weaponSize * (1 + area + Bonus(build, id, "areaPct")))
-            return {
-                enabled = level > 0,
-                damage = level > 0 and profile.damage * (1 + 0.35 * (level - 1)) * math.max(0.1, 1 + power + Bonus(build, id, "damagePct")) or 0,
-                interval = math.max(0.5, profile.interval / math.max(0.1, 1 + speed + Bonus(build, id, "speedPct"))),
-                radius = math.min(900, profile.radius * size * (weapon.engine == "nova" and weaponRange or 1)),
-                range = math.min(2500, profile.range * weaponRange), size = weaponSize,
-                duration = math.min(20, math.max(0.1, profile.duration + Bonus(build, "all", "duration") + Bonus(build, id, "duration")) * weaponLife),
-                speed = profile.speed * (weapon.projectile and projectileSpeed or 1),
-                summonKind = weapon.summonKind,
-                count = profile.count and math.min(profile.cap, profile.count + (profile.countGrowth or 1) * math.floor(math.max(0, level - 1) / 6)) or 0,
-                cap = profile.cap or 0,
-                chainInterval = profile.chainInterval, chainRange = profile.chainRange, chainFraction = profile.chainFraction,
-                modelScale = weapon.modelScale, opaque = weapon.opaque,
-                pulse = math.max(0.1, profile.pulse / (weapon.engine == "summon" and math.max(0.1, 1 + speed + Bonus(build, id, "speedPct")) or 1)),
-                slow = profile.slow, delay = 0.8,
-                slowDurationBonus = Bonus(build, id, "slowDuration"),
-            }
-        end
+        local g = {build = build, power = power, speed = speed, area = area,
+            weaponSize = weaponSize, weaponRange = weaponRange, weaponLife = weaponLife,
+            projectileSpeed = projectileSpeed, projectileSize = projectileSize,
+            projectileRange = projectileRange, projectileLife = projectileLife}
         local result = {
             multiCount = multiCounts[levels.multicast or 0] or 0, multiDamage = multiDamage[levels.multicast or 0] or 0,
             moveSpeed = math.min(500, math.max(100, c.moveSpeed + Bonus(build, "all", "moveSpeed") + (levels.stride or 0) * catalog.stride.amount)),
@@ -558,8 +603,7 @@ do
         for set in pairs(bonusKeys.set) do result.sets[set] = Bonus(build, "set", set) >= 1 end
         for id, weapon in pairs(c.weapons) do
             local level = levels[id] or 0
-            local fields = bases[id] and EngineFields(weapon.engine, id, level, bases[id])
-                or ProfileFields(id, level, c.weaponProfiles[id])
+            local fields = engines[weapon.engine].fields(g, id, level, bases[id] or c.weaponProfiles[id])
             fields.weaponId, fields.model, fields.thrown, fields.lightning = id, weapon.model, weapon.thrown, weapon.lightning
             fields.falling, fields.hitModel = weapon.falling, weapon.hitModel
             fields.throwModel, fields.throwScale = weapon.throwModel, weapon.throwScale
@@ -584,15 +628,16 @@ do
             end
         end
         for weapon, id in pairs(build.evolutions or {}) do
-            local entry, target, engine = catalog[id], result.weapons[weapon], c.weapons[weapon].engine
+            local entry, target, engine = catalog[id], result.weapons[weapon], engines[c.weapons[weapon].engine]
             for key, value in pairs(entry.multiply) do target[key] = target[key] * value end
             for key, value in pairs(entry.add) do target[key] = target[key] + value end
             -- Fixed-count branches retain the value of duration/count bonuses as damage.
-            if engine == "chain" and entry.set.targets then target.damage = target.damage * target.targets / chainTargets[levels[weapon]] end
-            if engine == "strike" and entry.set.count then target.damage = target.damage * target.count / monsoonCount[levels[weapon]] end
+            local fixed = engine.fixed
+            if fixed and entry.set[fixed] then target.damage = target.damage * target[fixed] / engine.levels[fixed][levels[weapon]] end
             for key, value in pairs(entry.set) do target[key] = value end
             if target.cap and target.cap > 0 then target.count = math.min(target.cap, target.count) end
-            target.evolution = entry.mode
+            -- mode names the combat behaviour; modeValues holds its numbers.
+            target.evolution, target.modeValues = entry.mode, entry.modeValues
             local status = result.status[weapon]
             for key, value in pairs(entry.status) do
                 if key == "poison" or key == "curse" then status[key] = status[key] + value
@@ -668,7 +713,7 @@ do
         return true
     end
     function SurvivorAugments.NewBuild(startingWeapon, startingTrinket, heroId)
-        assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= #chainTargets, "Growth tables support levels 1..7")
+        assert(SurvivorConfig.growthMaxLevel >= 1 and SurvivorConfig.growthMaxLevel <= #engines.chain.levels.targets, "Growth tables support levels 1..7")
         assert(SurvivorConfig.weaponSlots >= 1 and SurvivorConfig.weaponSlots <= 6
             and SurvivorConfig.trinketSlots >= 1 and SurvivorConfig.trinketSlots <= 6, "Growth UI supports 1..6 slots per category")
         local first, owner = startingWeapon or SurvivorConfig.startingWeapon, heroId or SurvivorConfig.defaultHero
