@@ -40,20 +40,33 @@ do
         theme.ids = {melee = FourCC("sm0" .. i), ranged = FourCC("sr0" .. i), flying = FourCC("sf0" .. i), boss = FourCC("sb0" .. i)}
         theme.flying = theme.flying or [[Units\Undead\Gargoyle\Gargoyle.mdl]]
     end
-    local effects, weather, sound, rect, arena = {}, nil, nil, nil, nil
-    local sceneProps, paintBounds, currentTheme = {}, nil, nil
-    local dialogueAudioOwners, soundVolume = {}, nil
+    -- The arena this run plays in (Init) and who holds the ambience down. Cleanup swaps
+    -- in a fresh NewRun() after detaching the rect, so a new field needs no second reset.
+    local function NewRun()
+        return {rect = nil, arena = nil, paintBounds = nil, dialogueAudioOwners = {}}
+    end
+    -- Everything the applied stage owns: scenery, weather and ambience, the terrain cells
+    -- it repainted and the pathing cells it blocked. ClearPresentation swaps in a fresh
+    -- NewPresentation() (the current view) before restoring any of them natively.
+    local function NewPresentation()
+        return {
+            effects = {}, sceneProps = {}, currentTheme = nil, weather = nil, sound = nil, soundVolume = nil,
+            painted = {}, paintedCells = {},
+            cells = {}, walls = {}, reachable = {}, lava = {},
+        }
+    end
+    local run, view = NewRun(), NewPresentation()
     local function RefreshAmbienceVolume()
-        local volume = next(dialogueAudioOwners) and 8 or 18
-        if sound and soundVolume ~= volume then
+        local volume = next(run.dialogueAudioOwners) and 8 or 18
+        if view.sound and view.soundVolume ~= volume then
             -- This is our loop's gain, independent of the player's master sound setting.
-            local ok = pcall(SetSoundVolume, sound, volume)
-            if ok then soundVolume = volume end
+            local ok = pcall(SetSoundVolume, view.sound, volume)
+            if ok then view.soundVolume = volume end
         end
     end
     function SurvivorStage.SetDialogueAmbience(enabled, owner)
         owner = owner or "story"
-        dialogueAudioOwners[owner] = enabled and true or nil
+        run.dialogueAudioOwners[owner] = enabled and true or nil
         RefreshAmbienceVolume()
     end
     -- Teardown attempts every native restore; a failed item is skipped, never replayed.
@@ -69,8 +82,6 @@ do
             end)
         end
     end
-    local painted, paintedCells = {}, {}
-    local cells, walls, reachable, lava = {}, {}, {}, {}
     -- Stock assets, resolved through the player's graphics mode. No imported model overrides.
     local grave = [[Doodads\Cityscape\Props\CityGrave\CityGrave]]
     local column = [[Doodads\Cityscape\Structures\City_ColumnSingle]]
@@ -99,15 +110,15 @@ do
     end
     local function Inside(x, y, margin)
         margin = margin or 128
-        return arena and x >= arena.minX + margin and x <= arena.maxX - margin
-            and y >= arena.minY + margin and y <= arena.maxY - margin
+        return run.arena and x >= run.arena.minX + margin and x <= run.arena.maxX - margin
+            and y >= run.arena.minY + margin and y <= run.arena.maxY - margin
     end
     local function InClearing(x, y)
-        local cx, cy = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
+        local cx, cy = (run.arena.minX + run.arena.maxX) / 2, (run.arena.minY + run.arena.maxY) / 2
         return (x - cx)^2 + (y - cy)^2 < 420^2
     end
     local function OnOwnedWall(x, y)
-        for _, wall in ipairs(walls) do
+        for _, wall in ipairs(view.walls) do
             if x >= wall.x1 and x <= wall.x2 and y >= wall.y1 and y <= wall.y2 then return true end
         end
         return false
@@ -117,23 +128,22 @@ do
         -- Background texture includes blocked ground; height, water, cliffs and pathing stay authored.
         x, y = math.floor(x / 128) * 128 + 64, math.floor(y / 128) * 128 + 64
         if background then
-            if x < paintBounds.minX or x > paintBounds.maxX or y < paintBounds.minY or y > paintBounds.maxY then return end
+            if x < run.paintBounds.minX or x > run.paintBounds.maxX or y < run.paintBounds.minY or y > run.paintBounds.maxY then return end
         elseif not Inside(x, y) or (IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) and not OnOwnedWall(x, y)) then
             return
         end
         local key = x .. ":" .. y
-        if not paintedCells[key] then
+        if not view.paintedCells[key] then
             local cell = {x = x, y = y, tile = GetTerrainType(x, y),
                 variation = GetTerrainVariance(x, y), blighted = IsPointBlighted(x, y)}
-            painted[#painted + 1], paintedCells[key] = cell, cell
+            view.painted[#view.painted + 1], view.paintedCells[key] = cell, cell
         end
         local variant = math.floor(Variation(math.floor(x / 128) * 31 + math.floor(y / 128) * 17, index) * 4)
         SetTerrainType(x, y, FourCC(tile), variant, 1, 1)
         if blighted ~= nil then SetBlightPoint(SurvivorConfig.Owner(), x, y, blighted) end
     end
-    local function RestoreTerrain(errors)
-        local restore = painted
-        painted, paintedCells = {}, {} -- Detach before native writes.
+    -- Restores the cells of a view that ClearPresentation already detached.
+    local function RestoreTerrain(errors, restore)
         AttemptEach(errors, "stage terrain", restore, function(cell)
             SetTerrainType(cell.x, cell.y, cell.tile, cell.variation, 1, 1)
             SetBlightPoint(SurvivorConfig.Owner(), cell.x, cell.y, cell.blighted)
@@ -145,7 +155,7 @@ do
     local function Scenery(model, x, y, scale, angle, color)
         local effect = AddSpecialEffect(model, x, y)
         if not effect then return end
-        effects[#effects + 1] = effect
+        view.effects[#view.effects + 1] = effect
         Ground(effect, x, y)
         BlzSetSpecialEffectScale(effect, scale or 1)
         BlzSetSpecialEffectYaw(effect, angle or 0)
@@ -155,23 +165,23 @@ do
         return effect
     end
     function SurvivorStage.SceneProp(key, model, x, y, scale, angle, tint)
-        assert(currentTheme and rect, "Initialize stage presentation before scene scenery")
-        if sceneProps[key] then return sceneProps[key] end
-        if #effects >= 96 or not Inside(x, y, 32) then return end
-        local effect = Scenery(model, x, y, scale, angle, tint or sceneryColors[currentTheme])
-        sceneProps[key] = effect
+        assert(view.currentTheme and run.rect, "Initialize stage presentation before scene scenery")
+        if view.sceneProps[key] then return view.sceneProps[key] end
+        if #view.effects >= 96 or not Inside(x, y, 32) then return end
+        local effect = Scenery(model, x, y, scale, angle, tint or sceneryColors[view.currentTheme])
+        view.sceneProps[key] = effect
         return effect
     end
     local function Prop(index, model, x, y, scale, angle, tint)
         -- Reserve room for the same scenery viewed during the dialogue scene.
-        if #effects >= 80 or x < arena.minX + 128 or x > arena.maxX - 128
-            or y < arena.minY + 128 or y > arena.maxY - 128 or InClearing(x, y) then return end
+        if #view.effects >= 80 or x < run.arena.minX + 128 or x > run.arena.maxX - 128
+            or y < run.arena.minY + 128 or y > run.arena.maxY - 128 or InClearing(x, y) then return end
         if IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) and not OnOwnedWall(x, y) then return end
         return Scenery(model, x, y, scale, angle, tint or sceneryColors[index])
     end
     local function Decorate(index, x, y, scale, seed, solid)
-        if #effects >= 80 or x < arena.minX + 128 or x > arena.maxX - 128
-            or y < arena.minY + 128 or y > arena.maxY - 128 or InClearing(x, y) then return end
+        if #view.effects >= 80 or x < run.arena.minX + 128 or x > run.arena.maxX - 128
+            or y < run.arena.minY + 128 or y > run.arena.maxY - 128 or InClearing(x, y) then return end
         if not solid and IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY) then return end
         local models = pools[index]
         local choice = 1 + math.floor(Variation(seed, 4) * #models)
@@ -217,13 +227,13 @@ do
     local function PaintTerrain(index, cx, cy)
         -- Follow the real movement area, with a bounded sight buffer beyond it. A small
         -- central disc leaves the editor biome exposed as soon as the hero walks away.
-        local minX, minY = math.ceil((paintBounds.minX - 64) / 128) * 128 + 64,
-            math.ceil((paintBounds.minY - 64) / 128) * 128 + 64
-        for x = minX, paintBounds.maxX, 128 do
-            for y = minY, paintBounds.maxY, 128 do
+        local minX, minY = math.ceil((run.paintBounds.minX - 64) / 128) * 128 + 64,
+            math.ceil((run.paintBounds.minY - 64) / 128) * 128 + 64
+        for x = minX, run.paintBounds.maxX, 128 do
+            for y = minY, run.paintBounds.maxY, 128 do
                 local dx, dy = x - cx, y - cy
-                local edge = math.min(x - paintBounds.minX, paintBounds.maxX - x,
-                    y - paintBounds.minY, paintBounds.maxY - y)
+                local edge = math.min(x - run.paintBounds.minX, run.paintBounds.maxX - x,
+                    y - run.paintBounds.minY, run.paintBounds.maxY - y)
                 -- Frosted rock forms a natural snowy border rather than revealing bare dirt.
                 local tile = index == 3 and edge < 512 and "Nsnr" or TileAt(index, dx, dy)
                 local blighted = themes[index].blight == true and dx * dx + dy * dy > 1000^2 and OnOwnedWall(x, y)
@@ -240,7 +250,7 @@ do
         local visited = {}
         for _, point in ipairs(targets) do
             local node
-            for _, candidate in ipairs(reachable) do
+            for _, candidate in ipairs(view.reachable) do
                 if candidate.x == point.x and candidate.y == point.y then node = candidate; break end
             end
             while node do
@@ -259,7 +269,7 @@ do
     local function DressLandmark(index)
         -- The dominant silhouette occupies an already blocked wall. It cannot create
         -- invisible new obstacles or narrow the routes used by search objectives.
-        local wall = walls[1]
+        local wall = view.walls[1]
         local x, y = (wall.x1 + wall.x2) / 2, (wall.y1 + wall.y2) / 2
         local gate = [[Doodads\LordaeronSummer\Terrain\Gate\Gate.mdl]]
         local mainModels = {grave .. "0.mdl", cart, gate,
@@ -289,7 +299,7 @@ do
             for b = 1, 3 do
                 local px = x + (vertical and b * 128 or a * 128)
                 local py = y + (vertical and a * 128 or -b * 128)
-                if px > arena.minX + 128 and px < arena.maxX - 128 and py > arena.minY + 128 and py < arena.maxY - 128 then
+                if px > run.arena.minX + 128 and px < run.arena.maxX - 128 and py > run.arena.minY + 128 and py < run.arena.maxY - 128 then
                     Terrain(index, px, py, floor, false)
                 end
             end
@@ -348,7 +358,7 @@ do
         -- Asymmetric clusters suggest burial plots, collapsed shelves and old courtyards.
         -- Tall silhouettes are restricted to blocked geometry and the outer scenery belt.
         local anchors = {{-1650, 780}, {1380, 1130}, {-1280, -1460}, {1720, -820}, {420, 1850}, {-620, -1920}}
-        local scale = math.min(1, (arena.maxX - arena.minX - 512) / 4200, (arena.maxY - arena.minY - 512) / 4200)
+        local scale = math.min(1, (run.arena.maxX - run.arena.minX - 512) / 4200, (run.arena.maxY - run.arena.minY - 512) / 4200)
         for group, point in ipairs(anchors) do
             local ax = cx + (point[1] + (Variation(index * 37 + group, 1) - 0.5) * 160) * scale
             local ay = cy + (point[2] + (Variation(index * 37 + group, 2) - 0.5) * 160) * scale
@@ -365,15 +375,13 @@ do
         -- The outer map already has the editor's town, trees and cliffs. Keep those silhouettes.
     end
     -- Only cells owned by this stage are changed. Restore their original pathing on exit.
-    local function ClearGeometry(errors)
-        local restore = cells
-        cells, walls, reachable, lava = {}, {}, {}, {}
+    local function ClearGeometry(errors, restore)
         AttemptEach(errors, "stage pathing", restore, function(cell)
             SetTerrainPathable(cell.x, cell.y, PATHING_TYPE_WALKABILITY, cell.walkable)
         end)
     end
     function SurvivorStage.LineClear(ax, ay, bx, by)
-        for _, wall in ipairs(walls) do
+        for _, wall in ipairs(view.walls) do
             local low, high = 0, 1
             for axis = 1, 2 do
                 local origin, delta = axis == 1 and ax or ay, axis == 1 and bx - ax or by - ay
@@ -408,12 +416,12 @@ do
         end
         while head <= #queue do
             local p = queue[head]; head = head + 1
-            reachable[#reachable + 1] = p
+            view.reachable[#view.reachable + 1] = p
             for _, offset in ipairs(offsets) do
                 local ix, iy = p.ix + offset[1], p.iy + offset[2]
                 local key, x, y = ix .. ":" .. iy, cx + ix * 128, cy + iy * 128
                 if not visited[key] and math.abs(ix) <= 12 and math.abs(iy) <= 12 then
-                    local valid = x > arena.minX + 96 and x < arena.maxX - 96 and y > arena.minY + 96 and y < arena.maxY - 96
+                    local valid = x > run.arena.minX + 96 and x < run.arena.maxX - 96 and y > run.arena.minY + 96 and y < run.arena.maxY - 96
                     -- A hero-sized margin at the node plus a continuous walkable edge.
                     for _, d in ipairs(margins) do
                         if not valid then break end
@@ -428,13 +436,13 @@ do
             end
         end
         SurvivorMetrics.Count("stage.reachability.pathingReads", reads)
-        SurvivorMetrics.Count("stage.reachability.nodes", #reachable)
+        SurvivorMetrics.Count("stage.reachability.nodes", #view.reachable)
     end
     function SurvivorStage.FindPoint(angle, distance, avoid)
-        if not arena then return nil end
-        local cx, cy = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
+        if not run.arena then return nil end
+        local cx, cy = (run.arena.minX + run.arena.maxX) / 2, (run.arena.minY + run.arena.maxY) / 2
         local tx, ty, best, score = cx + math.cos(angle) * distance, cy + math.sin(angle) * distance, nil, math.huge
-        for _, p in ipairs(reachable) do
+        for _, p in ipairs(view.reachable) do
             local valid = (p.x - cx)^2 + (p.y - cy)^2 >= 400^2
             for _, q in ipairs(avoid or {}) do if (p.x - q.x)^2 + (p.y - q.y)^2 < 320^2 then valid = false end end
             local value = (p.x - tx)^2 + (p.y - ty)^2
@@ -442,11 +450,11 @@ do
         end
         return best and {x = best.x, y = best.y} or nil
     end
-    function SurvivorStage.LavaPoints() return lava end
+    function SurvivorStage.LavaPoints() return view.lava end
     function SurvivorStage.LandmarkApproach(avoid)
-        if not arena or not walls[1] then return nil end
-        local wall = walls[1]
-        local cx, cy = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
+        if not run.arena or not view.walls[1] then return nil end
+        local wall = view.walls[1]
+        local cx, cy = (run.arena.minX + run.arena.maxX) / 2, (run.arena.minY + run.arena.maxY) / 2
         local vertical = wall.y2 - wall.y1 > wall.x2 - wall.x1
         local x = vertical and wall.x2 + 192 or (wall.x1 + wall.x2) / 2
         local y = vertical and (wall.y1 + wall.y2) / 2 or wall.y1 - 192
@@ -470,14 +478,14 @@ do
     end
     function SurvivorStage.ScenePoint()
         local point = SurvivorStage.LandmarkApproach()
-        if not point or not arena then return nil end
+        if not point or not run.arena then return nil end
         -- Leave space for the two actors and the final departure shot, even on a small arena.
-        local margin = math.min(900, (arena.maxX - arena.minX) / 3, (arena.maxY - arena.minY) / 3)
-        return {x = math.max(arena.minX + margin, math.min(arena.maxX - margin, point.x)),
-            y = math.max(arena.minY + margin, math.min(arena.maxY - margin, point.y))}
+        local margin = math.min(900, (run.arena.maxX - run.arena.minX) / 3, (run.arena.maxY - run.arena.minY) / 3)
+        return {x = math.max(run.arena.minX + margin, math.min(run.arena.maxX - margin, point.x)),
+            y = math.max(run.arena.minY + margin, math.min(run.arena.maxY - margin, point.y))}
     end
     local function BuildGeometry(index, cx, cy)
-        local scale = math.min(1, (arena.maxX - arena.minX - 384) / 2600, (arena.maxY - arena.minY - 384) / 2600)
+        local scale = math.min(1, (run.arena.maxX - run.arena.minX - 384) / 2600, (run.arena.maxY - run.arena.minY - 384) / 2600)
         local layouts = {
             {{-900,-450,-700,-250},{650,250,850,450},{-350,850,-150,1050},{350,-1050,550,-850}},
             {{-1000,350,-350,510},{350,350,1000,510},{-1000,-510,-350,-350},{350,-510,1000,-350}},
@@ -489,13 +497,13 @@ do
         for _, box in ipairs(layouts[index]) do
             local x1, y1 = math.floor((cx + box[1] * scale) / 32) * 32, math.floor((cy + box[2] * scale) / 32) * 32
             local x2, y2 = math.ceil((cx + box[3] * scale) / 32) * 32, math.ceil((cy + box[4] * scale) / 32) * 32
-            walls[#walls + 1] = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+            view.walls[#view.walls + 1] = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
             for x = x1 + 16, x2 - 16, 32 do
                 for y = y1 + 16, y2 - 16, 32 do
                     local key = x .. ":" .. y
                     if not seen[key] then
                         seen[key] = true
-                        cells[#cells + 1] = {x = x, y = y, walkable = not IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY)}
+                        view.cells[#view.cells + 1] = {x = x, y = y, walkable = not IsTerrainPathable(x, y, PATHING_TYPE_WALKABILITY)}
                         SetTerrainPathable(x, y, PATHING_TYPE_WALKABILITY, false)
                     end
                 end
@@ -504,30 +512,31 @@ do
             local length, vertical = math.max(x2 - x1, y2 - y1), y2 - y1 > x2 - x1
             local count = math.max(2, math.ceil(length / 150))
             for i = 1, count do
-                local seed = index * 100 + #walls * 11 + i
+                local seed = index * 100 + #view.walls * 11 + i
                 local x, y = (x1 + x2) / 2, (y1 + y2) / 2
                 if vertical then y = y1 + (y2 - y1) * (i - 0.5) / count
                 else x = x1 + (x2 - x1) * (i - 0.5) / count end
-                if #walls ~= 1 or math.abs(i - (count + 1) / 2) > 1 then
+                if #view.walls ~= 1 or math.abs(i - (count + 1) / 2) > 1 then
                     Decorate(index, x + (Variation(seed, 1) - 0.5) * 28, y + (Variation(seed, 2) - 0.5) * 28,
                         0.65 + Variation(seed, 3) * 0.25, seed, true)
                 end
             end
         end
         if index == 2 then
-            for _, x in ipairs({-780, 780}) do lava[#lava + 1] = {x = cx + x * scale, y = cy, radius = 190 * scale} end
+            for _, x in ipairs({-780, 780}) do view.lava[#view.lava + 1] = {x = cx + x * scale, y = cy, radius = 190 * scale} end
         end
         BuildReachable(cx, cy)
-        assert(#reachable >= 40, "Stage paths must connect to the starting clearing")
+        assert(#view.reachable >= 40, "Stage paths must connect to the starting clearing")
     end
     function SurvivorStage.Get(index) return assert(themes[index], "Invalid stage theme") end
     -- Releases ownership before each native call and records failures in errors.
     local function ClearPresentation(errors)
-        ClearGeometry(errors)
-        RestoreTerrain(errors)
-        local oldEffects, oldWeather, oldSound = effects, weather, sound
-        effects, sceneProps, currentTheme, weather, sound, soundVolume = {}, {}, nil, nil, nil, nil
-        AttemptEach(errors, "stage effect", oldEffects, DestroyEffect)
+        local old = view
+        view = NewPresentation()
+        ClearGeometry(errors, old.cells)
+        RestoreTerrain(errors, old.painted)
+        AttemptEach(errors, "stage effect", old.effects, DestroyEffect)
+        local oldWeather, oldSound = old.weather, old.sound
         if oldWeather then
             RunSession.Attempt(errors, "weather disable", function() EnableWeatherEffect(oldWeather, false) end)
             RunSession.Attempt(errors, "weather", function() RemoveWeatherEffect(oldWeather) end)
@@ -539,9 +548,8 @@ do
     end
     function SurvivorStage.Cleanup()
         local errors = {}
-        local oldRect = rect
-        rect, arena, paintBounds = nil, nil, nil
-        dialogueAudioOwners = {}
+        local oldRect = run.rect
+        run = NewRun()
         RunSession.Attempt(errors, "ambience volume", RefreshAmbienceVolume)
         ClearPresentation(errors)
         if oldRect then RunSession.Attempt(errors, "stage rect", function() RemoveRect(oldRect) end) end
@@ -550,19 +558,19 @@ do
     function SurvivorStage.Init(bounds)
         -- Presentation exists only with an arena rect, and Cleanup detaches the rect
         -- first. Re-cleaning a released stage would only repeat its ambience refresh.
-        if rect ~= nil then SurvivorStage.Cleanup() end
-        arena = bounds
+        if run.rect ~= nil then SurvivorStage.Cleanup() end
+        run.arena = bounds
         -- GetWorldBounds returns a new rectangle. Snapshot and release it immediately.
         local world = GetWorldBounds()
-        paintBounds = {minX = math.max(bounds.minX - 1024, GetRectMinX(world) + 64),
+        run.paintBounds = {minX = math.max(bounds.minX - 1024, GetRectMinX(world) + 64),
             maxX = math.min(bounds.maxX + 1024, GetRectMaxX(world) - 64),
             minY = math.max(bounds.minY - 1024, GetRectMinY(world) + 64),
             maxY = math.min(bounds.maxY + 1024, GetRectMaxY(world) - 64)}
         RemoveRect(world)
-        rect = Rect(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY)
+        run.rect = Rect(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY)
     end
     function SurvivorStage.Apply(index)
-        assert(rect ~= nil, "Initialize stage arena first")
+        assert(run.rect ~= nil, "Initialize stage arena first")
         local started, phase = SurvivorMetrics.Begin(), SurvivorMetrics.Begin()
         SurvivorMetrics.Count("stage.calls")
         local errors = {}
@@ -570,11 +578,11 @@ do
         Raise(errors)
         SurvivorMetrics.End("stage.clear", phase)
         local theme = SurvivorStage.Get(index)
-        currentTheme = index
-        local cx, cy = (arena.minX + arena.maxX) / 2, (arena.minY + arena.maxY) / 2
+        view.currentTheme = index
+        local cx, cy = (run.arena.minX + run.arena.maxX) / 2, (run.arena.minY + run.arena.maxY) / 2
         phase = SurvivorMetrics.Begin()
         BuildGeometry(index, cx, cy)
-        SurvivorMetrics.Count("stage.geometry.cells", #cells)
+        SurvivorMetrics.Count("stage.geometry.cells", #view.cells)
         SurvivorMetrics.End("stage.geometry", phase)
         phase = SurvivorMetrics.Begin()
         PaintTerrain(index, cx, cy)
@@ -584,8 +592,8 @@ do
         DressLandmark(index)
         DressSearchRoute(index)
         DressStage(index, cx, cy)
-        SurvivorMetrics.Count("stage.terrain.cells", #painted)
-        SurvivorMetrics.Count("stage.scenery.effects", #effects)
+        SurvivorMetrics.Count("stage.terrain.cells", #view.painted)
+        SurvivorMetrics.Count("stage.scenery.effects", #view.effects)
         SurvivorMetrics.End("stage.scenery", phase)
         local dnc = "Environment\\DNC\\DNC" .. theme.light .. "\\DNC" .. theme.light
         SetDayNightModels(dnc .. "Terrain\\DNC" .. theme.light .. "Terrain.mdl", dnc .. "Unit\\DNC" .. theme.light .. "Unit.mdl")
@@ -594,9 +602,9 @@ do
         FogMaskEnable(false)
         FogEnable(false)
         ResetTerrainFog()
-        if theme.weather then weather = AddWeatherEffect(rect, FourCC(theme.weather)); EnableWeatherEffect(weather, true) end
-        sound = CreateSound(theme.sound, true, false, false, 500, 500, "DefaultEAXON")
-        if sound then RefreshAmbienceVolume(); StartSound(sound) end
+        if theme.weather then view.weather = AddWeatherEffect(run.rect, FourCC(theme.weather)); EnableWeatherEffect(view.weather, true) end
+        view.sound = CreateSound(theme.sound, true, false, false, 500, 500, "DefaultEAXON")
+        if view.sound then RefreshAmbienceVolume(); StartSound(view.sound) end
         SurvivorMetrics.End("stage.apply", started)
     end
 end

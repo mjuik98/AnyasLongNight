@@ -22,12 +22,12 @@ assert(replacement~=first and first.stopped and replacement.volume==8 and replac
     'A newly created theme loop inherits the active dialogue ownership')
 soundVolumeError=true
 local ok=pcall(function()SurvivorStage.SetDialogueAmbience(false,'ui')end)
-assert(ok and replacement.volume==8 and Local(SurvivorStage.SetDialogueAmbience,'soundVolume')==8,
+assert(ok and replacement.volume==8 and StageView().soundVolume==8,
     'A failed optional native must neither stop gameplay nor cache an unapplied gain')
 soundVolumeError=false;SurvivorStage.SetDialogueAmbience(false,'ui')
 assert(replacement.volume==18 and replacement.volumeWrites==2,'A later update retries the failed gain')
 SurvivorStage.SetDialogueAmbience(true);SurvivorStage.Cleanup()
-assert(replacement.volume==18 and replacement.stopped and next(Local(SurvivorStage.SetDialogueAmbience,'dialogueAudioOwners'))==nil)
+assert(replacement.volume==18 and replacement.stopped and next(StageRun().dialogueAudioOwners)==nil)
 SurvivorStage.Init({minX=-5000,minY=-5000,maxX=5000,maxY=5000});SurvivorStage.Apply(3)
 assert(soundHandles[#soundHandles].volume==18,'A restarted run does not inherit a stale owner')
 SurvivorStage.Cleanup()
@@ -39,7 +39,7 @@ SurvivorStage.Init({minX=-5000,minY=-5000,maxX=5000,maxY=5000});SurvivorStage.Ap
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 local loop=soundHandles[1];state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',0,0,0);local completed=0
 SurvivorStory.ShowBriefing(hero,function()completed=completed+1 end)
-local owners=Local(SurvivorStage.SetDialogueAmbience,'dialogueAudioOwners')
+local owners=StageRun().dialogueAudioOwners
 assert(owners.story and owners.ui and loop.volume==8 and loop.volumeWrites==2)
 AdvanceVisualTime(.6);SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.6)
 assert(loop.volume==8 and loop.volumeWrites==2,'Page actions and cue playback leave the ambience gain cached')
@@ -60,7 +60,7 @@ state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',0,0,0);local completed=0
 local function Done()completed=completed+1 end
 local function Scenery()
     local result={}
-    for key,effect in pairs(Local(SurvivorStage.SceneProp,'sceneProps'))do
+    for key,effect in pairs(StageView().sceneProps)do
         assert(not effect.destroyed and effect.alpha~=0)
         assert(math.abs(effect.z-(45+effect.x*.001+effect.y*.002))<.001,
             'Static scenery remains grounded instead of being retired below the terrain')
@@ -70,7 +70,7 @@ local function Scenery()
     return result
 end
 local function Survives(snapshot)
-    local props=Local(SurvivorStage.SceneProp,'sceneProps')
+    local props=StageView().sceneProps
     for key,entry in pairs(snapshot)do
         local effect=entry.effect
         assert(props[key]==effect and not effect.destroyed and effect.alpha~=0
@@ -79,11 +79,11 @@ local function Survives(snapshot)
     end
 end
 local function Closed(actors,portraits)
-    assert(hero.visible and #Local(SurvivorStory.Cleanup,'sceneEffects')==0)
+    assert(hero.visible and #StoryScene().sceneEffects==0)
     for _,effect in ipairs(actors)do assert(effect.destroyed,'Actors, patrols and carried evidence are scene-owned')end
     for _,unit in pairs(portraits)do assert(unit.removed,'Portrait proxies remain scene-owned')end
-    assert(Local(SurvivorStory.Cleanup,'motion')==nil
-        and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil,'Dialogue timers still retire with their scene')
+    assert(StoryScene().motion==nil
+        and StoryScene().cameraGuardTimer==nil,'Dialogue timers still retire with their scene')
 end
 local previous
 for index=1,5 do
@@ -91,12 +91,12 @@ for index=1,5 do
     if previous then for _,entry in pairs(previous)do
         assert(entry.effect.destroyed,'A stage transition removes the preceding scene scenery')
     end end
-    assert(next(Local(SurvivorStage.SceneProp,'sceneProps'))==nil,'Stage application resets scenery keys')
+    assert(next(StageView().sceneProps)==nil,'Stage application resets scenery keys')
     if index==1 then
         SurvivorStory.ShowBriefing(hero,Done)
         local snapshot=Scenery();local count=0;for _ in pairs(snapshot)do count=count+1 end
         assert(count==4 and not hero.visible,'The briefing separates its grave and footprints from its two actors')
-        local actors,portraits=Local(SurvivorStory.Cleanup,'sceneEffects'),Local(SurvivorStory.Cleanup,'portraitUnits')
+        local actors,portraits=StoryScene().sceneEffects,StoryScene().portraitUnits
         assert(#actors==2)
         SurvivorUI.SkipConversation();Closed(actors,portraits);Survives(snapshot)
     end
@@ -104,20 +104,20 @@ for index=1,5 do
         if index<5 then SurvivorStory.ShowInterlude(index,hero,Done)else SurvivorStory.ShowEnding(hero,Done)end
     end
     finding=nil;Open()
-    local actors,portraits=Local(SurvivorStory.Cleanup,'sceneEffects'),Local(SurvivorStory.Cleanup,'portraitUnits')
+    local actors,portraits=StoryScene().sceneEffects,StoryScene().portraitUnits
     assert(not hero.visible and #actors==({2,3,2,5,4})[index],
         'Only actors, the sample, patrols and moving ending transport belong to Story')
     local snapshot=Scenery()
     for _,entry in pairs(snapshot)do for _,actor in ipairs(actors)do
         assert(entry.effect~=actor,'Stage scenery cannot enter the scene actor cleanup list')
     end end
-    local before=#Local(SurvivorStage.Apply,'effects')
+    local before=#StageView().effects
     assert(before<=96)
     for _=1,index==5 and 5 or 4 do SurvivorUI.AdvanceNarrative()end
     Closed(actors,portraits);Survives(snapshot)
     finding=true;Open()
-    local retryActors,retryPortraits=Local(SurvivorStory.Cleanup,'sceneEffects'),Local(SurvivorStory.Cleanup,'portraitUnits')
-    assert(#Local(SurvivorStage.Apply,'effects')==before,'Replaying a scene never duplicates static scenery')
+    local retryActors,retryPortraits=StoryScene().sceneEffects,StoryScene().portraitUnits
+    assert(#StageView().effects==before,'Replaying a scene never duplicates static scenery')
     Survives(snapshot)
     if index==4 then assert(#retryActors==6,'Recovered orders remain transient scene evidence')end
     SurvivorUI.SkipConversation();Closed(retryActors,retryPortraits);Survives(snapshot)
@@ -125,7 +125,7 @@ for index=1,5 do
 end
 assert(completed==11)
 SurvivorStory.Reset();Survives(previous)
-local effects=Local(SurvivorStage.Apply,'effects')
+local effects=StageView().effects
 local prop=SurvivorStage.SceneProp('budget-prop','prop.mdl',700,700,.5,0,{100,110,120})
 assert(prop)
 for i=1,200 do SurvivorStage.SceneProp('budget-'..i,'prop.mdl',700,700,.5,0,{100,110,120})end
@@ -135,7 +135,7 @@ assert(SurvivorStage.SceneProp('budget-prop','other.mdl',900,900,2)==prop,
     'A duplicate key returns its original handle even when the effect budget is full')
 SurvivorStage.Cleanup()
 for _,effect in ipairs(effects)do assert(effect.destroyed,'Run cleanup destroys persistent scenery too')end
-assert(next(Local(SurvivorStage.SceneProp,'sceneProps'))==nil)
+assert(next(StageView().sceneProps)==nil)
 SurvivorStage.Init({minX=-5000,minY=-5000,maxX=5000,maxY=5000});SurvivorStage.Apply(1)
 local fresh=SurvivorStage.SceneProp('budget-prop','prop.mdl',700,700,.5)
 assert(fresh and fresh~=prop,'A restarted run acquires fresh scenery after all old owners were cleared')
@@ -166,7 +166,7 @@ for _,fixture in ipairs({
             assert((e.x-cx)^2+(e.y-cy)^2>=420^2,'Keep the starting battle clearing free of scenery')
         end end
         assert(live<=96 and live>10)
-        local owned=Local(SurvivorStage.Apply,'painted')
+        local owned=StageView().painted
         assert(#owned>0)
         for _,cell in ipairs(owned)do
             local original=TerrainCell(cell.x,cell.y)
@@ -235,8 +235,8 @@ suite('stage teardown attempts every native restore after failures and permits a
     [config,metrics,'src/30_gameplay/SurvivorStage.lua'], String.raw`
 local bounds=bj_mapInitialPlayableArea
 SurvivorStage.Init(bounds);SurvivorStage.Apply(3)
-local cells,owned=Local(SurvivorStage.Apply,'cells'),Local(SurvivorStage.Apply,'painted')
-local rect,weather=Local(SurvivorStage.Apply,'rect'),Local(SurvivorStage.Apply,'weather')
+local cells,owned=StageView().cells,StageView().painted
+local rect,weather=StageRun().rect,StageView().weather
 assert(#cells>1 and #owned>1 and weather,'The fixture owns pathing, terrain and weather')
 local first=cells[1]
 local function Key(x,y)return math.floor(x/32)..":"..math.floor(y/32)end
@@ -260,7 +260,7 @@ end
 for _,cell in ipairs(owned)do assert(TerrainCell(cell.x,cell.y).tile==cell.tile,'Terrain is restored after a pathing failure')end
 for _,e in ipairs(sceneEffects)do assert(e.destroyed,'Scenery is destroyed after earlier failures')end
 assert(weather.removed,'Weather is released')
-assert(Local(SurvivorStage.Apply,'rect')==nil and #Local(SurvivorStage.Apply,'cells')==0,'Ownership is detached even when natives fail')
+assert(StageRun().rect==nil and #StageView().cells==0,'Ownership is detached even when natives fail')
 SurvivorStage.Init(bounds);SurvivorStage.Apply(1);SurvivorStage.Cleanup()
 `);
 suite('stage reachability reuses native samples only within one geometry build and reports transition work', stageMocks,
@@ -279,13 +279,13 @@ function IsTerrainPathable(x,y,...)
     assert(samples[key]==nil,'Overlapping flood margins and edges share each native sample')
     samples[key]=true;return original(x,y,...)
 end
-SetLocal(SurvivorStage.Apply,'reachable',{});flood(0,0)
+StageView().reachable={};flood(0,0)
 IsTerrainPathable=original
 local sampleCount=0;for _ in pairs(samples)do sampleCount=sampleCount+1 end
 assert(sampleCount>0)
 print('  cached reachability: '..sampleCount..' unique native samples')
 local function HasNode(x,y)
-    for _,p in ipairs(Local(SurvivorStage.FindPoint,'reachable'))do if p.x==x and p.y==y then return true end end
+    for _,p in ipairs(StageView().reachable)do if p.x==x and p.y==y then return true end end
     return false
 end
 assert(HasNode(128,0))

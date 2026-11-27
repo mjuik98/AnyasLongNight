@@ -360,7 +360,7 @@ local function Begin(index,start)
 end
 Begin(1,1000)
 now=1030;SurvivorExpedition.Step(0.02,now)
-local risk=Local(SurvivorExpedition.Step,'risk')
+local risk=ExpeditionRun().risk
 assert(risk.state=='offered' and SurvivorExpedition.RiskOffer()==nil)
 assert(not SurvivorExpedition.AcceptRisk(),'A distant stale click cannot begin a challenge')
 hero.x,hero.y=risk.x,risk.y
@@ -382,7 +382,7 @@ state='RUNNING';now=1060;SurvivorExpedition.Step(.1,now);SurvivorExpedition.Step
 assert(#rewards==1 and rewards[1]=='risk' and not SurvivorExpedition.RiskActive(),'Survival reward is granted once')
 
 Begin(2,2000);hero.x,hero.y=0,0;now=2095;SurvivorExpedition.Step(.02,now)
-risk=Local(SurvivorExpedition.Step,'risk');hero.x,hero.y=risk.x,risk.y
+risk=ExpeditionRun().risk;hero.x,hero.y=risk.x,risk.y
 assert(SurvivorExpedition.RiskOffer());now=2150
 assert(not SurvivorExpedition.AcceptRisk() and not SurvivorExpedition.RiskOffer(),'Expiry is rechecked even before the next Step')
 hero.x,hero.y=0,0;now=2150
@@ -396,7 +396,7 @@ SurvivorExpedition.Reset();assert(not SurvivorExpedition.HasRiskNotice() and Sur
 -- Search and risk starts use their persistent objective display instead of duplicate popups.
 notifications={};Begin(1,5000);hero.x,hero.y=0,0;now=5020;SurvivorExpedition.Step(.02,now)
 assert(#notifications==0 and SurvivorExpedition.Status():find('선택 수색'))
-local objective=Local(SurvivorExpedition.Step,'objective')
+local objective=ExpeditionRun().objective
 for i=1,#objective.points do
     hero.x,hero.y=objective.x,objective.y;SurvivorExpedition.Step(.02,now)
 end
@@ -412,7 +412,7 @@ SurvivorExpedition.Reset()
 -- Killing the courier speaks its own line before the reply; the scene reply never repeats the subtitle.
 local speech={};SurvivorUI.Say=function(speaker,text)speech[#speech+1]=text end
 Begin(4,6000);hero.x,hero.y=0,0;now=6020;SurvivorExpedition.Step(.02,now)
-objective=Local(SurvivorExpedition.Step,'objective')
+objective=ExpeditionRun().objective
 assert(objective.courier and SurvivorExpedition.GetSceneReply(4)==nil,'No scene reply before the search is complete')
 SurvivorExpedition.OnKill(objective.courier,false)
 assert(#speech==2 and speech[1]:find('지원 요청') and speech[2]==SurvivorExpedition.GetReply(4),'Courier line precedes the reply')
@@ -432,7 +432,7 @@ local voiced={};SurvivorUI.Say=function(speaker,text)voiced[#voiced+1]={speaker,
 local anyaHero=hero
 hero=CreateUnit(0,SurvivorConfig.heroes.putress.unitId,0,0,0)
 Begin(4,6500);hero.x,hero.y=0,0;now=6520;SurvivorExpedition.Step(.02,now)
-objective=Local(SurvivorExpedition.Step,'objective')
+objective=ExpeditionRun().objective
 SurvivorExpedition.OnKill(objective.courier,false)
 assert(#voiced==2 and voiced[1][1]=='퓨트리스' and voiced[1][2]==chapters[4].putress.beats[1]
     and voiced[2][1]=='퓨트리스' and voiced[2][2]==chapters[4].putress.reply,'Putress speaks its own courier and reply lines')
@@ -441,7 +441,7 @@ assert(SurvivorExpedition.UseAdvantage(4) and voiced[3][1]=='퓨트리스' and v
 SurvivorExpedition.Reset()
 voiced={};hero=anyaHero
 Begin(4,6800);hero.x,hero.y=0,0;now=6820;SurvivorExpedition.Step(.02,now)
-objective=Local(SurvivorExpedition.Step,'objective')
+objective=ExpeditionRun().objective
 SurvivorExpedition.OnKill(objective.courier,false)
 assert(voiced[1][1]=='안야' and voiced[1][2]==chapters[4].beats[1] and voiced[2][2]==chapters[4].reply,'Anya keeps her lines')
 SurvivorExpedition.Reset()
@@ -450,7 +450,7 @@ for index=1,5 do
     speech={};Begin(index,7000+index*1000);hero.x,hero.y=0,0
     local opens=Local(SurvivorExpedition.RiskOffer,'RiskWindow')()
     now=7000+index*1000+opens;SurvivorExpedition.Step(.02,now)
-    risk=Local(SurvivorExpedition.Step,'risk');hero.x,hero.y=risk.x,risk.y
+    risk=ExpeditionRun().risk;hero.x,hero.y=risk.x,risk.y
     assert(SurvivorExpedition.AcceptRisk() and speech[#speech] and speech[#speech]~='','Every stage has its own risk line')
     if index>1 then assert(speech[#speech]~=previousRiskLine)end
     previousRiskLine=speech[#speech]
@@ -459,7 +459,7 @@ end
 for index,window in ipairs({{30,90},{90,150},{95,180},{95,180},{95,180}})do
     Begin(index,7000);hero.x,hero.y=0,0
     now=7000+window[1]-.02;SurvivorExpedition.Step(.02,now)
-    risk=Local(SurvivorExpedition.Step,'risk');assert(risk.state=='waiting')
+    risk=ExpeditionRun().risk;assert(risk.state=='waiting')
     now=7000+window[1];SurvivorExpedition.Step(.02,now)
     hero.x,hero.y=risk.x,risk.y;assert(SurvivorExpedition.RiskOffer())
     now=7000+window[2]-.02
@@ -931,15 +931,15 @@ suite('expedition teardown detaches markers before native calls and a failure ca
 function DestroyTextTag(tag)assert(not tag.destroyed);tag.destroyed=true end
 `, [config,'src/30_gameplay/SurvivorExpedition.lua'], String.raw`
 local failing,other,tag={},{},{}
-SetLocal(SurvivorExpedition.EndStage,'objective',{effect=failing,tag=tag})
-SetLocal(SurvivorExpedition.EndStage,'risk',{effect=other})
+ExpeditionRun().objective={effect=failing,tag=tag}
+ExpeditionRun().risk={effect=other}
 local destroy=DestroyEffect
 DestroyEffect=function(e)if e==failing then error('injected marker failure')end;destroy(e)end
 local ok,message=pcall(SurvivorExpedition.EndStage)
 DestroyEffect=destroy
 assert(not ok and tostring(message):find('injected marker failure'))
 assert(tag.destroyed and other.destroyed,'A failed marker removal still releases the remaining handles')
-assert(Local(SurvivorExpedition.EndStage,'objective')==nil and Local(SurvivorExpedition.EndStage,'risk')==nil,
+assert(ExpeditionRun().objective==nil and ExpeditionRun().risk==nil,
     'Ownership is detached before native calls')
 SurvivorExpedition.Reset() -- Must not retry the failed handle.
 `);
@@ -1431,13 +1431,13 @@ suite('equipment item-event failures reach the run owner instead of only printin
 local hero=NewGear()
 local failures={}
 RunSession.Fail=function(message)failures[#failures+1]=tostring(message)end
-local trigger=Local(SurvivorEquipment.Init,'eventTrigger')
+local trigger=EquipmentRun().eventTrigger
 local manipulated=GetManipulatedItem
 GetTriggerUnit=function()return hero end
 GetManipulatedItem=function()error('injected item event failure')end
 trigger.action()
 GetManipulatedItem=manipulated
-assert(#failures==0 and Local(SurvivorEquipment.Init,'hero')==hero,'Item events fire inside equipment scans; teardown is deferred')
+assert(#failures==0 and EquipmentRun().hero==hero,'Item events fire inside equipment scans; teardown is deferred')
 FlushRunSession()
 assert(#failures==1 and failures[1]:find('injected item event failure'),'Item-event failures reach RunSession.Fail')
 SurvivorEquipment.Cleanup()
@@ -1475,10 +1475,10 @@ local manipulated=GetManipulatedItem
 GetManipulatedItem=function()error('injected pickup failure')end
 SurvivorEquipment.CollectRest() -- UnitAddItem raises the pickup event inside this scan.
 GetManipulatedItem=manipulated
-assert(finished==nil and Local(SurvivorEquipment.Init,'hero')==hero,'The scan finishes on owned state; no teardown under its native call')
+assert(finished==nil and EquipmentRun().hero==hero,'The scan finishes on owned state; no teardown under its native call')
 assert(hero.bag[1]==reward)
 TickTimers()
-assert(finished=='error' and Local(SurvivorEquipment.Init,'hero')==nil,'The paused watchdog tick consumes the request')
+assert(finished=='error' and EquipmentRun().hero==nil,'The paused watchdog tick consumes the request')
 assert(table.concat(messages,'\n'):find('injected pickup failure'))
 `);
 
@@ -1548,7 +1548,7 @@ for _,text in ipairs({'레벨업 장신구','버리기 불가','숫자는 강화
 end
 assert(not indicator.description:find('판매')and not indicator.description:find('골드'))
 SurvivorEquipment.DropAt(0,0,1)
-local item;for candidate in pairs(Local(SurvivorEquipment.Step,'owned'))do item=candidate end
+local item;for candidate in pairs(EquipmentRun().owned)do item=candidate end
 assert(item and item.tooltip and not item.tooltip:find('판매')and not item.tooltip:find('골드'))
 hero.bag[1]=item;SurvivorEquipment.Reconcile()
 state='INVENTORY';local preview=SurvivorEquipment.PreviewCleanup('common')
@@ -1597,7 +1597,7 @@ state='STAGE_CLEAR';bagReads=0;TickTimers();assert(bagReads==6)
 for i=1,6 do hero.bag[i]=CreateItem('Hs01',0,0)end
 assert(SurvivorEquipment.ClaimReward('Hs08'))
 bagReads=0;TickTimers();assert(bagReads==6 and SurvivorEquipment.PendingRewardCount()==1)
-local pending;for item,record in pairs(Local(SurvivorEquipment.Step,'owned'))do if record.pendingReward then pending=item end end
+local pending;for item,record in pairs(EquipmentRun().owned)do if record.pendingReward then pending=item end end
 revision=renderedRevision;RemoveItem(pending);bagReads=0;TickTimers()
 assert(bagReads==6 and renderedRevision>revision and SurvivorEquipment.PendingRewardCount()==0)
 SurvivorInventoryPause.Cleanup();SurvivorNativeLoadout.Cleanup();SurvivorEquipment.Cleanup()
@@ -1608,7 +1608,7 @@ suite('chosen rewards survive expiry/cap/transition and collect before ordinary 
 local hero,build=NewGear("firebolt",1)
 hero.bag[1]=CreateItem("Hs15",0,0)
 assert(SurvivorEquipment.ClaimReward("Hs04"))
-local owned=Local(SurvivorEquipment.Step,"owned");local reward
+local owned=EquipmentRun().owned;local reward
 for item,record in pairs(owned)do if record.pendingReward then reward=item end end
 assert(reward and SurvivorEquipment.PendingRewardCount()==1)
 assert(reward.tooltip:find("수령 보상") and lastMessage:find("자동 소멸 없음"))
@@ -1650,7 +1650,7 @@ rejectPickup=false;SurvivorEquipment.CollectRest()
 assert(SurvivorEquipment.PendingRewardCount()==0 and hero.bag[1].id=="Hs08")
 SurvivorEquipment.ClaimReward("Hi04") -- Now full again; a second pending reward.
 local pending
-for item,record in pairs(Local(SurvivorEquipment.Step,"owned"))do if record.pendingReward then pending=item end end
+for item,record in pairs(EquipmentRun().owned)do if record.pendingReward then pending=item end end
 assert(pending and SurvivorEquipment.PendingRewardCount()==1)
 SurvivorEquipment.Cleanup();assert(pending.removed and SurvivorEquipment.PendingRewardCount()==0)
 `);
@@ -1745,7 +1745,7 @@ SurvivorEquipment.CollectRest()
 assert(hero.bag[1] and SurvivorEquipment.PendingRewardCount()==0 and not hero.bag[1].tooltip:find('미수령 보상'))
 assert(SurvivorEquipment.ClaimReward("Hi04"))
 local pending
-for item,record in pairs(Local(SurvivorEquipment.Step,'owned')) do if record.pendingReward then pending=item end end
+for item,record in pairs(EquipmentRun().owned) do if record.pendingReward then pending=item end end
 ui=SurvivorEquipment.UIRevision();RemoveItem(assert(pending))
 assert(SurvivorEquipment.UIRevision()>ui and SurvivorEquipment.PendingRewardCount()==0,
     'External removal of a pending reward must invalidate a paused inventory display')

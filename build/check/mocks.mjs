@@ -193,6 +193,18 @@ function SetLocal(fn,key,v) local _,f,i=Up(fn,key); assert(f,"Missing upvalue ".
 function CombatRun() return Local(SurvivorCombat.Init,"run") end
 -- The lifecycle's current run record (AnyasLongNight's NewRun()); Start replaces it.
 function LifecycleRun() return Local(AnyasLongNight.NextStage,"run") end
+-- Equipment's run (hero, trigger, owned item records, tooltip state); Init and Cleanup replace it.
+function EquipmentRun() return Local(SurvivorEquipment.Init,"run") end
+-- The story record (clues, transcript, stage) that Reset replaces, and the open scene
+-- (portraits, actors, camera, motion) that every Cleanup replaces.
+function StoryRun() return Local(SurvivorStory.Reset,"run") end
+function StoryScene() return Local(SurvivorStory.Cleanup,"scene") end
+-- The stage arena of this run (rect, bounds, ambience owners) that Cleanup replaces, and
+-- the applied stage's view (scenery, weather, painted terrain, pathing) that each Apply replaces.
+function StageRun() return Local(SurvivorStage.Cleanup,"run") end
+function StageView() return Local(SurvivorStage.Apply,"view") end
+-- Expedition's run (journal records, current stage markers); EndStage and Reset replace it.
+function ExpeditionRun() return Local(SurvivorExpedition.Reset,"run") end
 function NewCombat(weapon)
     world,actors,hits={}, {}, {}; state="RUNNING"; now=0
     local hero=CreateUnit(0,"hero",0,0,0)

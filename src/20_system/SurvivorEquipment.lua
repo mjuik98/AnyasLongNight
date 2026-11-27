@@ -299,24 +299,33 @@ do
         Trinket = "장신구", Ring = "반지", Primary = "무기", Offhand = "보조 무기"}
     local byType, byId = {}, {}
     for _, entry in ipairs(catalog) do byType[FourCC(entry.id)], byId[entry.id] = entry, entry end
-    local hero, build, eventTrigger
-    -- Injected by the run owner so this system layer never calls up into the UI.
-    local notify = function() end
-    local owned, lastSlots, lastBag = {}, {}, {}
-    local dryKills, bonusesDirty, allTooltipsDirty = 0, true, true
-    local equippedIds, descriptionCache, tooltipDirty = {}, {}, {}
-    local tooltipCache = setmetatable({}, {__mode = "k"})
-    local uiRevision, lastBagCapacity, lastPendingCount = 0, nil, nil
+    -- Everything one run owns lives in this table: Init fills a fresh NewRun() and
+    -- Cleanup swaps in another before any native removal, so a new field needs no
+    -- second reset list.
+    local function NewRun()
+        return {
+            hero = nil, build = nil, eventTrigger = nil,
+            -- Injected by the run owner so this system layer never calls up into the UI.
+            notify = function() end,
+            -- Item handle -> ground/reward record, and the last observed native snapshot.
+            owned = {}, lastSlots = {}, lastBag = {}, lastBagCapacity = nil, lastPendingCount = nil,
+            dryKills = 0, bonusesDirty = true, allTooltipsDirty = true,
+            -- Equipped catalog ids, set descriptions for them, and tooltip writes per item.
+            equippedIds = {}, descriptionCache = {}, tooltipDirty = {}, tooltipCache = setmetatable({}, {__mode = "k"}),
+            currentStage = 1, pickupMode = 1, locked = {},
+        }
+    end
+    local run = NewRun()
+    -- Map-lifetime: the UI revision only grows, so a cached render never matches a new run.
+    local uiRevision = 0
     local HelpfulBossIndex
-    local currentStage = 1
-    local pickupMode, locked = 1, {}
     local pickupNames = {"전체", "희귀 이상", "영웅만", "끔"}
     local rarityRank = {common = 1, rare = 2, epic = 3}
     local function TouchUI() uiRevision = uiRevision + 1 end
 
-    function SurvivorEquipment.PickupMode() return pickupNames[pickupMode] end
+    function SurvivorEquipment.PickupMode() return pickupNames[run.pickupMode] end
     function SurvivorEquipment.CyclePickup()
-        if hero then pickupMode = pickupMode % #pickupNames + 1; TouchUI() end
+        if run.hero then run.pickupMode = run.pickupMode % #pickupNames + 1; TouchUI() end
     end
 
     -- Regression fixtures enumerate the runtime catalog through this API.
@@ -326,7 +335,7 @@ do
         local entry = assert(byId[id], "Unknown gear")
         return rarities[entry.rarity].color .. entry.name .. "|r"
     end
-    function SurvivorEquipment.SetStage(index) currentStage = index end
+    function SurvivorEquipment.SetStage(index) run.currentStage = index end
     function SurvivorEquipment.Summary(id)
         local entry = assert(byId[id], "Unknown gear")
         local rarity = rarities[entry.rarity]
@@ -336,9 +345,9 @@ do
             for _, tier in ipairs(set.tiers) do thresholds[#thresholds + 1] = tier.count .. "개" end
             -- Name the set's element and weapons so a new player can see what it supports.
             for _, weapon in ipairs(set.weapons) do
-                if not build or SurvivorConfig.weapons[weapon].hero == build.hero then
+                if not run.build or SurvivorConfig.weapons[weapon].hero == run.build.hero then
                     local name = SurvivorAugments.Get(weapon).name
-                    linked[#linked + 1] = build and SurvivorAugments.Level(build, weapon) > 0 and "|cff80ff80" .. name .. "|r" or name
+                    linked[#linked + 1] = run.build and SurvivorAugments.Level(run.build, weapon) > 0 and "|cff80ff80" .. name .. "|r" or name
                 end
             end
         end
@@ -348,21 +357,21 @@ do
     end
     local function RollRarity(elite, bossReward)
         local roll = GetRandomInt(1, 100)
-        if bossReward then return roll <= 25 + 10 * (currentStage - 1) and "epic" or "rare" end
-        if elite then return roll <= 10 + 5 * (currentStage - 1) and "epic" or "rare" end
-        if roll <= 2 + 2 * (currentStage - 1) then return "epic" end
-        if roll <= 20 + 10 * (currentStage - 1) then return "rare" end
+        if bossReward then return roll <= 25 + 10 * (run.currentStage - 1) and "epic" or "rare" end
+        if elite then return roll <= 10 + 5 * (run.currentStage - 1) and "epic" or "rare" end
+        if roll <= 2 + 2 * (run.currentStage - 1) then return "epic" end
+        if roll <= 20 + 10 * (run.currentStage - 1) then return "rare" end
         return "common"
     end
     -- Drops and rewards come from shared gear plus the current hero's own gear.
     local function ForHero(entry)
-        return entry.hero == nil or entry.hero == (build and build.hero or SurvivorConfig.defaultHero)
+        return entry.hero == nil or entry.hero == (run.build and run.build.hero or SurvivorConfig.defaultHero)
     end
     SurvivorEquipment.ForHero = function(id) return byId[id] ~= nil and ForHero(byId[id]) end
     function SurvivorEquipment.FitsBuild(id)
         local entry = byId[id]
-        if not entry or not build then return false end
-        for _, weapon in ipairs(build.weapons) do
+        if not entry or not run.build then return false end
+        for _, weapon in ipairs(run.build.weapons) do
             if entry.bonuses[weapon] then return true end
             if entry.set then
                 for _, member in ipairs(sets[entry.set].weapons) do if member == weapon then return true end end
@@ -375,9 +384,9 @@ do
         for i, value in ipairs(pool) do
             local entry = type(value) == "number" and catalog[value] or byId[value]
             local weight = SurvivorEquipment.FitsBuild(entry.id) and 3 or 1
-            if entry.set and not equippedIds[entry.id] then
+            if entry.set and not run.equippedIds[entry.id] then
                 local count = 0
-                for _, piece in ipairs(sets[entry.set].pieces) do if equippedIds[piece] then count = count + 1 end end
+                for _, piece in ipairs(sets[entry.set].pieces) do if run.equippedIds[piece] then count = count + 1 end end
                 local tiers = sets[entry.set].tiers
                 if count > 0 and count < tiers[#tiers].count then weight = weight * 2 end
             end
@@ -408,7 +417,7 @@ do
     function SurvivorEquipment.RollBossReward()
         local offers, excluded = {}, {}
         for i = 1, 3 do
-            local entry = catalog[i == 1 and build ~= nil and HelpfulBossIndex() or RollIndex(false, true, excluded)]
+            local entry = catalog[i == 1 and run.build ~= nil and HelpfulBossIndex() or RollIndex(false, true, excluded)]
             offers[i], excluded[entry.id] = entry.id, true
         end
         return offers
@@ -416,7 +425,7 @@ do
     function SurvivorEquipment.RollRiskReward()
         local offers, used = {}, {}
         for slot = 1, 3 do
-            local chance = SurvivorConfig.encounters[currentStage].riskReward.epicChance
+            local chance = SurvivorConfig.encounters[run.currentStage].riskReward.epicChance
             local tier = chance >= 100 and "epic" or (GetRandomInt(1, 100) <= chance and "epic" or "rare")
             local pool = {}
             for _, entry in ipairs(catalog) do
@@ -440,33 +449,33 @@ do
     end
     local function ReadSlots()
         local slots = {}
-        for i = 0, 8 do slots[i + 1] = UnitItemInEquipmentSlot(hero, ConvertLoadoutSlot(i)) end
+        for i = 0, 8 do slots[i + 1] = UnitItemInEquipmentSlot(run.hero, ConvertLoadoutSlot(i)) end
         return slots
     end
     local function ReadBag()
-        local bag, count, capacity = {}, 0, UnitExtendedInventorySize(hero)
+        local bag, count, capacity = {}, 0, UnitExtendedInventorySize(run.hero)
         for i = 0, capacity - 1 do
-            local item = UnitItemInBagSlot(hero, i)
+            local item = UnitItemInBagSlot(run.hero, i)
             bag[i + 1] = item
             if item ~= nil then count = count + 1 end
         end
         return bag, count, capacity
     end
     local function ObserveBag(bag, capacity)
-        local changed = capacity ~= lastBagCapacity
-        for i = 1, math.max(capacity, lastBagCapacity or 0) do
-            if bag[i] ~= lastBag[i] then
+        local changed = capacity ~= run.lastBagCapacity
+        for i = 1, math.max(capacity, run.lastBagCapacity or 0) do
+            if bag[i] ~= run.lastBag[i] then
                 changed = true
-                if bag[i] ~= nil then tooltipDirty[bag[i]] = true end
+                if bag[i] ~= nil then run.tooltipDirty[bag[i]] = true end
             end
         end
-        lastBag, lastBagCapacity = bag, capacity
+        run.lastBag, run.lastBagCapacity = bag, capacity
         if changed then TouchUI() end
         return changed
     end
     local function ObservePendingRewards(bag, capacity, slots)
         local bagged, equipped, pending = nil, nil, 0
-        for item, record in pairs(owned) do
+        for item, record in pairs(run.owned) do
             if record.pendingReward and SurvivorConfig.ItemExists(item) then
                 if not bagged then
                     bagged = {}
@@ -482,11 +491,11 @@ do
                 end
             end
         end
-        if pending ~= lastPendingCount then lastPendingCount = pending; TouchUI(); return true end
+        if pending ~= run.lastPendingCount then run.lastPendingCount = pending; TouchUI(); return true end
         return false
     end
     function SurvivorEquipment.UIRevision()
-        if hero then
+        if run.hero then
             local bag, _, capacity = ReadBag()
             ObserveBag(bag, capacity)
             ObservePendingRewards(bag, capacity)
@@ -506,7 +515,7 @@ do
         end
         for i = 1, 9 do local item = inventory.slots[i]; if item then inventory.equipped[item] = true; Add(item) end end
         for i = 1, capacity do local item = bag[i]; if item then inventory.bagged[item] = true; Add(item) end end
-        for i = 0, UnitInventorySize(hero) - 1 do Add(UnitItemInSlot(hero, i)) end
+        for i = 0, UnitInventorySize(run.hero) - 1 do Add(UnitItemInSlot(run.hero, i)) end
         return inventory
     end
     local function Sources(slots)
@@ -576,34 +585,34 @@ do
     local function RefreshTooltip(item, equipped)
         local entry = Entry(item)
         if not entry then return end
-        local text = descriptionCache[entry.id]
-        if not text then text = SurvivorEquipment.Describe(entry.id, equipped); descriptionCache[entry.id] = text end
-        if owned[item] and owned[item].pendingReward then
+        local text = run.descriptionCache[entry.id]
+        if not text then text = SurvivorEquipment.Describe(entry.id, equipped); run.descriptionCache[entry.id] = text end
+        if run.owned[item] and run.owned[item].pendingReward then
             text = "|cffffcc00미수령 보상 · 이번 도전 중 자동 소멸 없음|r|n" .. text
         end
-        if locked[item] then text = "|cffffcc00[보관 잠금] 일괄 정리 제외|r|n" .. text end
-        if tooltipCache[item] == text then return end
+        if run.locked[item] then text = "|cffffcc00[보관 잠금] 일괄 정리 제외|r|n" .. text end
+        if run.tooltipCache[item] == text then return end
         local name = SurvivorEquipment.Name(entry.id)
         BlzSetItemName(item, name)
         BlzSetItemTooltip(item, name)
         BlzSetItemDescription(item, text)
         BlzSetItemExtendedTooltip(item, text)
-        tooltipCache[item] = text
+        run.tooltipCache[item] = text
         SurvivorMetrics.Count("equipment.tooltipWrites")
     end
     local function BagCount()
         local _, count, capacity = ReadBag()
         return count, capacity
     end
-    function SurvivorEquipment.BagCount() if not hero then return 0, 0 end; return BagCount() end
+    function SurvivorEquipment.BagCount() if not run.hero then return 0, 0 end; return BagCount() end
     local function HeldItems()
         local list, seen = {}, {}
         local function Add(item)
             if item and not seen[item] and Entry(item) then list[#list + 1], seen[item] = item, true end
         end
-        for i = 0, 8 do Add(UnitItemInEquipmentSlot(hero, ConvertLoadoutSlot(i))) end
-        for i = 0, UnitExtendedInventorySize(hero) - 1 do Add(UnitItemInBagSlot(hero, i)) end
-        for i = 0, UnitInventorySize(hero) - 1 do Add(UnitItemInSlot(hero, i)) end
+        for i = 0, 8 do Add(UnitItemInEquipmentSlot(run.hero, ConvertLoadoutSlot(i))) end
+        for i = 0, UnitExtendedInventorySize(run.hero) - 1 do Add(UnitItemInBagSlot(run.hero, i)) end
+        for i = 0, UnitInventorySize(run.hero) - 1 do Add(UnitItemInSlot(run.hero, i)) end
         return list
     end
     -- Rank only the first boss card, after the existing rarity roll. Compare pure
@@ -613,7 +622,7 @@ do
     -- engine rewardFields (SurvivorConfig.weaponEngines).
     local function RewardValues(stats)
         local values = {stats.equipmentLife, stats.moveSpeed, stats.regeneration}
-        for _, weapon in ipairs(build.weapons) do
+        for _, weapon in ipairs(run.build.weapons) do
             local source = stats.weapons[weapon]
             for _, field in ipairs(SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine].rewardFields) do
                 local lower = field:sub(1, 1) == "-"
@@ -636,7 +645,7 @@ do
         assert(#pool > 0, "Empty related boss reward pool")
         local held, entries = {}, {}
         for _, item in ipairs(HeldItems()) do held[Entry(item).id] = true end
-        for item, record in pairs(owned) do
+        for item, record in pairs(run.owned) do
             if record.pendingReward and Entry(item) then held[Entry(item).id] = true end
         end
         for _, item in pairs(ReadSlots()) do
@@ -644,7 +653,7 @@ do
             if entry then entries[#entries + 1] = entry end
         end
         local beforeBonuses, beforeCounts = PreviewBonuses(entries)
-        local before = RewardValues(SurvivorAugments.PreviewEquipment(build, {reward = beforeBonuses}))
+        local before = RewardValues(SurvivorAugments.PreviewEquipment(run.build, {reward = beforeBonuses}))
         local best, choices = -1, {}
         for _, index in ipairs(pool) do
             local candidate, positions = catalog[index], {}
@@ -656,7 +665,7 @@ do
                 for i, entry in ipairs(entries) do afterEntries[i] = entry end
                 afterEntries[position] = candidate
                 local afterBonuses, afterCounts = PreviewBonuses(afterEntries)
-                local after = RewardValues(SurvivorAugments.PreviewEquipment(build, {reward = afterBonuses}))
+                local after = RewardValues(SurvivorAugments.PreviewEquipment(run.build, {reward = afterBonuses}))
                 local improves, loses, activates, breaksSet = false, false, false, false
                 for i, value in ipairs(after) do
                     if value > before[i] + 0.0001 then improves = true end
@@ -692,25 +701,25 @@ do
     end
     function SurvivorEquipment.PendingRewardCount()
         local count = 0
-        if not hero then return count end
-        for item, record in pairs(owned) do
+        if not run.hero then return count end
+        for item, record in pairs(run.owned) do
             if record.pendingReward and SurvivorConfig.ItemExists(item)
-                and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then count = count + 1 end
+                and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then count = count + 1 end
         end
         return count
     end
     local function Received(item, record)
-        if record.pendingReward then tooltipDirty[item] = true; TouchUI() end
+        if record.pendingReward then run.tooltipDirty[item] = true; TouchUI() end
         record.carried, record.restPickup, record.pendingReward = true, false, false
     end
     local function TryPickup(item, record, inventory)
         local carried, restPickup, pending, noAuto, reward = record.carried, record.restPickup,
             record.pendingReward, record.noAuto, record.reward
-        if not UnitAddItem(hero, item) then
+        if not UnitAddItem(run.hero, item) then
             -- Pickup events may fire before a rejected native insertion finishes.
             record.carried, record.restPickup, record.pendingReward, record.noAuto, record.reward =
                 carried, restPickup, pending, noAuto, reward
-            tooltipDirty[item] = true
+            run.tooltipDirty[item] = true
             return false
         end
         Received(item, record)
@@ -721,9 +730,9 @@ do
         return true
     end
     local function CollectPendingRewards(nearOnly, elapsed, inventory)
-        if not hero then return end
-        local x, y = GetUnitX(hero), GetUnitY(hero)
-        for item, record in pairs(owned) do
+        if not run.hero then return end
+        local x, y = GetUnitX(run.hero), GetUnitY(run.hero)
+        for item, record in pairs(run.owned) do
             if record.pendingReward and SurvivorConfig.ItemExists(item) then
                 if inventory.bagged[item] or inventory.equipped[item] then Received(item, record)
                 elseif inventory.count < inventory.capacity and (not nearOnly or elapsed >= (record.retry or 0)) then
@@ -741,7 +750,7 @@ do
         -- A reward explicitly chosen by the player bypasses all auto-loot filters.
         if record.reward then return true end
         local entry = Entry(item)
-        if not entry or pickupMode == 4 or rarityRank[entry.rarity] < pickupMode then return false end
+        if not entry or run.pickupMode == 4 or rarityRank[entry.rarity] < run.pickupMode then return false end
         local copies = inventory.copies[entry.id] or 0
         return copies < (entry.slot == "Ring" and 2 or 1)
     end
@@ -749,29 +758,29 @@ do
     -- revision/tooltip state, so it must run identically on every client.
     local function ListBag(observe)
         local list = {}
-        if not hero then return list, 0, 0 end
+        if not run.hero then return list, 0, 0 end
         local bag, count, capacity = ReadBag()
         if observe then ObserveBag(bag, capacity) end
         for i = 1, capacity do
             local item = bag[i]
             local entry = Entry(item)
-            if entry then list[#list + 1] = {item = item, id = entry.id, locked = locked[item] == true} end
+            if entry then list[#list + 1] = {item = item, id = entry.id, locked = run.locked[item] == true} end
         end
         return list, count, capacity
     end
     function SurvivorEquipment.BagEntries() return ListBag(true) end
     function SurvivorEquipment.ReadBagEntries() return ListBag(false) end
     function SurvivorEquipment.ToggleLock(item)
-        if not hero or not Entry(item) or not UnitHasItemBagged(hero, item) then return false end
-        locked[item] = not locked[item] or nil
-        tooltipDirty[item] = true
+        if not run.hero or not Entry(item) or not UnitHasItemBagged(run.hero, item) then return false end
+        run.locked[item] = not run.locked[item] or nil
+        run.tooltipDirty[item] = true
         TouchUI()
         SurvivorEquipment.Reconcile()
         return true
     end
     -- Keep-family choices: the current hero's weapon elements in weapon order, then 공용.
     function SurvivorEquipment.CleanupFamilies()
-        local heroId, families, seen = build and build.hero or SurvivorConfig.defaultHero, {}, {}
+        local heroId, families, seen = run.build and run.build.hero or SurvivorConfig.defaultHero, {}, {}
         for _, weapon in ipairs(SurvivorConfig.weaponOrder) do
             local profile = SurvivorConfig.weapons[weapon]
             if profile.hero == heroId and not seen[profile.element] then
@@ -801,19 +810,19 @@ do
         local result = {kind = kind, keepFamily = keepFamily, items = {}}
         local validFamily = false
         for _, name in ipairs(SurvivorEquipment.CleanupFamilies()) do if keepFamily == name then validFamily = true end end
-        if not hero or (kind ~= "common" and kind ~= "duplicate" and kind ~= "family")
+        if not run.hero or (kind ~= "common" and kind ~= "duplicate" and kind ~= "family")
             or (kind == "family" and not validFamily) then return result end
         local kept = {}
         -- Protected copies count first, regardless of bag order.
         for _, item in ipairs(HeldItems()) do
-            if locked[item] or not UnitHasItemBagged(hero, item) or UnitHasItemEquipped(hero, item) then
+            if run.locked[item] or not UnitHasItemBagged(run.hero, item) or UnitHasItemEquipped(run.hero, item) then
                 local id = GetItemTypeId(item)
                 kept[id] = (kept[id] or 0) + 1
             end
         end
         for _, row in ipairs(SurvivorEquipment.BagEntries()) do
             local item, entry = row.item, byId[row.id]
-            if not locked[item] and not UnitHasItemEquipped(hero, item) then
+            if not run.locked[item] and not UnitHasItemEquipped(run.hero, item) then
                 local id, remove = GetItemTypeId(item), kind == "common" and entry.rarity == "common"
                 if kind == "duplicate" then
                     kept[id] = (kept[id] or 0) + 1
@@ -827,16 +836,16 @@ do
     end
     function SurvivorEquipment.ConfirmCleanup(preview)
         local state = RunSession.GetState()
-        if not hero or not preview or RunSession.IsPending() or (state ~= "INVENTORY" and state ~= "STAGE_CLEAR") then return 0 end
+        if not run.hero or not preview or RunSession.IsPending() or (state ~= "INVENTORY" and state ~= "STAGE_CLEAR") then return 0 end
         local allowed, removed = {}, 0
         for _, item in ipairs(SurvivorEquipment.PreviewCleanup(preview.kind, preview.keepFamily).items) do allowed[item] = true end
         -- Never delete newly arrived items or items equipped/locked since the preview.
         for _, item in ipairs(preview.items) do
             if allowed[item] and SurvivorConfig.ItemExists(item) then
-                allowed[item], owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil, nil
+                allowed[item], run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil, nil
                 RemoveItem(item)
                 -- Removing a carried item can raise a drop event that re-records the dead handle.
-                owned[item], tooltipDirty[item] = nil, nil
+                run.owned[item], run.tooltipDirty[item] = nil, nil
                 removed = removed + 1
             end
         end
@@ -845,117 +854,117 @@ do
         return removed
     end
     function SurvivorEquipment.Reconcile(inventory)
-        if hero == nil then return end
+        if run.hero == nil then return end
         local slots = inventory and inventory.slots or ReadSlots()
         local bag, _, capacity
         if inventory then bag, capacity = inventory.bag, inventory.capacity else bag, _, capacity = ReadBag() end
         local changed = ObserveBag(bag, capacity)
         for i = 1, 9 do
-            if slots[i] ~= lastSlots[i] then
-                bonusesDirty, changed = true, true
-                if slots[i] ~= nil then tooltipDirty[slots[i]] = true end
+            if slots[i] ~= run.lastSlots[i] then
+                run.bonusesDirty, changed = true, true
+                if slots[i] ~= nil then run.tooltipDirty[slots[i]] = true end
             end
         end
-        if bonusesDirty then
+        if run.bonusesDirty then
             local sources, equipped = Sources(slots)
-            SurvivorAugments.SetEquipmentBonuses(build, sources, hero)
+            SurvivorAugments.SetEquipmentBonuses(run.build, sources, run.hero)
             local same = true
-            for id in pairs(equipped) do if not equippedIds[id] then same = false end end
-            for id in pairs(equippedIds) do if not equipped[id] then same = false end end
+            for id in pairs(equipped) do if not run.equippedIds[id] then same = false end end
+            for id in pairs(run.equippedIds) do if not equipped[id] then same = false end end
             if not same then
-                equippedIds, descriptionCache, allTooltipsDirty = equipped, {}, true
+                run.equippedIds, run.descriptionCache, run.allTooltipsDirty = equipped, {}, true
             end
-            lastSlots, bonusesDirty = slots, false
+            run.lastSlots, run.bonusesDirty = slots, false
             TouchUI()
         end
         local seen = {}
         local function Refresh(item)
             if item and not seen[item] then
                 seen[item] = true
-                if SurvivorConfig.ItemExists(item) then RefreshTooltip(item, equippedIds) end
-                tooltipDirty[item] = nil
+                if SurvivorConfig.ItemExists(item) then RefreshTooltip(item, run.equippedIds) end
+                run.tooltipDirty[item] = nil
             end
         end
-        if allTooltipsDirty then
-            for item in pairs(owned) do Refresh(item) end
+        if run.allTooltipsDirty then
+            for item in pairs(run.owned) do Refresh(item) end
             -- Gear granted by the editor or another system is observed without item events.
             for i = 1, 9 do Refresh(slots[i]) end
             for i = 1, capacity do Refresh(bag[i]) end
-            allTooltipsDirty, changed = false, true
+            run.allTooltipsDirty, changed = false, true
         else
-            for item in pairs(tooltipDirty) do Refresh(item); tooltipDirty[item] = nil; changed = true end
+            for item in pairs(run.tooltipDirty) do Refresh(item); run.tooltipDirty[item] = nil; changed = true end
         end
         if ObservePendingRewards(bag, capacity, slots) then changed = true end
         -- The observer can reuse the revision from this exact native snapshot.
         return changed, uiRevision
     end
     function SurvivorEquipment.Init(unit, runBuild, onNotify)
-        assert(hero == nil, "Equipment must be cleaned before initialization")
+        assert(run.hero == nil, "Equipment must be cleaned before initialization")
         assert(type(UnitEquipItem) == "function" and type(UnitUnequipItem) == "function"
             and type(UnitItemInEquipmentSlot) == "function" and type(UnitItemInBagSlot) == "function"
             and type(UnitExtendedInventorySize) == "function" and type(UnitHasItemBagged) == "function"
             and type(UnitHasItemEquipped) == "function" and type(ConvertLoadoutSlot) == "function"
             and EVENT_PLAYER_UNIT_EQUIP_ITEM ~= nil and EVENT_PLAYER_UNIT_UNEQUIP_ITEM ~= nil,
             "장비 시스템은 Warcraft III 3.0 이상이 필요합니다.")
-        hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = unit, runBuild, 0, true, true, 1
+        run = NewRun()
+        run.hero, run.build = unit, runBuild
         -- The run owner passes the UI notifier; this system never reaches into gameplay UI.
         assert(type(onNotify) == "function", "Equipment needs a notifier")
         -- Notices also run inside Step's item loop and pickup events: report, never end the run.
-        notify = function(text) SurvivorConfig.Present("equipment notice", onNotify, text) end
-        pickupMode, locked = 1, {}
+        run.notify = function(text) SurvivorConfig.Present("equipment notice", onNotify, text) end
         -- AInv holds level-up trinket indicators; AIni/AEqu hold physical dropped gear.
         for _, code in ipairs({"AInv", "AIni", "AEqu"}) do
             local id = FourCC(code)
-            if GetUnitAbilityLevel(hero, id) == 0 then assert(UnitAddAbility(hero, id), "Missing inventory ability: " .. code) end
-            UnitMakeAbilityPermanent(hero, true, id)
+            if GetUnitAbilityLevel(run.hero, id) == 0 then assert(UnitAddAbility(run.hero, id), "Missing inventory ability: " .. code) end
+            UnitMakeAbilityPermanent(run.hero, true, id)
         end
-        assert(UnitExtendedInventorySize(hero) > 0, "확장 인벤토리가 활성화되지 않았습니다.")
-        eventTrigger = CreateTrigger()
+        assert(UnitExtendedInventorySize(run.hero) > 0, "확장 인벤토리가 활성화되지 않았습니다.")
+        run.eventTrigger = CreateTrigger()
         for _, event in ipairs({EVENT_PLAYER_UNIT_EQUIP_ITEM, EVENT_PLAYER_UNIT_UNEQUIP_ITEM,
             EVENT_PLAYER_UNIT_PICKUP_ITEM, EVENT_PLAYER_UNIT_DROP_ITEM}) do
-            TriggerRegisterPlayerUnitEvent(eventTrigger, SurvivorConfig.Owner(), event, nil)
+            TriggerRegisterPlayerUnitEvent(run.eventTrigger, SurvivorConfig.Owner(), event, nil)
         end
         local function OnItemEvent()
             -- Event timing may precede native slot mutation. Read slots after the transaction.
-            if GetTriggerUnit() == hero then
+            if GetTriggerUnit() == run.hero then
                 TouchUI()
                 local item = GetManipulatedItem()
                 if Entry(item) then
-                    tooltipDirty[item] = true
-                    owned[item] = owned[item] or {expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime}
+                    run.tooltipDirty[item] = true
+                    run.owned[item] = run.owned[item] or {expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime}
                     local kind = GetTriggerEventId()
                     if kind == EVENT_PLAYER_UNIT_DROP_ITEM then
-                        owned[item].noAuto, owned[item].restPickup, owned[item].reward = true, false, false
-                        owned[item].pendingReward = false
+                        run.owned[item].noAuto, run.owned[item].restPickup, run.owned[item].reward = true, false, false
+                        run.owned[item].pendingReward = false
                     elseif kind == EVENT_PLAYER_UNIT_PICKUP_ITEM then
-                        owned[item].noAuto = false
-                        Received(item, owned[item])
+                        run.owned[item].noAuto = false
+                        Received(item, run.owned[item])
                     end
                 end
             end
         end
         -- Pickups also fire inside Step's equipment scan, so teardown is deferred.
-        TriggerAddAction(eventTrigger, RunSession.TriggerAction(OnItemEvent))
+        TriggerAddAction(run.eventTrigger, RunSession.TriggerAction(OnItemEvent))
         SurvivorEquipment.Reconcile()
     end
     function SurvivorEquipment.DropAt(x, y, catalogIndex, pendingReward)
-        if hero == nil then return nil end
+        if run.hero == nil then return nil end
         local ground, oldest, oldestTime = 0, nil, math.huge
-        for item, record in pairs(owned) do
+        for item, record in pairs(run.owned) do
             if SurvivorConfig.ItemExists(item) and not record.pendingReward
-                and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
+                and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
                 ground = ground + 1
                 if record.expires < oldestTime then oldest, oldestTime = item, record.expires end
             end
         end
         if not pendingReward and ground >= SurvivorConfig.equipmentGroundLimit and oldest then
-            owned[oldest], locked[oldest], tooltipDirty[oldest], tooltipCache[oldest] = nil, nil, nil, nil; RemoveItem(oldest)
+            run.owned[oldest], run.locked[oldest], run.tooltipDirty[oldest], run.tooltipCache[oldest] = nil, nil, nil, nil; RemoveItem(oldest)
         end
         local entry = catalog[catalogIndex or RollIndex(false, false)]
         assert(entry ~= nil, "Unknown equipment catalog index")
         local item = CreateItem(FourCC(entry.id), x, y)
         assert(item ~= nil and GetItemTypeId(item) == FourCC(entry.id), "Missing equipment objects: import assets/war3map.w3t")
-        owned[item] = {expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime, carried = false,
+        run.owned[item] = {expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime, carried = false,
             pendingReward = pendingReward == true, reward = pendingReward == true, restPickup = pendingReward == true}
         -- An ordinary floor drop changes no slot, bag or pending reward; the next
         -- Step/observer tick reconciles. Only protected rewards need it now.
@@ -963,38 +972,38 @@ do
             TouchUI()
             SurvivorEquipment.Reconcile()
         end
-        RefreshTooltip(item, equippedIds)
+        RefreshTooltip(item, run.equippedIds)
         return item
     end
     function SurvivorEquipment.ClaimReward(id, source)
-        if not hero or not byId[id] then return false end
+        if not run.hero or not byId[id] then return false end
         local index
         for i, entry in ipairs(catalog) do if entry.id == id then index = i; break end end
-        local item = SurvivorEquipment.DropAt(GetUnitX(hero), GetUnitY(hero), index, true)
+        local item = SurvivorEquipment.DropAt(GetUnitX(run.hero), GetUnitY(run.hero), index, true)
         SurvivorEquipment.CollectRest()
-        notify(
+        run.notify(
             (source or "보스 보상") .. ": " .. SurvivorEquipment.Name(id)
-                .. (owned[item].pendingReward and "\n발밑에 보관 · 수령 전 자동 소멸 없음"
+                .. (run.owned[item].pendingReward and "\n발밑에 보관 · 수령 전 자동 소멸 없음"
                     or " · 가방에 수령했습니다."))
         return true
     end
     function SurvivorEquipment.OnKill(dead, elite)
-        dryKills = dryKills + 1
-        if elite or dryKills >= SurvivorConfig.equipmentPityKills or GetRandomReal(0, 1) < SurvivorConfig.equipmentDropChance then
+        run.dryKills = run.dryKills + 1
+        if elite or run.dryKills >= SurvivorConfig.equipmentPityKills or GetRandomReal(0, 1) < SurvivorConfig.equipmentDropChance then
             SurvivorEquipment.DropAt(GetUnitX(dead), GetUnitY(dead), RollIndex(elite, false))
-            dryKills = 0
+            run.dryKills = 0
         end
     end
     function SurvivorEquipment.Step(elapsed)
-        if hero == nil or not RunSession.IsRunning() then return end
+        if run.hero == nil or not RunSession.IsRunning() then return end
         local inventory = ReadInventory()
         CollectPendingRewards(true, elapsed, inventory)
-        local x, y = GetUnitX(hero), GetUnitY(hero)
+        local x, y = GetUnitX(run.hero), GetUnitY(run.hero)
         local radius = SurvivorConfig.equipmentPickupRadius
-        for item, record in pairs(owned) do
+        for item, record in pairs(run.owned) do
             if not SurvivorConfig.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
-                owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
+                run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
             elseif inventory.bagged[item] or inventory.equipped[item] then Received(item, record)
             elseif not record.pendingReward then
                 if record.carried then
@@ -1004,13 +1013,13 @@ do
                     record.retry = elapsed + 3 -- Allow intentionally dropped items to remain on the floor.
                 end
                 if elapsed >= record.expires then
-                    owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil; RemoveItem(item)
+                    run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil; RemoveItem(item)
                 elseif elapsed >= (record.retry or 0) then
                     local dx, dy = GetItemX(item) - x, GetItemY(item) - y
                     if dx * dx + dy * dy <= radius * radius and CanAutoPick(item, record, inventory) then
                         record.retry = elapsed + 0.5
                         if inventory.count < inventory.capacity and TryPickup(item, record, inventory) then
-                            notify("장비 획득: " .. SurvivorEquipment.Name(Entry(item).id) .. "\n확장 인벤토리에서 장착하세요.")
+                            run.notify("장비 획득: " .. SurvivorEquipment.Name(Entry(item).id) .. "\n확장 인벤토리에서 장착하세요.")
                         end
                     end
                 end
@@ -1019,38 +1028,38 @@ do
         SurvivorEquipment.Reconcile(inventory.changed and ReadInventory() or inventory)
     end
     function SurvivorEquipment.DebugDrops()
-        for i = 1, #catalog do SurvivorEquipment.DropAt(GetUnitX(hero) + (i - 3) * 45, GetUnitY(hero) + 60, i) end
+        for i = 1, #catalog do SurvivorEquipment.DropAt(GetUnitX(run.hero) + (i - 3) * 45, GetUnitY(run.hero) + 60, i) end
     end
     -- Regression fixtures exercise ordinary-floor cleanup and protected rewards.
     function SurvivorEquipment.ClearGround()
-        for item, record in pairs(owned) do
+        for item, record in pairs(run.owned) do
             if not SurvivorConfig.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
-                owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
-            elseif not record.pendingReward and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
-                owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
+                run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
+            elseif not record.pendingReward and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
+                run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
                 RemoveItem(item)
             end
         end
     end
     function SurvivorEquipment.PrepareRest()
-        if not hero then return end
-        for item, record in pairs(owned) do
-            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
+        if not run.hero then return end
+        for item, record in pairs(run.owned) do
+            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
                 record.restPickup = not record.noAuto
-                SetItemPosition(item, GetUnitX(hero), GetUnitY(hero))
+                SetItemPosition(item, GetUnitX(run.hero), GetUnitY(run.hero))
             end
         end
         SurvivorEquipment.CollectRest()
     end
     function SurvivorEquipment.CollectRest()
-        if not hero then return end
+        if not run.hero then return end
         local inventory = ReadInventory()
         CollectPendingRewards(false, RunSession.GetElapsed(), inventory)
-        for item, record in pairs(owned) do
+        for item, record in pairs(run.owned) do
             if not SurvivorConfig.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
-                owned[item], locked[item], tooltipDirty[item], tooltipCache[item] = nil, nil, nil, nil
+                run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
             elseif inventory.bagged[item] or inventory.equipped[item] then
                 Received(item, record)
             elseif record.restPickup and inventory.count < inventory.capacity and CanAutoPick(item, record, inventory) then
@@ -1060,30 +1069,25 @@ do
         return SurvivorEquipment.Reconcile(inventory.changed and ReadInventory() or inventory)
     end
     function SurvivorEquipment.CarryGroundToStage()
-        for item, record in pairs(owned) do
-            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(hero, item) and not UnitHasItemEquipped(hero, item) then
-                SetItemPosition(item, GetUnitX(hero), GetUnitY(hero))
+        for item, record in pairs(run.owned) do
+            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
+                SetItemPosition(item, GetUnitX(run.hero), GetUnitY(run.hero))
                 record.expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime
                 record.carried, record.restPickup, record.retry = false, false, RunSession.GetElapsed() + 3
             end
         end
     end
     function SurvivorEquipment.Cleanup()
-        -- Detach ownership before native calls; Init asserts on a leftover hero.
-        local oldTrigger, oldOwned = eventTrigger, owned
-        eventTrigger = nil
+        -- Detach the whole run before native calls: item events and late callbacks only
+        -- see the fresh, empty run, and Init asserts on a leftover hero.
+        local old = run
+        run = NewRun()
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
-        RunSession.DestroyTrigger(errors, "equipment trigger", oldTrigger)
-        for item in pairs(oldOwned) do
+        RunSession.DestroyTrigger(errors, "equipment trigger", old.eventTrigger)
+        for item in pairs(old.owned) do
             Attempt("equipment item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
         end
-        owned, lastSlots, lastBag = {}, {}, {}
-        equippedIds, descriptionCache, tooltipDirty = {}, {}, {}
-        tooltipCache, lastBagCapacity, lastPendingCount = setmetatable({}, {__mode = "k"}), nil, nil
-        locked, pickupMode = {}, 1
-        hero, build, dryKills, bonusesDirty, allTooltipsDirty, currentStage = nil, nil, 0, true, true, 1
-        notify = function() end
         Attempt("equipment UI revision", TouchUI)
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end
     end
