@@ -1786,3 +1786,13 @@ for i=1,21 do for n=2,5 do warnings[n]:selfInteractions()end end
 for _,warning in ipairs(warnings)do assert(warning.cleaned)end
 SurvivorCombat.Cleanup()
 `);
+suite('combat cleanup before the first Init attaches every extracted module and reports no error', mocks, [config,metrics,augments,combat], String.raw`
+-- The first Start tears down subsystems before any run was initialized.
+local ok,message=pcall(SurvivorCombat.Cleanup)
+assert(ok,'First cleanup must not fail: '..tostring(message))
+local ready,remaining,uses=SurvivorCombat.EscapeStatus()
+assert(ready==true and remaining==0 and uses==0 and SurvivorCombat.StageEscapeUses(1)==0)
+local hero=NewCombat('firebolt')
+assert(CombatRun().hero==hero)
+SurvivorCombat.Cleanup()
+`);

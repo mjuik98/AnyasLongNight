@@ -1709,6 +1709,8 @@ do
     Supplies.Bind(primitives)
     Hero.Bind(primitives)
     Enemies.Bind(primitives)
+    -- Attach the initial empty run at load: the first Start cleans up before any Init.
+    AttachModules()
     -- Public combat API served by the extracted modules.
     SurvivorCombat.Spawn, SurvivorCombat.SpawnBoss, SurvivorCombat.SpawnCourier = Enemies.Spawn, Enemies.SpawnBoss, Enemies.SpawnCourier
     SurvivorCombat.ReleaseCourier, SurvivorCombat.PurgeNearby = Enemies.Release, Supplies.PurgeNearby
