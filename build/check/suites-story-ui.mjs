@@ -1776,34 +1776,51 @@ empty.excluded={};for id,weapon in pairs(SurvivorConfig.weapons)do if weapon.her
 assert(SurvivorAugments.CanChoose('velocity',empty),'Excluding the other hero weapons never blocks projectile speed')
 `);
 
-suite('weapon clocks follow the registry: profiles and volleys fire before upkeep, zones keep overshoot', mocks + String.raw`
+suite('the lifecycle tick fires early-phase weapons before upkeep and late-phase ones after the spawns', mocks + String.raw`
 OnInit={final=function()end}
 function GetHeroLevel()return 1 end
 function GetHeroSkillPoints()return 0 end
 SurvivorExpedition.Step=function()end
 SurvivorEquipment={Step=function()end}
 SurvivorNativeLoadout={Refresh=function()end}
-casts={}
+casts,ticks={},{}
 SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 0,0,0 end,
-    SpawnBoss=function()return true end,Spawn=function()return true end,
-    CastWeapon=function(id)casts[#casts+1]=id end,
+    SpawnBoss=function()return true end,Spawn=function()casts[#casts+1]='spawn';return true end,
+    TickWeapons=function(dt)ticks[#ticks+1]=dt;return {'meteor','orbitblade'},{'firebolt','flamefield'} end,
+    CastWeapons=function(ids)for _,id in ipairs(ids)do casts[#casts+1]=id end end,
     UpdateStatus=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
 `, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
 local step=Local(AnyasLongNight.BeginRun,'Step')
 LifecycleRun().hero=CreateUnit(0,'hero',0,0,0)
-LifecycleRun().stats={weapons={flamefield={enabled=true,interval=.05},firebolt={enabled=true,interval=.05},
-    orbitblade={enabled=true,interval=.05},meteor={enabled=true,interval=.05},blizzard={enabled=false,interval=.01}}}
+LifecycleRun().stats={weapons={}}
 SetLocal(step,'selectedDifficulty','normal');SetLocal(step,'RefreshDamageBoard',function()end)
+SetLocal(step,'SpawnWave',function()casts[#casts+1]='wave' end)
 LifecycleRun().stage=1;LifecycleRun().stageStarted=0;LifecycleRun().bossStarted=false;LifecycleRun().nextElite=45
 state='RUNNING'
 now=.03;step(.03,now)
-assert(#casts==1 and casts[1]=='upkeep','Nothing fires before its interval')
-casts={};now=.06;step(.03,now)
 local order=table.concat(casts,',')
-assert(order=='meteor,orbitblade,upkeep,firebolt,flamefield','Unexpected cast order '..order)
-local clocks=LifecycleRun().weaponClocks
+assert(#ticks==1 and ticks[1]==.03 and order=='meteor,orbitblade,upkeep,wave,firebolt,flamefield','Unexpected cast order '..order)
+assert(LifecycleRun().weaponClocks==nil,'Weapon cooldown clocks belong to combat')
+`);
+
+suite('weapon clocks follow the registry: profiles and volleys fire early, zones keep overshoot, stages restart clocks', mocks,
+    [config,metrics,augments,combat], String.raw`
+local hero,build,units=NewCombat('firebolt')
+local weapons=build.stats.weapons
+for _,id in ipairs({'flamefield','firebolt','orbitblade','meteor'})do weapons[id].enabled,weapons[id].interval=true,.05 end
+weapons.blizzard.enabled,weapons.blizzard.interval=false,.01
+local function Joined(list)return table.concat(list,',')end
+local early,late=SurvivorCombat.TickWeapons(.03)
+assert(#early==0 and #late==0,'Nothing fires before its interval')
+early,late=SurvivorCombat.TickWeapons(.03)
+assert(Joined(early)=='meteor,orbitblade' and Joined(late)=='firebolt,flamefield',
+    'Unexpected phases '..Joined(early)..' / '..Joined(late))
+local clocks=CombatRun().weaponClocks
 assert(math.abs(clocks.flamefield-.01)<1e-9 and clocks.firebolt==0 and clocks.meteor==0 and clocks.blizzard==0,
     'Zones carry overshoot; other weapons restart and unowned weapons stay idle')
+SurvivorCombat.TickWeapons(.02);assert(clocks.firebolt>0)
+SurvivorCombat.BeginStage(2,now);assert(next(CombatRun().weaponClocks)==nil,'A new stage restarts every weapon clock')
+SurvivorCombat.Cleanup()
 `);
 
 suite('initial and later introductions wait for a distinct preparation countdown before real combat and reject stale run callbacks', presentationMocks + String.raw`

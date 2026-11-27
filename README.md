@@ -92,10 +92,16 @@ npm run check:base
 
 모든 무기의 계산된 성능은 `stats.weapons[id]` 한 곳에 같은 필드 이름(`damage`·`interval`·`count`·`range`·`radius` 등)으로 둡니다. 성장 공식은 엔진별로 정해집니다.
 
-- **코어 엔진**(missile·zone·chain·orbit·strike·cone·pierce): 엔진 기준값은 `SurvivorConfig.weaponEngines[engine].base`에 있습니다. 같은 엔진을 쓰는 다른 무기는 `SurvivorConfig.weaponBases`에서 일부 값만 바꿉니다. 엔진의 기준 무기(안야 무기)는 엔진의 기본 연출을 씁니다.
-- **프로필 엔진**(nova·field·meteor·summon·orb·boomerang): 무기별 기준값은 `SurvivorConfig.weaponProfiles`에 있습니다.
+- **코어 엔진**(missile·zone·chain·orbit·strike·cone·pierce): 엔진 기준값은 `SurvivorConfig.weaponEngines[engine].base`, 레벨별 성장표는 같은 항목의 `levels`에 있습니다. 같은 엔진을 쓰는 다른 무기는 `SurvivorConfig.weaponBases`에서 일부 값만 바꿉니다. 엔진의 기준 무기(안야 무기)는 엔진의 기본 연출을 씁니다.
+- **프로필 엔진**(nova·field·meteor·summon·orb·boomerang): 무기별 기준값은 `SurvivorConfig.weaponProfiles`에 있습니다. 공통 성장 공식을 쓰며 엔진 항목의 `radiusRange`(범위가 사정거리 보너스로도 증가)·`pulseHaste`(공격 간격이 쿨다운 감소로 단축)로 차이를 둡니다.
 
-진화는 `SurvivorAugments`의 진화 목록에서 정의하며 ID는 `<무기>_<키>`(예: `firebolt_burst`)입니다. `multiply`·`add`·`set`은 해당 무기의 스탯 필드를 바꾸고, `status`는 퓨트리스 상태 효과를, `mode`는 전투 동작(`burst`·`focus`·`pulse`·`guard`·`shatter`·`lance`)을 지정합니다. 전투 코드는 진화 ID가 아니라 `mode`를 읽으므로 진화 순서를 바꿔도 동작이 바뀌지 않습니다.
+엔진 하나는 `SurvivorConfig.weaponEngines`의 항목 하나입니다. 설정 파일에는 데이터(기준값·성장표·`phase`·`carry`·`single`·`volley`·`fixed`·보스 보상 필드)를 두고, 로드 시 `SurvivorAugments`가 성장 공식 `fields`와 툴팁 행 `rows`를, `SurvivorCombat`이 시전 함수 `cast(id, shot)`를 같은 항목에 등록합니다. 엔진을 추가하거나 바꿀 때 이 세 곳을 엔진 이름으로 찾으면 되며, 생명주기·디스패치 코드는 수정하지 않습니다. 함수가 빠진 엔진은 로드 시 오류로 멈춥니다.
+
+- `phase`: 무기 쿨다운 시계는 전투(`SurvivorCombat.TickWeapons`)가 관리합니다. `early` 엔진(프로필 엔진·순찰 칼날)은 상태 갱신 전에, `late` 엔진은 해당 틱의 적 생성 후에 `weaponOrder` 순서로 발동합니다. 시계는 스테이지 시작 시 초기화됩니다.
+- `carry`: 장판처럼 초과 시간을 다음 쿨다운으로 넘깁니다. `single`: 추가 공격마다 해당 개수 필드를 1로 줄입니다. `volley`: 기본·추가 칼날을 한 번에 생성합니다.
+- `fixed`: 진화가 이 필드를 고정하면 잃는 레벨 성장분(`levels[fixed]`)을 피해 배율로 보존합니다(뇌격·천벌 등).
+
+진화는 `SurvivorAugments`의 진화 목록에서 정의하며 ID는 `<무기>_<키>`(예: `firebolt_burst`)입니다. `multiply`·`add`·`set`은 해당 무기의 스탯 필드를 바꾸고, `status`는 퓨트리스 상태 효과를, `mode`는 전투 동작(`burst`·`focus`·`pulse`·`guard`·`shatter`·`lance`)을 지정합니다. 전투 코드는 진화 ID가 아니라 `mode`를 읽으므로 진화 순서를 바꿔도 동작이 바뀌지 않습니다. `burst`·`focus`·`shatter`·`lance`의 수치(폭발 반경·대상 수·피해율, 중첩 수·지속, 파편 범위·개수·피해율, 빙결 타격 수·시간 등)는 진화 항목의 `modeValues`에 있으며 `stats.weapons[id].modeValues`로 전투에 전달됩니다. 진화 동작의 피해는 시전한 무기의 피해 통계에 포함됩니다.
 
 공격 태그의 글자색은 `SurvivorConfig.weaponTagColors`에서 관리합니다. 유도는 주황, 관통은 하늘색, 근접은 분홍, 장판은 연두, 낙하는 연보라, 폭발은 산호색, 연쇄는 노랑, 소환은 민트색을 사용합니다.
 

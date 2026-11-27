@@ -9,10 +9,11 @@ do
     local runSerial = 0
     -- Clocks and schedules that restart with every stage (run start and NextStage).
     -- nextHazard nil: the stage's first lava warning is still ahead (encounters[stage].lava.first).
+    -- Weapon cooldown clocks belong to combat (SurvivorCombat.TickWeapons, reset by BeginStage).
     local function ResetStageClocks(state)
         state.nextElite, state.bossStarted = SurvivorConfig.eliteInterval, false
         state.nextHazard, state.nextRush = nil, SurvivorConfig.swarmRush.firstAt
-        state.weaponClocks, state.spawnBudget, state.enemyClock, state.hudClock = {}, 0, 0, 0
+        state.spawnBudget, state.enemyClock, state.hudClock = 0, 0, 0
     end
     -- Everything one run owns. Start replaces the whole table after the previous run's
     -- teardown; CleanupRun only drops the handles, so the result screen keeps its record.
@@ -350,35 +351,17 @@ do
             return
         end
         if not run.bossStarted and stageElapsed >= timing.bossStart then StartBoss(elapsed) end
-        -- An unowned weapon has no cooldown accumulation and cannot fire.
-        local due = {}
-        for _, id in ipairs(SurvivorConfig.weaponOrder) do
-            local engine = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[id].engine]
-            local weapon = run.stats.weapons[id]
-            local enabled = weapon and weapon.enabled
-            local clock = enabled and (run.weaponClocks[id] or 0) + dt or 0
-            local interval = enabled and weapon.interval
-            if enabled and clock >= interval then
-                clock = engine.carry and clock - interval or 0
-                due[#due + 1] = id
-            end
-            run.weaponClocks[id] = clock
-        end
-        -- Profile weapons and volleys fire before status upkeep; the rest after this tick's spawns.
-        local function Fire(early)
-            for _, id in ipairs(due) do
-                local engine = SurvivorConfig.weaponEngines[SurvivorConfig.weapons[id].engine]
-                if (engine.profile or engine.volley or false) == early then SurvivorCombat.CastWeapon(id) end
-            end
-        end
+        -- Weapon cooldowns advance only on ticks that reach combat. Early-phase weapons
+        -- fire before status upkeep; late-phase ones after this tick's spawns.
+        local early, late = SurvivorCombat.TickWeapons(dt)
         -- A kill/death callback can request teardown mid-tick; stop advancing this tick.
-        Fire(true)
+        SurvivorCombat.CastWeapons(early)
         if not RunSession.IsRunning() then return end
         SurvivorCombat.UpdateStatus(dt)
         if not RunSession.IsRunning() then return end
         run.enemyClock, run.hudClock = run.enemyClock + dt, run.hudClock + dt
         SpawnWave(dt, stageElapsed)
-        Fire(false)
+        SurvivorCombat.CastWeapons(late)
         if not RunSession.IsRunning() then return end
         if run.enemyClock >= 0.5 then
             run.enemyClock = 0

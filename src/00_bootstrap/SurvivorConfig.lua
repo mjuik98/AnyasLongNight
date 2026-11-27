@@ -219,34 +219,49 @@ SurvivorConfig = {
     throw = {arc = 0.35, minHeight = 120, maxHeight = 320, minFlight = 0.55, maxFlight = 0.8, flightRange = 800,
         model = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
     -- Every weapon's derived stats live in stats.weapons[id] (SurvivorAugments.Calculate).
-    -- A core engine has its own growth formulas and a base: its reference weapon (Anya's)
-    -- uses the base as is and keeps the engine's default visuals; another weapon on that
-    -- engine overrides some base keys in weaponBases. Profile engines grow every weapon
-    -- from its weaponProfiles entry instead.
-    -- cast = the SurvivorCombat function; single = the count reduced to 1 for each
-    -- multicast extra attack; volley casts base and extra blades together (no snapshot);
-    -- carry keeps overshoot time so zones never drift.
+    -- One registry entry per firing engine. This table holds the engine's data; at load
+    -- SurvivorAugments adds fields(g, id, level, base) (growth formula -> stats.weapons[id])
+    -- and rows(w, hit, weapon, id) (owned-weapon tooltip rows), and SurvivorCombat adds
+    -- cast(id, shot) (shot nil = the weapon's own cast, else a multicast snapshot).
+    -- A core engine has its own growth formulas, a base and per-level growth tables
+    -- (levels[name][weapon level 1..7]): its reference weapon (Anya's) uses the base as is
+    -- and keeps the engine's default visuals; another weapon on that engine overrides some
+    -- base keys in weaponBases. Profile engines grow every weapon from its weaponProfiles
+    -- entry instead (radiusRange: radius also grows with weapon range; pulseHaste: the
+    -- attack interval shortens with cooldown reduction).
+    -- phase: "early" weapons fire before status upkeep, "late" ones after the tick's spawns.
+    -- single = the count reduced to 1 for each multicast extra attack; volley casts base
+    -- and extra blades together (no snapshot); carry keeps overshoot time so zones never drift.
+    -- fixed: an evolution that sets this field keeps the level growth it removes
+    -- (levels[fixed] at the weapon's level) as a damage multiplier.
     -- rewardFields: the stats a boss reward must improve for this engine ("-" = lower is better);
     -- see SurvivorEquipment HelpfulBossIndex. damageLabel renames 피해 on growth cards.
     weaponEngines = {
-        missile = {weapon = "firebolt", cast = "FireMissile", single = "count", rewardFields = {"damage", "count", "range", "-interval"},
-            base = {interval = 0.8, damage = 40, speed = 850, range = 1000, lifetime = 5, hitRadius = 32}},
-        zone = {weapon = "flamefield", cast = "CreateZone", carry = true, rewardFields = {"damage", "radius", "duration", "-interval"},
-            base = {interval = 4.0, duration = 3.0, radius = 230, damage = 12, pulse = 0.5}},
-        chain = {weapon = "chainlightning", cast = "CastChainLightning", rewardFields = {"damage", "targets", "range", "jumpRange", "-interval"},
-            base = {interval = 2.2, damage = 45, range = 750, jumpRange = 350}},
-        orbit = {weapon = "orbitblade", cast = "CastBlades", volley = true, rewardFields = {"damage", "count", "radius", "duration", "-interval"},
-            base = {damage = 30, radius = 180, period = 2.4, hitRadius = 65, hitInterval = 0.45, interval = 5.0, duration = 3.0}},
-        strike = {weapon = "monsoon", cast = "CastMonsoon", single = "count", rewardFields = {"damage", "count", "range", "radius", "-interval"},
-            base = {interval = 3.2, damage = 55, range = 800, radius = 150}},
-        cone = {weapon = "frontslash", cast = "CastFrontSlash", rewardFields = {"damage", "range", "angle", "duration", "-interval"},
-            base = {interval = 1.8, damage = 65, range = 320, angle = 100}},
-        pierce = {weapon = "frostshard", cast = "FireFrostShard", rewardFields = {"damage", "pierce", "slowDuration", "-interval"},
-            base = {interval = 1.6, damage = 30, speed = 650, range = 900, lifetime = 2.0, hitRadius = 45, slow = 0.30, slowDuration = 2.0}},
-        nova = {profile = true}, field = {profile = true},
-        meteor = {profile = true, rewardFields = {"damage", "radius", "range", "-interval"}, damageLabel = "충돌 피해"},
-        summon = {profile = true, damageLabel = "소환 피해"},
-        orb = {profile = true}, boomerang = {profile = true},
+        missile = {weapon = "firebolt", phase = "late", single = "count", rewardFields = {"damage", "count", "range", "-interval"},
+            base = {interval = 0.8, damage = 40, speed = 850, range = 1000, lifetime = 5, hitRadius = 32},
+            levels = {power = {1, 1.25, 1.5, 1.875, 2.25, 2.6, 3}, count = {1, 1, 2, 2, 3, 3, 4}}},
+        zone = {weapon = "flamefield", phase = "late", carry = true, rewardFields = {"damage", "radius", "duration", "-interval"},
+            base = {interval = 4.0, duration = 3.0, radius = 230, damage = 12, pulse = 0.5},
+            levels = {power = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, radius = {1, 1, 1.15, 1.15, 1.3, 1.3, 1.45}, duration = {0, 0, 0, 1, 1, 1, 1.5}}},
+        chain = {weapon = "chainlightning", phase = "late", fixed = "targets", rewardFields = {"damage", "targets", "range", "jumpRange", "-interval"},
+            base = {interval = 2.2, damage = 45, range = 750, jumpRange = 350},
+            levels = {power = {1, 1.3, 1.6, 1.9, 2.3, 2.6, 3}, targets = {3, 4, 5, 6, 7, 8, 9}}},
+        orbit = {weapon = "orbitblade", phase = "early", volley = true, rewardFields = {"damage", "count", "radius", "duration", "-interval"},
+            base = {damage = 30, radius = 180, period = 2.4, hitRadius = 65, hitInterval = 0.45, interval = 5.0, duration = 3.0},
+            levels = {power = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, count = {2, 2, 3, 3, 4, 4, 5}}},
+        strike = {weapon = "monsoon", phase = "late", single = "count", fixed = "count", rewardFields = {"damage", "count", "range", "radius", "-interval"},
+            base = {interval = 3.2, damage = 55, range = 800, radius = 150},
+            levels = {power = {1, 1.3, 1.6, 1.9, 2.3, 2.6, 3}, count = {1, 1, 2, 2, 3, 3, 4}}},
+        cone = {weapon = "frontslash", phase = "late", rewardFields = {"damage", "range", "angle", "duration", "-interval"},
+            base = {interval = 1.8, damage = 65, range = 320, angle = 100},
+            levels = {power = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}}},
+        pierce = {weapon = "frostshard", phase = "late", rewardFields = {"damage", "pierce", "slowDuration", "-interval"},
+            base = {interval = 1.6, damage = 30, speed = 650, range = 900, lifetime = 2.0, hitRadius = 45, slow = 0.30, slowDuration = 2.0},
+            levels = {power = {1, 1.3, 1.6, 2, 2.5, 2.9, 3.4}, pierce = {2, 3, 3, 4, 5, 5, 6}}},
+        nova = {profile = true, phase = "early", radiusRange = true}, field = {profile = true, phase = "early"},
+        meteor = {profile = true, phase = "early", rewardFields = {"damage", "radius", "range", "-interval"}, damageLabel = "충돌 피해"},
+        summon = {profile = true, phase = "early", pulseHaste = true, damageLabel = "소환 피해"},
+        orb = {profile = true, phase = "early"}, boomerang = {profile = true, phase = "early"},
     },
     -- Core-engine Putress weapons override their engine's base values.
     weaponBases = {
@@ -332,9 +347,13 @@ SurvivorConfig.heroes.anya.startingWeapons = SurvivorConfig.startingWeapons
 do
     local c, listed = SurvivorConfig, {}
     -- Profile engines share one boss-reward stat list unless they name their own.
-    for _, engine in pairs(c.weaponEngines) do
+    for name, engine in pairs(c.weaponEngines) do
         engine.rewardFields = engine.rewardFields
             or {"damage", "radius", "range", "duration", "slowDurationBonus", "-interval"}
+        assert(engine.phase == "early" or engine.phase == "late", "Weapon engine needs a firing phase " .. name)
+        assert(engine.profile or engine.base and engine.levels and engine.levels.power, "Core engine needs a base and level tables " .. name)
+        for _, list in pairs(engine.levels or {}) do assert(#list == c.growthMaxLevel, "Engine level tables cover every level " .. name) end
+        assert(not engine.fixed or engine.levels[engine.fixed], "A fixed evolution field needs its level table " .. name)
     end
     for _, id in ipairs(c.weaponOrder) do
         local weapon = assert(c.weapons[id], "Unregistered weapon " .. id)
