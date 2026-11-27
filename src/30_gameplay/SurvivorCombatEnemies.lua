@@ -6,7 +6,7 @@ SurvivorCombatEnemies = {}
 do
     local run = nil
     local Status, Hazards = SurvivorCombatStatus, SurvivorCombatHazards
-    local Alive = SurvivorConfig.UnitLive
+    local Alive = SurvivorUtil.UnitLive
     local Enemy, UnitTime, UnitTimeStopped, StopUnitTime, SegmentDistanceSquared, HurtHero
     -- Rotation state survives runs: owner slots are configured once per map.
     local enemyOwners, enemyOwnerSerial = nil, 0
@@ -25,7 +25,7 @@ do
     -- Spread enemies over allied slots that borrow Neutral Hostile's color; all share one display name.
     local function NextEnemyOwner()
         if not enemyOwners then
-            local template, heroOwner = Player(PLAYER_NEUTRAL_AGGRESSIVE), SurvivorConfig.Owner()
+            local template, heroOwner = Player(PLAYER_NEUTRAL_AGGRESSIVE), SurvivorUtil.Owner()
             enemyOwners = {}
             for _, id in ipairs(SurvivorConfig.enemyPlayerIds) do enemyOwners[#enemyOwners + 1] = Player(id) end
             for _, owner in ipairs(enemyOwners) do

@@ -11,7 +11,7 @@ do
     local lastSentOpen = false
     local prefix = "HSInventory"
 
-    local ValidFrame = SurvivorConfig.ValidFrame
+    local ValidFrame = SurvivorUtil.ValidFrame
     local function ReadLocalPanels()
         local open, found, bagOpen, detailsOpen = false, 0, false, false
         for _, name in ipairs(frameNames) do
@@ -53,7 +53,7 @@ do
         -- Bag observation updates equipment metadata, so it runs on every client.
         -- The local renderer receives this revision instead of observing again.
         if revision == nil and SurvivorEquipment.UIRevision then revision = SurvivorEquipment.UIRevision() end
-        if SurvivorConfig.IsLocalPlayer() then
+        if SurvivorUtil.IsLocalPlayer() then
             local open, _, bagOpen, detailsOpen = ReadLocalPanels()
             SurvivorUI.SetRestInventoryVisible(open)
             SurvivorLootUI.SetInventoryVisible(bagOpen and not detailsOpen, revision, detailsOpen)
@@ -75,7 +75,7 @@ do
         sentSequence, receivedSequence, lastSentOpen, frames = 0, 0, false, {}
         syncTrigger = CreateTrigger()
         -- Registered for the owner only, so every event is the owner's sync.
-        BlzTriggerRegisterPlayerSyncEvent(syncTrigger, SurvivorConfig.Owner(), prefix, false)
+        BlzTriggerRegisterPlayerSyncEvent(syncTrigger, SurvivorUtil.Owner(), prefix, false)
         TriggerAddAction(syncTrigger, function()
             if activeGeneration ~= runGeneration then return end
             local state = RunSession.GetState()
@@ -116,7 +116,7 @@ do
         end)
     end
     function SurvivorInventoryPause.DebugStatus()
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         local open, found = ReadLocalPanels()
         print(string.format("[AnyasLongNight inventory] native panels=%d / visible=%s / state=%s",
             found, tostring(open), RunSession.GetState()))
@@ -132,7 +132,7 @@ do
         RunSession.CancelTimer(errors, "observer timer", oldTimer)
         RunSession.DestroyTrigger(errors, "sync trigger", oldTrigger)
         Attempt("rest inventory", function()
-            if SurvivorConfig.IsLocalPlayer() then SurvivorUI.SetRestInventoryVisible(false) end
+            if SurvivorUtil.IsLocalPlayer() then SurvivorUI.SetRestInventoryVisible(false) end
         end)
         Attempt("loot UI", SurvivorLootUI.Reset)
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end

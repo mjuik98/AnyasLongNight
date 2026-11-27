@@ -60,7 +60,7 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
         lua.lua_setglobal(state,to_luastring('EmitItemTooltip'));
         const chunks = [['catalog natives','function FourCC(value)return value end\nALICE_Config={MIN_INTERVAL=.02}'],
             ['talents',talentLua(loadTalentCatalog(snapshots))]];
-        for (const name of ['src/00_bootstrap/SurvivorConfig.lua','src/20_system/SurvivorAugments.lua',
+        for (const name of ['src/00_bootstrap/SurvivorConfig.lua','src/00_bootstrap/SurvivorUtil.lua','src/20_system/SurvivorAugments.lua',
             ...(weapons ? [] : ['src/20_system/SurvivorEquipment.lua'])]) {
             const absolute = path.join(root,name), bytes = fs.readFileSync(absolute);
             if(snapshots.has(absolute))assert.deepEqual(snapshots.get(absolute),bytes,'Tooltip source changed: '+name);
@@ -68,19 +68,16 @@ function loadRuntimeTooltipCatalog(snapshots, weapons) {
             chunks.push([name,bytes.toString('utf8')]);
         }
         chunks.push(['descriptions',weapons ? String.raw`
-local ids={firebolt='HsW1',flamefield='HsW2',chainlightning='HsW3',orbitblade='HsW4',monsoon='HsW5',frontslash='HsW6',frostshard='HsW7',frostnova='HsW8',blizzard='HsW9',meteor='HsWA',thunderorb='HsWB',returnblade='HsWC',
-    plaguedart='HsWD',plaguetrail='HsWE',corrosion='HsWF',plaguepool='HsWG',deathcoil='HsWH',soulchain='HsWI',wraithguard='HsWJ',shadowscythe='HsWK',plaguejar='HsWL',catalyst='HsWM',boilingflask='HsWN',acidvials='HsWO',banshee='HsWP',shadowarcher='HsWQ',plaguezombie='HsWR',experiment='HsWS'}
-for id,raw in pairs(ids)do
-    local build=SurvivorAugments.NewBuild(id,nil,SurvivorConfig.weapons[id].hero)
+for id,weapon in pairs(SurvivorConfig.weapons)do
+    local raw,build=weapon.rawcode,SurvivorAugments.NewBuild(id,nil,weapon.hero)
     for level=1,SurvivorConfig.growthMaxLevel do
         build.levels[id]=level;SurvivorAugments.Recalculate(build)
         local name=SurvivorAugments.Get(id).name..' · '..(level==SurvivorConfig.growthMaxLevel and 'MAX' or 'Lv.'..level)
-        EmitItemTooltip(raw..':'..level,name,SurvivorAugments.OwnedTooltip(id,build))
+        EmitItemTooltip(raw..':'..level,name,SurvivorAugments.OwnedTooltip(id,build),SurvivorAugments.Get(id).icon)
     end
 end
 ` : String.raw`
-local ids={power='HsT1',haste='HsT2',reach='HsT3',velocity='HsT4',magnitude='HsT5',longevity='HsT6',multicast='HsT7',vitality='HsT8',renewal='HsT9',stride='HsTA',armor='HsTB'}
-for id,raw in pairs(ids)do
+for id,raw in pairs(SurvivorConfig.trinketRawcodes)do
     EmitItemTooltip(raw,SurvivorAugments.Get(id).name,SurvivorAugments.OwnedTooltip(id,SurvivorAugments.NewBuild('firebolt',id)))
 end
 for _,entry in ipairs(SurvivorEquipment.Catalog())do
@@ -98,7 +95,7 @@ end
 }
 // Weapon/trinket growth ends at level 7 (SurvivorConfig.growthMaxLevel).
 export const growthLevels = 7;
-// Passive weapon indicators: original HsW1..HsWO plus summons HsWP..HsWS (SurvivorNativeLoadout).
+// Passive weapon indicators HsW1..HsWS (SurvivorConfig.weapons[id].rawcode): a tripwire for the catalog size.
 export const weaponObjectCount = 28;
 // 11 trinkets + 30 single gear + 22 sets of nine pieces, minus Anya set pieces reusing single gear.
 export const itemObjectCount = 231;

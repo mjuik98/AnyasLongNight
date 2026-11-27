@@ -295,7 +295,7 @@ const map = openMap(original), old = map.read('war3map.lua').toString('utf8');
     assert.equal(parseObjectData(inline.get('war3mapSkin.w3t'),'item').tables.flat().find(row=>row.newId==='He05')
         .fields.find(field=>field.id==='utub').value,'피해 +10%|n풍미 문장');
     verifyPreserved(original,map.replace(prepared.entries),[...prepared.entries.keys()]);
-    assert.equal(snapshots.size,7);
+    assert.equal(snapshots.size,8);
     console.log('PASS requested talent categories and item tooltip cleanup preserve stats, flavor, unrelated data and repeated builds');
 }
 {
@@ -1229,7 +1229,7 @@ console.log('PASS MPQ replace/base sync never accumulate unused archive bytes an
         }
     }
     const abilities=parseObjectData(fs.readFileSync(path.join(root,'assets/war3mapSkin.w3a')),'ability');
-    for(const object of additionalWeaponObjects)assert.equal(abilities.tables[1].find(row=>row.newId===object.id).fields.find(field=>field.id==='aart').value,object.icon);
+    for(const object of additionalWeaponObjects())assert.equal(abilities.tables[1].find(row=>row.newId===object.id).fields.find(field=>field.id==='aart').value,object.icon);
     assert.equal(parseObjectData(fs.readFileSync(path.join(root,'assets/war3map.w3a')),'ability').tables[1].filter(row=>weaponObjectPattern.test(row.newId)).length,weaponObjectCount);
     console.log('PASS Putress hero copies Anya overrides and all 28 weapon indicators carry their icons');
 }

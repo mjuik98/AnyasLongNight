@@ -23,14 +23,18 @@ export function suite(name, before, files, after) {
     } finally { lua.lua_close(L); }
 }
 
-export const config = 'src/00_bootstrap/SurvivorConfig.lua';
+// Configuration and the shared runtime helpers every module uses.
+export const config = ['src/00_bootstrap/SurvivorConfig.lua', 'src/00_bootstrap/SurvivorUtil.lua'];
 export const metrics = 'src/20_system/SurvivorMetrics.lua';
 export const augments = 'src/20_system/SurvivorAugments.lua';
 export const combat = ['src/30_gameplay/SurvivorCombatStatus.lua', 'src/30_gameplay/SurvivorCombatSets.lua',
     'src/30_gameplay/SurvivorCombatHazards.lua', 'src/30_gameplay/SurvivorCombatSupplies.lua', 'src/30_gameplay/SurvivorCombatHero.lua',
-    'src/30_gameplay/SurvivorCombatEnemies.lua', 'src/30_gameplay/SurvivorCombat.lua'];
+    'src/30_gameplay/SurvivorCombatEnemies.lua', 'src/30_gameplay/SurvivorCombatWeapons.lua', 'src/30_gameplay/SurvivorCombat.lua'];
 export const uiModules = ['src/30_gameplay/SurvivorScreenEffects.lua', 'src/30_gameplay/SurvivorNativeHUD.lua',
     'src/30_gameplay/SurvivorDamageBoard.lua', 'src/30_gameplay/SurvivorSpeech.lua',
     'src/30_gameplay/SurvivorNarrativeUI.lua', 'src/30_gameplay/SurvivorUI.lua'];
 
 export const equipment = 'src/20_system/SurvivorEquipment.lua';
+// The run lifecycle and the modules it splits out (setup choices, level rewards, chat commands).
+export const lifecycle = ['src/30_gameplay/SurvivorSetup.lua', 'src/30_gameplay/SurvivorProgression.lua',
+    'src/30_gameplay/SurvivorDebugCommands.lua', 'src/00_bootstrap/AnyasLongNight.lua'];

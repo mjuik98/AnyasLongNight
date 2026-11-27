@@ -25,6 +25,9 @@ do
     -- A paused state (CHOOSING/INVENTORY/STAGE_CLEAR) keeps its name until the
     -- watchdog consumes a pending teardown; player actions check this as well.
     function RunSession.IsPending() return pendingReason ~= nil end
+    -- Player actions and deferred stage callbacks act only on this paused state, and only
+    -- while no pending teardown is about to replace it.
+    function RunSession.CanAct(expected) return state == expected and pendingReason == nil end
     function RunSession.IsInventoryOpen() return inventoryOpen end
     -- Cleanup steps keep running after a failure; each failure is recorded as "label: message".
     function RunSession.Attempt(errors, label, action)

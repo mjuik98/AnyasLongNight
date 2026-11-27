@@ -302,7 +302,7 @@ do
         DisplayDamageBoard(false)
         HideCombatOverlays()
         -- Native timed messages can render above the cinematic caption.
-        if SurvivorConfig.IsLocalPlayer() then ClearTextMessages() end
+        if SurvivorUtil.IsLocalPlayer() then ClearTextMessages() end
         introReady = onReady
         DialogueAmbience(true)
         NativeHUD.Apply("intro")

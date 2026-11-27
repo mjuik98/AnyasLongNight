@@ -9,8 +9,8 @@ do
     local tagState = {summon = {}, fall = {}, relay = {}, burstHits = 0, burstReady = 0, meleeUntil = 0}
     local stormHits, stormReady, bladeReady = 0, 0, 0
     local soulReady, inStatusProc = 0, false
-    local Alive = SurvivorConfig.UnitLive
-    local Height = SurvivorConfig.TerrainZ
+    local Alive = SurvivorUtil.UnitLive
+    local Height = SurvivorUtil.TerrainZ
     local Status = SurvivorCombatStatus
     local Enemy, GroundTarget, Hit, AreaHit, Candidates, AreaCandidates, ReleaseCandidates
     local ImpactPoint, ProcVisual, FallPayload, TagSecondary

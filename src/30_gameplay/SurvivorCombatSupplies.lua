@@ -5,8 +5,8 @@
 SurvivorCombatSupplies = {}
 do
     local run = nil
-    local Alive = SurvivorConfig.UnitLive
-    local Height = SurvivorConfig.TerrainZ
+    local Alive = SurvivorUtil.UnitLive
+    local Height = SurvivorUtil.TerrainZ
     local Enemy, ProcVisual, SetUnitPause
     function SurvivorCombatSupplies.Bind(combat)
         Enemy, ProcVisual, SetUnitPause = combat.Enemy, combat.ProcVisual, combat.SetUnitPause
@@ -48,7 +48,7 @@ do
     end
     local function DiscardItem(item)
         run.bonusItems[item] = nil
-        SurvivorConfig.RemoveItemIfPresent(item)
+        SurvivorUtil.RemoveItemIfPresent(item)
     end
     function SurvivorCombatSupplies.ClearItems()
         while next(run.bonusItems) ~= nil do DiscardItem(next(run.bonusItems)) end
@@ -74,7 +74,7 @@ do
             -- An automatically consumed powerup may already have no native handle.
             -- A paused pickup retains its reward until the next running update.
             if record.pending then SurvivorCombatSupplies.Collect(item)
-            elseif not SurvivorConfig.ItemExists(item) or elapsed >= record.expires then DiscardItem(item)
+            elseif not SurvivorUtil.ItemExists(item) or elapsed >= record.expires then DiscardItem(item)
             else
                 local x, y = GetItemX(item), GetItemY(item)
                 if (x - hx)^2 + (y - hy)^2 <= config.pickupRadius^2 and SurvivorStage.LineClear(hx, hy, x, y) then

@@ -104,12 +104,12 @@ do
     end
     local function Say(text)
         -- Presentation: also reached from kill callbacks inside weapon hit loops.
-        SurvivorConfig.Present("expedition notice", SurvivorUI.Notify, text)
+        SurvivorUtil.Present("expedition notice", SurvivorUI.Notify, text)
     end
     -- The playing hero speaks its own line; chapter[heroId] overrides the Anya text.
     -- records[stage].reply keeps the Anya text because story scenes reuse it.
     local function Speak(chapter, key, index)
-        local id, profile = SurvivorConfig.HeroOf(run.hero)
+        local id, profile = SurvivorUtil.HeroOf(run.hero)
         local lines = chapter and chapter[id] or heroLines[id]
         local text = lines and lines[key]
         if index then text = text and text[index] end
@@ -117,7 +117,7 @@ do
             text = chapter and chapter[key] or heroLines.anya[key]
             if index then text = text[index] end
         end
-        SurvivorConfig.Present("expedition line", SurvivorUI.Say, profile.name, text)
+        SurvivorUtil.Present("expedition line", SurvivorUI.Say, profile.name, text)
     end
     local function Locate(point)
         local dx, dy = point.x - GetUnitX(run.hero), point.y - GetUnitY(run.hero)
@@ -132,7 +132,7 @@ do
         return math.min(95, closes - 60), closes
     end
     function SurvivorExpedition.RiskOffer()
-        if not SurvivorConfig.UnitLive(run.hero) or not RunSession.IsRunning()
+        if not SurvivorUtil.UnitLive(run.hero) or not RunSession.IsRunning()
             or not run.risk or run.risk.state ~= "offered" then return nil end
         local age = RunSession.GetElapsed() - run.started
         local opens, closes = RiskWindow()
@@ -198,7 +198,7 @@ do
         run.records[run.stage].finding, run.records[run.stage].reply = chapter.finding, chapter.reply
         local healthReward = run.combat.grantRecovery()
         run.rewardCallback("search")
-        SurvivorConfig.Present("clue cue", SurvivorUI.Cue, "clue")
+        SurvivorUtil.Present("clue cue", SurvivorUI.Cue, "clue")
         Say("|cff70e6cc수색 완료 · 리롤 보충|r\n" .. healthReward)
         Speak(chapter, "reply")
     end
@@ -267,7 +267,7 @@ do
             run.risk.state = "offered"
             Marker(run.risk, "위험 · " .. chapter.relic .. " (접근 후 수락)", 235, 130, 245)
             PingMinimapEx(run.risk.x, run.risk.y, 4, 235, 130, 245, false)
-            SurvivorConfig.Present("risk line", SurvivorUI.Say, "수색 기록", chapter.temptation)
+            SurvivorUtil.Present("risk line", SurvivorUI.Say, "수색 기록", chapter.temptation)
         end
         if run.risk and run.risk.state == "offered" then
             if age >= riskCloses then run.risk.state = "closed"; RemoveMarker(run.risk) end

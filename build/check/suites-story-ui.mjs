@@ -1,5 +1,5 @@
 // Story scenes, dialogue, subtitles, loot/result UI, setup and combat preparation.
-import {augments, combat, config, equipment, metrics, suite, uiModules} from './harness.mjs';
+import {augments, combat, config, equipment, metrics, suite, uiModules, lifecycle} from './harness.mjs';
 import {gearMocks, mocks, presentationMocks} from './mocks.mjs';
 suite('preparation start, black intro and dialogue retries never pass native strings, textures or renderer frames to visibility natives',
     presentationMocks + String.raw`
@@ -100,7 +100,7 @@ SurvivorUI.Init(function()end,function()end,function()end,function()end,function
 state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);selectedUnit=hero
 frames.SimpleInventoryCover.visible=false;frames.ConsoleBottomBarOverlay.visible=false
 local originals,nativeFrames={},{}
-for _,entry in ipairs(Local(SurvivorNativeHUD.Apply,'cinematicFrames'))do if entry.frame then
+for _,entry in ipairs(Internal('hud','cinematicFrames'))do if entry.frame then
     local frame=entry.frame
     originals[frame]={visible=frame.visible,enabled=frame.enabled,parent=frame.parent,x=frame.x,y=frame.y,
         width=frame.width,height=frame.height,anchor=frame.anchor}
@@ -194,8 +194,8 @@ assert(frames.NativeTooltip.visible and(writes[frames.NativeTooltip]or 0)==child
     'An untouched child flag must not be overwritten with inherited false visibility')
 assert(frames.NativePortrait.visible and frames.NativeWorldFrame.visible,
     'A failed native restore still attempts every other saved flag')
-assert(next(Local(SurvivorNativeHUD.Apply,'cinematicSaved'))~=nil)
-SurvivorUI.HidePanel();assert(frames.CommandBarFrame.visible and next(Local(SurvivorNativeHUD.Apply,'cinematicSaved'))==nil)
+assert(next(Internal('hud','cinematicSaved'))~=nil)
+SurvivorUI.HidePanel();assert(frames.CommandBarFrame.visible and next(Internal('hud','cinematicSaved'))==nil)
 assert(frames.NativeTooltip.parent==hiddenParent and not hiddenParent.visible)
 `);
 
@@ -282,7 +282,7 @@ for _,effect in ipairs(retiring)do storyEffects[effect]=true end
 closing=true;SurvivorUI.AdvanceNarrative()
 assert(completed==1 and events[1]=='hero visible'and events[2]=='hero selected'
     and events[#events]=='gameplay continuation','The last Continue finishes synchronously in the safe native order')
-assert(LiveTimers(.03)==0 and next(Local(SurvivorNativeHUD.Apply,'cinematicSaved'))==nil and #unsafeFrameCalls==0)
+assert(LiveTimers(.03)==0 and next(Internal('hud','cinematicSaved'))==nil and #unsafeFrameCalls==0)
 for _,effect in ipairs(retiring)do
     assert(effect.destroyed and effect.alpha==0 and effect.z==-10000,'No retired story effect remains visibly animating')
 end
@@ -297,7 +297,7 @@ state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);selectedUnit=he
 local completed,closes=0,0
 local function Done()completed=completed+1 end
 SurvivorStory.ShowBriefing(hero,Done)
-local stale=Local(SurvivorUI.SkipConversation,'conversationClose');assert(type(stale)=='function')
+local stale=Internal('narrative','conversationClose');assert(type(stale)=='function')
 SurvivorStory.ShowInterlude(2,hero,Done)
 local fresh=StoryScene().sceneEffects
 local unit,sceneTimer=selectedUnit,StoryScene().motion.timer
@@ -310,7 +310,7 @@ SurvivorUI.ShowConversation('failure',pages,Done,nil,function()closes=closes+1;e
 local ok,message=pcall(SurvivorUI.AdvanceNarrative)
 assert(not ok and message:find('intentional close failure')and closes==1 and completed==1)
 assert(not SurvivorUI.IsNarrativeVisible()and frames.CommandBarFrame.visible and frames.SimpleInventoryBar.visible
-    and next(Local(SurvivorNativeHUD.Apply,'cinematicSaved'))==nil and LiveTimers(.03)==0,
+    and next(Internal('hud','cinematicSaved'))==nil and LiveTimers(.03)==0,
     'A failing scene closer still restores custom/native UI without running gameplay continuation')
 SurvivorUI.HidePanel();SurvivorUI.SkipConversation();assert(closes==1)
 SurvivorUI.ShowConversation('retry',pages,Done,nil,function()closes=closes+1 end)
@@ -321,14 +321,14 @@ suite('panel and story teardown release their run state before native steps that
     [config,'src/30_gameplay/SurvivorStory.lua',uiModules], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR'
-SetLocal(SurvivorUI.HidePanel,'gearCallback',function()end);SetLocal(SurvivorUI.HidePanel,'choosing',true)
+SetInternal('ui','gearCallback',function()end);SetInternal('ui','choosing',true)
 assert(SurvivorUI.IsChoiceVisible())
-local stopIntro=Local(SurvivorUI.HidePanel,'StopIntro')
-SetLocal(SurvivorUI.HidePanel,'StopIntro',function()error('injected intro failure',0)end)
+local stopIntro=Internal('ui','StopIntro')
+SetInternal('ui','StopIntro',function()error('injected intro failure',0)end)
 local ok,message=pcall(SurvivorUI.HidePanel)
-SetLocal(SurvivorUI.HidePanel,'StopIntro',stopIntro)
+SetInternal('ui','StopIntro',stopIntro)
 assert(not ok and tostring(message):find('injected intro failure'),'The failure still surfaces')
-assert(not SurvivorUI.IsChoiceVisible() and Local(SurvivorUI.HidePanel,'restVisible')==false,
+assert(not SurvivorUI.IsChoiceVisible() and Internal('ui','restVisible')==false,
     'A failed intro stop must not leave the choice reported as visible (hidden HUD, blocked loot controls)')
 SurvivorUI.HidePanel()
 SurvivorStory.Record(1);assert(next(StoryRun().clues)~=nil)
@@ -352,20 +352,20 @@ local cover=frames.HSStoryReturnShade
 assert(completed==1 and hero.visible and selectedUnit==hero and cover.visible and cover.alpha==255)
 assert(SurvivorUI.IsCombatPreparationVisible()and LiveTimers(.02)==1 and now==0,
     'Only presentation time advances; preparation still owns the gameplay pause')
-local first=Local(SurvivorUI.SkipConversation,'returnTimer')
+local first=Internal('narrative','returnTimer')
 AdvanceVisualTime(.3);assert(cover.visible and cover.alpha>0 and cover.alpha<255)
 AdvanceVisualTime(.35);assert(not cover.visible and LiveTimers(.02)==0 and first.destroyed and completed==1)
 SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
-local replaced=Local(SurvivorUI.SkipConversation,'returnTimer')
+local replaced=Internal('narrative','returnTimer')
 SurvivorUI.ShowNarrative('replacement','new text',function()end)
 assert(replaced.destroyed and not cover.visible)
 replaced.callback();assert(not cover.visible and frames.AnyasLongNightStageIntro.alpha==255)
 SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
-local reset=Local(SurvivorUI.SkipConversation,'returnTimer')
+local reset=Internal('narrative','returnTimer')
 SurvivorUI.HidePanel();SurvivorStory.Reset();reset.callback()
 assert(reset.destroyed and not cover.visible and LiveTimers(.02)==0)
 SurvivorStory.ShowBriefing(hero,Done);SurvivorUI.SkipConversation()
-local failed=Local(SurvivorUI.SkipConversation,'returnTimer');local alpha=BlzFrameSetAlpha
+local failed=Internal('narrative','returnTimer');local alpha=BlzFrameSetAlpha
 function BlzFrameSetAlpha(frame,value)
     if frame==cover and value<255 then error('return fade failure')end
     return alpha(frame,value)
@@ -387,7 +387,7 @@ suite('intro reveal timers cancel on skip, replacement, error and restart and st
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR';local pages={{speaker='안야',text='one'},{speaker='퓨트리스',text='two'}}
 local completed=0;local function Done()completed=completed+1 end
-local function Reveal()local timer=Local(SurvivorUI.ShowConversation,'revealTimer');assert(timer and timer.dt==.03 and timer.repeated);return timer end
+local function Reveal()local timer=Internal('narrative','revealTimer');assert(timer and timer.dt==.03 and timer.repeated);return timer end
 local function Inert(timer)
     assert(timer.destroyed and not timer.running)
     local text,alpha,visible=frames.AnyasLongNightStageText.text,frames.AnyasLongNightStageIntro.alpha,frames.AnyasLongNightStageIntro.visible
@@ -673,9 +673,9 @@ assert(not frames.HSSpeech.visible and frames.HSNoticeText.text:find("보스 공
 now=17;SurvivorUI.UpdateSpeech();assert(not frames.HSSpeech.visible)
 now=18.1;SurvivorUI.UpdateSpeech()
 assert(frames.HSSpeech.visible and frames.HSNoticeText.text=="경고 뒤에 표시할 장비 알림")
-assert(Local(SurvivorSpeech.Advance,"speech").remaining>4,"Warnings pause rather than consume reading time")
+assert(Internal("speech","speech").remaining>4,"Warnings pause rather than consume reading time")
 for i=1,20 do SurvivorUI.Say("안야","queued "..i)end
-assert(#Local(SurvivorSpeech.Say,"queue")==6,"Bound visible queue even when events arrive together")
+assert(#Internal("speech","queue")==6,"Bound visible queue even when events arrive together")
 SurvivorStory.Reset();SurvivorUI.UpdateSpeech()
 assert(not frames.HSSpeech.visible and #SurvivorStory.JournalChapters()==0,"Restart must clear captions and transcript")
 `);
@@ -1164,10 +1164,10 @@ SurvivorUI.Init(function()end,function()end,function()end,function()end,function
 state='RUNNING';now=0
 SurvivorUI.Say('안야','전투 중 읽던 대사');SurvivorUI.UpdateSpeech()
 now=1;SurvivorUI.UpdateSpeech()
-local before=Local(SurvivorSpeech.Advance,'speech').remaining
+local before=Internal('speech','speech').remaining
 -- The local native-panel observer only redraws: it never advances the shared reading clock.
 now=3;SurvivorUI.SetRestInventoryVisible(true);SurvivorUI.SetRestInventoryVisible(false);now=1
-assert(Local(SurvivorSpeech.Advance,'speech').remaining==before and Local(SurvivorSpeech.Advance,'clock')==1,
+assert(Internal('speech','speech').remaining==before and Internal('speech','clock')==1,
     'Local panel visibility changes redraw speech without consuming reading time')
 SurvivorUI.Alert(2,'지원병 합류',70,'support')
 SurvivorUI.Alert(3,'통로 옆으로 회피',100,'pattern')
@@ -1179,19 +1179,19 @@ assert(not frames.HSSpeech.visible and not frames.HSEssentialHUD.visible and not
 assert(frames.HSNotice.width<=0.29 and frames.HSNotice.height>.042 and frames.HSNotice.height<=.132,
     'Concurrent warnings reserve only the lines they use')
 SurvivorUI.Alert(3,'수정된 회피 안내',100,'pattern');SurvivorUI.UpdateSpeech()
-assert(#Local(SurvivorUI.Alert,'alerts')==2 and not frames.HSNoticeText.text:find('통로 옆으로 회피'),'Same key refreshes its warning')
+assert(#Internal('speech','alerts')==2 and not frames.HSNoticeText.text:find('통로 옆으로 회피'),'Same key refreshes its warning')
 state='INVENTORY';for i=1,100 do TickTimers()end
-assert(#Local(SurvivorUI.Alert,'alerts')==2 and Local(SurvivorSpeech.Advance,'speech').remaining==before,'Paused run time never expires a warning')
+assert(#Internal('speech','alerts')==2 and Internal('speech','speech').remaining==before,'Paused run time never expires a warning')
 state='RUNNING';now=3.1;SurvivorUI.UpdateSpeech()
 assert(frames.HSNoticeText.text:find('수정된 회피 안내') and not frames.HSNoticeText.text:find('지원병 합류'),'Expired support warnings are not replayed')
 now=4.1;SurvivorUI.UpdateSpeech()
 assert(frames.HSSpeech.visible and not frames.HSNotice.visible)
 for i=1,20 do SurvivorUI.Alert(4,'alert '..i,i,'key '..i)end
-assert(#Local(SurvivorUI.Alert,'alerts')==8,'Bound urgent warning handles and state')
+assert(#Internal('speech','alerts')==8,'Bound urgent warning handles and state')
 SurvivorUI.Alert(4,'highest',1000,'top');SurvivorUI.UpdateSpeech()
 assert(frames.HSNoticeText.text:find('highest') and not frames.HSNoticeText.text:find('alert 1\n'))
 SurvivorUI.ClearSpeech();SurvivorUI.UpdateSpeech()
-assert(#Local(SurvivorUI.Alert,'alerts')==0 and not frames.HSNotice.visible and not frames.HSSpeech.visible)
+assert(#Internal('speech','alerts')==0 and not frames.HSNotice.visible and not frames.HSSpeech.visible)
 `);
 
 suite('safe essential HUD preserves native statistics controls and separates risk terms from nearby frames', presentationMocks + String.raw`
@@ -1202,7 +1202,7 @@ SurvivorUI.Init(function()end,function()end,function()end,function()end,function
 state='RUNNING';now=0
 local build={weapons={},evolutions={}}
 SurvivorUI.UpdateDamageBoard(build,3,200,2,'normal');SurvivorUI.UpdateSpeech()
-local board=Local(SurvivorDamageBoard.Update,'board')
+local board=Internal('board','board')
 assert(not frames.HSEssentialHUD.visible and not frames.HSEscapeState and not frames.HSEssentialTime and board.visible,
     'Ordinary combat has no escape frame, empty top panel or duplicate timer')
 assert(board.title:find('1:40') and board.title:find('S3/5'),'The native board title retains the remaining stage time')
@@ -1223,8 +1223,8 @@ for _,paused in ipairs({'INVENTORY','FINISHED','CHOOSING'})do
     state=paused;SurvivorUI.UpdateSpeech();assert(not board.visible,'Fold statistics in '..paused..' even when quiet state has not changed')
     state='RUNNING';SurvivorUI.UpdateSpeech();assert(board.visible and not board.minimized,'Restore native statistics after '..paused)
 end
-SetLocal(SurvivorUI.UpdateSpeech,'choosing',true);SurvivorUI.UpdateSpeech();assert(not board.visible)
-SetLocal(SurvivorUI.UpdateSpeech,'choosing',false);SurvivorUI.UpdateSpeech();assert(board.visible)
+SetInternal('ui','choosing',true);SurvivorUI.UpdateSpeech();assert(not board.visible)
+SetInternal('ui','choosing',false);SurvivorUI.UpdateSpeech();assert(board.visible)
 SurvivorUI.ShowConversation('정지된 장면',{{speaker='안야',text='대사'}},function()end)
 SurvivorUI.UpdateSpeech();assert(not board.visible,'Statistics never cover a manually advanced scene')
 SurvivorUI.SkipConversation();SurvivorUI.UpdateSpeech();assert(board.visible)
@@ -1241,7 +1241,7 @@ SurvivorUI.Alert(2,'회피',100,'test');SurvivorUI.UpdateSpeech()
 assert(frames.HSEssentialHUD.visible and board.visible and board.minimized)
 SafeLeftLane()
 riskOffer={name='봉인',remaining=40,seconds=30,text='risk terms'};SurvivorUI.UpdateSpeech()
-local accept=Local(SurvivorUI.UpdateExpedition,'riskAccept')
+local accept=Internal('ui','riskAccept')
 local function SeparatedRiskControls()
     local text,root=frames.AnyasLongNightExpedition,frames.HSExpedition
     assert(root.y<=.515 and root.y>=.36 and text.height>=.041 and text.height<=.128)
@@ -1312,13 +1312,13 @@ suite('combat speech keeps the timer title and restores both native statistics s
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='RUNNING';now=0;local build={weapons={},evolutions={}}
 SurvivorUI.UpdateDamageBoard(build,2,120,3,'normal')
-local board=Local(SurvivorDamageBoard.Update,'board')
+local board=Internal('board','board')
 MultiboardMinimize(board,false)
 SurvivorUI.Say('안야','통계 내용보다 먼저 읽을 대사');SurvivorUI.UpdateSpeech()
 assert(board.visible and board.minimized and board.title:find('2:00'),'Collapse rows while retaining the native timer title')
-assert(Local(SurvivorDamageBoard.Display,'originalMinimized')==false,'Remember the player-expanded false value')
+assert(Internal('board','originalMinimized')==false,'Remember the player-expanded false value')
 for i=1,5 do SurvivorUI.UpdateSpeech()end
-assert(Local(SurvivorDamageBoard.Display,'originalMinimized')==false,'Repeated quiet ticks never replace the original state')
+assert(Internal('board','originalMinimized')==false,'Repeated quiet ticks never replace the original state')
 now=7.1;SurvivorUI.UpdateSpeech();assert(board.visible and not board.minimized,'Natural subtitle expiry restores expansion')
 MultiboardMinimize(board,true)
 SurvivorUI.Alert(2,'그림자 탈출 발동',100,'escape');SurvivorUI.UpdateSpeech()
@@ -1332,7 +1332,7 @@ state='RUNNING';SurvivorUI.UpdateSpeech();assert(board.visible and board.minimiz
 SurvivorUI.ClearSpeech();assert(not board.minimized,'Clearing pending speech also restores expansion immediately')
 SurvivorUI.Say('안야','종료 정리');SurvivorUI.UpdateSpeech();assert(board.minimized)
 SurvivorUI.ClearDamageBoard();assert(board.destroyed and not board.minimized,'Restore before destroying a quiet board')
-SurvivorUI.UpdateDamageBoard(build,2,130,3,'normal');local replacement=Local(SurvivorDamageBoard.Update,'board')
+SurvivorUI.UpdateDamageBoard(build,2,130,3,'normal');local replacement=Internal('board','board')
 assert(replacement~=board and replacement.minimized,'A replacement board begins with its own default')
 SurvivorUI.UpdateSpeech();SurvivorUI.ClearSpeech();assert(replacement.minimized,'An old false snapshot never leaks into the new board')
 SurvivorUI.ClearDamageBoard()
@@ -1343,7 +1343,7 @@ suite('native statistics clicks override one-time speech and warning folding thr
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='RUNNING';now=0;local build={weapons={},evolutions={}}
 SurvivorUI.UpdateDamageBoard(build,1,120,4,'normal')
-local board=Local(SurvivorDamageBoard.Update,'board')
+local board=Internal('board','board')
 SurvivorUI.Say('안야','화살표로 통계를 펼칠 수 있는 대사');SurvivorUI.UpdateSpeech()
 local calls=board.minimizeCalls
 for i=1,5 do SurvivorUI.UpdateSpeech()end
@@ -1375,7 +1375,7 @@ SurvivorUI.ClearSpeech()
 assert(board.minimized and board.minimizeCalls==calls,'Clearing speech preserves the last observed manual choice')
 SurvivorUI.ClearDamageBoard()
 SurvivorUI.UpdateDamageBoard(build,1,120,4,'normal')
-local replacement=Local(SurvivorDamageBoard.Update,'board')
+local replacement=Internal('board','board')
 assert(replacement~=board and replacement.minimized)
 MultiboardMinimize(replacement,false)
 SurvivorUI.Say('안야','새 통계판');SurvivorUI.UpdateSpeech()
@@ -1387,14 +1387,14 @@ SurvivorUI.ClearDamageBoard()
 suite('UI speech failure recovers on the same map timer for a new run', presentationMocks,
     [config, 'src/30_gameplay/SurvivorStory.lua', uiModules], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
-local timer=Local(SurvivorUI.BeginRun,'speechTimer');local created=#timers
+local timer=Internal('ui','speechTimer');local created=#timers
 local update=SurvivorUI.UpdateSpeech;local failures=0
 RunSession.Fail=function(message)failures=failures+1;state='FINISHED';assert(message:find('injected speech failure'))end
 SurvivorUI.UpdateSpeech=function()error('injected speech failure')end
-TickTimers();assert(failures==1 and not timer.running and Local(SurvivorUI.BeginRun,'speechTimerPaused'))
+TickTimers();assert(failures==1 and not timer.running and Internal('ui','speechTimerPaused'))
 SurvivorUI.UpdateSpeech=update;state='RUNNING';now=0
 SurvivorUI.BeginRun();SurvivorUI.BeginRun();SurvivorUI.Init()
-assert(#timers==created and Local(SurvivorUI.BeginRun,'speechTimer')==timer and timer.running,
+assert(#timers==created and Internal('ui','speechTimer')==timer and timer.running,
     'A new run resumes the existing UI timer without allocating a second handle')
 SurvivorUI.Say('안야','다시 읽을 수 있는 대사');TickTimers()
 assert(frames.HSSpeech.visible and frames.HSSpeechText.text=='다시 읽을 수 있는 대사' and failures==1)
@@ -1433,7 +1433,7 @@ damageFixture=rows
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 local build=SurvivorAugments.NewBuild('firebolt')
 state='RUNNING';SurvivorUI.UpdateDamageBoard(build,1,0,3,'normal');SurvivorUI.UpdateSpeech()
-local board=Local(SurvivorDamageBoard.Update,'board')
+local board=Internal('board','board')
 assert(board.minimized and cellGets==12 and cellValues==0 and cellReleases==0)
 local styles=cellStyles;frameWrites=0
 for i=1,100 do SurvivorUI.UpdateSpeech();SurvivorUI.UpdateExpedition();SurvivorUI.UpdateDamageBoard(build,1,0,3,'normal')end
@@ -1493,9 +1493,9 @@ function BlzCreateFrameByType(...)createCalls=createCalls+1;return create(...)en
 invalidOrigin=true
 local ok,message=pcall(SurvivorLootUI.Init)
 assert(not ok and message:find('Missing game UI parent') and createCalls==0)
-assert(Local(SurvivorLootUI.Init,'root')==nil,'A failed parent lookup retains retry ownership')
+assert(Internal('loot','root')==nil,'A failed parent lookup retains retry ownership')
 invalidOrigin=false;SurvivorLootUI.Init()
-assert(Local(SurvivorLootUI.Init,'root').parent==fallback and originCalls==2 and createCalls>0)
+assert(Internal('loot','root').parent==fallback and originCalls==2 and createCalls>0)
 local count=createCalls;SurvivorLootUI.Init();assert(createCalls==count,'Successful initialization remains idempotent')
 `);
 }
@@ -1574,9 +1574,9 @@ ClickFrame(frames.ScriptDialogButton821)
 assert(frames.ScriptDialogButton821.text:find('잠금') and build.revision==revision,'UI locks never invalidate combat statistics')
 hero.bag[1]=CreateItem('Hs14',0,0) -- Native movement without an item event.
 -- The local observer entry never observes shared bag state itself.
-local before=Local(SurvivorEquipment.UIRevision,'uiRevision')
+local before=Internal('equipment','uiRevision')
 SurvivorLootUI.SetInventoryVisible(true)
-assert(Local(SurvivorEquipment.UIRevision,'uiRevision')==before,'A local render without a revision must not observe the shared bag')
+assert(Internal('equipment','uiRevision')==before,'A local render without a revision must not observe the shared bag')
 -- Like InventoryPause.Tick: observe on every client, then pass the revision to the local renderer.
 SurvivorLootUI.SetInventoryVisible(true,SurvivorEquipment.UIRevision())
 assert(frames.ScriptDialogButton821.text:find('빛바랜 목걸이') and not frames.ScriptDialogButton821.text:find('잠금'),
@@ -1615,8 +1615,8 @@ state='STAGE_CLEAR';TickTimers();assert(collections==1 and freezes==1)
 RunSession.RequestFail('injected pending teardown');TickTimers()
 assert(collections==1 and freezes==2,'A pending teardown stops item transactions but keeps the paused vitals frozen')
 -- The synchronized open/close event follows the same rule as the timer.
-syncData=Local(SurvivorInventoryPause.Init,'generation')..':1:0'
-Local(SurvivorInventoryPause.Cleanup,'syncTrigger').action()
+syncData=Internal('inventory','generation')..':1:0'
+Internal('inventory','syncTrigger').action()
 assert(collections==1,'A pending teardown stops the sync event from reconciling gear or granting talents')
 pendingFailure=nil;SurvivorInventoryPause.Cleanup()
 `);
@@ -1638,7 +1638,7 @@ SurvivorUI.UpdateSpeech()
 local record=units[unit]
 assert(record.patternCount==1 and record.supportAt==4,'Checkpoint reinforcements keep their actual two-second delay')
 assert(#actors>=5 and not frames.HSNotice.visible,'Cross pattern retains its visible ground warnings')
-assert(#Local(SurvivorUI.Alert,'alerts')==0,'Monster ability descriptions must not open a notice')
+assert(#Internal('speech','alerts')==0,'Monster ability descriptions must not open a notice')
 local spawns=0;SurvivorCombatEnemies.Spawn=function(elite,kind)spawns=spawns+1;return true end
 record.nextBlast,record.attackSpeed=100,1
 now=3.9;SurvivorCombat.UpdateEnemies(now);assert(spawns==0)
@@ -1653,9 +1653,9 @@ SurvivorUI.Init(function()end,function()end,function()end,function()end,function
 local build={weapons={},evolutions={}}
 for index,minutes in ipairs({3,4,5,5,5})do
     SurvivorUI.UpdateDamageBoard(build,index,0,3,'normal')
-    assert(Local(SurvivorDamageBoard.Update,'board').title:find(minutes..':00',1,true))
+    assert(Internal('board','board').title:find(minutes..':00',1,true))
     SurvivorUI.UpdateDamageBoard(build,index,60,3,'normal')
-    assert(Local(SurvivorDamageBoard.Update,'board').title:find((minutes-1)..':00',1,true))
+    assert(Internal('board','board').title:find((minutes-1)..':00',1,true))
 end
 local details={difficulty='쉬움',level=16,weapons={'잿불 화살'},trinkets={},stages={}}
 local report='누적 유효 피해'
@@ -1668,7 +1668,7 @@ assert(info.vertical==TEXT_JUSTIFY_TOP and info.horizontal==TEXT_JUSTIFY_LEFT
 assert(info.text:find('현재 레벨 16',1,true) and info.text:find('2:02',1,true)
     and damage.text:find('무기 6 6000',1,true))
 assert(rest.text:find('다음 시작 지점',1,true) and frames.ScriptDialogButton4.text=='다음 스테이지')
-local tabs=Local(SurvivorUI.NavigateJournal,'resultTabs')
+local tabs=Internal('ui','resultTabs')
 ClickFrame(tabs[2].frame)
 assert(not info.visible and not damage.visible and not rest.visible and frames.AnyasLongNightResultNote.visible)
 ClickFrame(tabs[1].frame);assert(info.visible and damage.visible and rest.visible)
@@ -1684,20 +1684,20 @@ state='FINISHED'
 local details={difficulty='보통',level=1,weapons={},trinkets={},stages={},journalChapters={
     {title='첫 수색',pages={'첫 장 요약','첫 장 대화'}},{title='두 번째 수색',pages={'둘째 장 요약','둘째 장 대화'}}}}
 SurvivorUI.ShowResult('boss_defeated',500,100,5,nil,'',details)
-local tab=Local(SurvivorUI.NavigateJournal,'resultTabs')[5].frame
+local tab=Internal('ui','resultTabs')[5].frame
 ClickFrame(tab)
 local note=frames.AnyasLongNightResultNote.text
 assert(note:find('첫 장 요약'))
 ClickFrame(tab);assert(frames.AnyasLongNightResultNote.text==note,'Repeated tab clicks never move a page')
 SurvivorUI.NavigateJournal(-1,0);assert(frames.AnyasLongNightResultNote.text==note)
-ClickFrame(Local(SurvivorUI.NavigateJournal,'journalNext'));assert(frames.AnyasLongNightResultNote.text:find('첫 장 대화'))
+ClickFrame(Internal('ui','journalNext'));assert(frames.AnyasLongNightResultNote.text:find('첫 장 대화'))
 SurvivorUI.NavigateJournal(99,0);assert(frames.AnyasLongNightResultNote.text:find('첫 장 대화'))
-ClickFrame(Local(SurvivorUI.NavigateJournal,'journalPrevious'));assert(frames.AnyasLongNightResultNote.text==note)
-ClickFrame(Local(SurvivorUI.NavigateJournal,'chapterNext'));assert(frames.AnyasLongNightResultNote.text:find('둘째 장 요약'))
+ClickFrame(Internal('ui','journalPrevious'));assert(frames.AnyasLongNightResultNote.text==note)
+ClickFrame(Internal('ui','chapterNext'));assert(frames.AnyasLongNightResultNote.text:find('둘째 장 요약'))
 SurvivorUI.NavigateJournal(0,99);assert(frames.AnyasLongNightResultNote.text:find('둘째 장 요약'))
-ClickFrame(Local(SurvivorUI.NavigateJournal,'chapterPrevious'));assert(frames.AnyasLongNightResultNote.text==note)
+ClickFrame(Internal('ui','chapterPrevious'));assert(frames.AnyasLongNightResultNote.text==note)
 assert(frames.HSJournalPosition.text:find('1/2장') and frames.HSJournalPosition.text:find('1/2쪽'))
-ClickFrame(Local(SurvivorUI.NavigateJournal,'resultTabs')[1].frame)
+ClickFrame(Internal('ui','resultTabs')[1].frame)
 assert(not frames.HSJournalPosition.visible)
 SurvivorUI.NavigateJournal(1,1);assert(not frames.AnyasLongNightResultNote.text:find('둘째 장 요약'),'Journal actions only work on its tab')
 `);
@@ -1709,8 +1709,8 @@ SurvivorSetupUI={ShowMenu=function(difficulty,weapon,trinket)
     setupShown={difficulty=difficulty,weapon=weapon,trinket=trinket}
 end,ShowOptions=function()end}
 SurvivorStory={SetSummaryMode=function(value)summaryMode=value end}
-`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-SetLocal(AnyasLongNight.Start,'initialized',true)
+`, [config,lifecycle], String.raw`
+SetInternal('lifecycle','initialized',true)
 state='READY';AnyasLongNight.Start()
 assert(not setupShown.difficulty and not setupShown.weapon and not setupShown.trinket)
 assert(not AnyasLongNight.RetrySame(),'Cannot retry before selecting a complete setup')
@@ -1724,7 +1724,7 @@ AnyasLongNight.Start()
 assert(setupShown.difficulty==selections.DIFFICULTY and setupShown.weapon==selections.WEAPON and setupShown.trinket==selections.TRINKET)
 assert(AnyasLongNight.IsStorySummary(),'Restart retains the explicitly chosen story preference')
 local starts=0
-SetLocal(AnyasLongNight.BeginRun,'Start',function(weapon,trinket)
+SetInternal('lifecycle','Start',function(weapon,trinket)
     starts=starts+1;assert(weapon==selections.WEAPON and trinket==selections.TRINKET);state='RUNNING'
 end)
 state='FINISHED';assert(AnyasLongNight.RetrySame() and starts==1)
@@ -1742,8 +1742,8 @@ SurvivorSetupUI={ShowMenu=function(difficulty,weapon,trinket,hero)
     setupShown={difficulty=difficulty,weapon=weapon,trinket=trinket,hero=hero}
 end,ShowOptions=function(kind,selected,hero)optionsShown={kind=kind,selected=selected,hero=hero}end}
 SurvivorStory={SetSummaryMode=function()end}
-`, [config,augments,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-SetLocal(AnyasLongNight.Start,'initialized',true)
+`, [config,augments,lifecycle], String.raw`
+SetInternal('lifecycle','initialized',true)
 state='READY';AnyasLongNight.Start()
 assert(setupShown.hero==SurvivorConfig.defaultHero and SurvivorConfig.heroes[setupShown.hero].unitId,
     'Setup opens with a playable default hero')
@@ -1789,12 +1789,12 @@ SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 
     TickWeapons=function(dt)ticks[#ticks+1]=dt;return {'meteor','orbitblade'},{'firebolt','flamefield'} end,
     CastWeapons=function(ids)for _,id in ipairs(ids)do casts[#casts+1]=id end end,
     UpdateStatus=function()casts[#casts+1]='upkeep' end,UpdateEnemies=function()end,WarnLava=function()end}
-`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-local step=Local(AnyasLongNight.BeginRun,'Step')
+`, [config,lifecycle], String.raw`
+local step=Internal('lifecycle','Step')
 LifecycleRun().hero=CreateUnit(0,'hero',0,0,0)
 LifecycleRun().stats={weapons={}}
-SetLocal(step,'selectedDifficulty','normal');SetLocal(step,'RefreshDamageBoard',function()end)
-SetLocal(step,'SpawnWave',function()casts[#casts+1]='wave' end)
+SetInternal('lifecycle','selectedDifficulty','normal');SetInternal('lifecycle','RefreshDamageBoard',function()end)
+SetInternal('lifecycle','SpawnWave',function()casts[#casts+1]='wave' end)
 LifecycleRun().stage=1;LifecycleRun().stageStarted=0;LifecycleRun().bossStarted=false;LifecycleRun().nextElite=45
 state='RUNNING'
 now=.03;step(.03,now)
@@ -1888,7 +1888,7 @@ for _,name in ipairs({'SimpleEquipmentInventoryPanel','SimpleEquipmentPanel','Si
 end
 `, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/30_gameplay/SurvivorNativeLoadout.lua',
     'src/30_gameplay/SurvivorInventoryPause.lua','src/30_gameplay/SurvivorStory.lua',uiModules,
-    'src/30_gameplay/SurvivorSetupUI.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
+    'src/30_gameplay/SurvivorSetupUI.lua',lifecycle], String.raw`
 SurvivorConfig.debugCommands=false
 AnyasLongNight.Init()
 local introduction=SurvivorUI.ShowStageIntro
@@ -1934,9 +1934,9 @@ end
 local function StartCountdown()
     ClickFrame(frames.HSCombatPreparationStart);ClickFrame(frames.HSCombatPreparationStart)
     assert(SurvivorUI.IsCombatPreparationVisible()and LiveTimers(1)==1 and CountdownText():find('3',1,true))
-    local countdown=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+    local countdown=Internal('narrative','preparationTimer')
     latestIntroduction();latestIntroduction()
-    assert(Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')==countdown and countdown.running and LiveTimers(1)==1,
+    assert(Internal('narrative','preparationTimer')==countdown and countdown.running and LiveTimers(1)==1,
         'Late introduction completions cannot replace an active combat countdown')
     local elapsed=RunSession.GetElapsed()
     for number=2,1,-1 do
@@ -1961,7 +1961,7 @@ local hero=LifecycleRun().hero
 assert(hero and not hero.removed and RunSession.GetState()=='STAGE_CLEAR'and halted and expeditionPaused)
 local build=LifecycleRun().build
 assert(build.weapons[1]=='firebolt'and build.trinkets[1]=='power'
-    and Local(AnyasLongNight.BeginRun,'selectedDifficulty')=='normal',
+    and Internal('lifecycle','selectedDifficulty')=='normal',
     'Exercise the reported firebolt and increased-damage trinket combination through actual preparation controls')
 assert(not frames.AnyasLongNightSetupShade.visible and frames.AnyasLongNightStageIntro.visible)
 assert(frames.ScriptDialogButton700.text=='장면 보기')
@@ -2035,14 +2035,15 @@ assert(RunSession.IsRunning(),'A stale click cannot consume another reward or pa
 for index=2,5 do
     assert(RunSession.BeginStageClear())
     if index==2 then
-        -- Reproduce the same hero/stage/run guard values while the defeated-boss cleanup owns the transition.
-        LifecycleRun().stageTransition=true
+        -- A boss clear begins its own transition sequence while the consumed preparation callbacks remain.
+        LifecycleRun().transition,LifecycleRun().transitionTicket="clearing",{}
         local resumed=resumeCount
         assert(not firstCanStart()and not firstReady()and resumeCount==resumed
             and RunSession.GetState()=='STAGE_CLEAR'and SurvivorCombat.Counts()==3,
             'A consumed preparation callback cannot reactivate during the same stage boss pause')
-        LifecycleRun().stageTransition=false
+        LifecycleRun().transition,LifecycleRun().transitionTicket=nil,nil
     end
+    LifecycleRun().transition="result" -- As if the boss reward was claimed.
     assert(AnyasLongNight.NextStage())
     assert(appliedStage==index and equipmentStage==index and expeditionStage==index and expeditionHero==hero)
     -- Each later stage opens on its arrival scene in the new place; nothing resumes until preparation.
@@ -2078,7 +2079,7 @@ for _,id in ipairs(SurvivorConfig.startingWeapons)do
         bag.visible=false;AdvanceVisualTime(.05)
         assert(DeliverInventorySync()==1 and not RunSession.IsInventoryOpen()
             and frames.HSCombatPreparation.visible and frames.HSCombatPreparationStart.visible)
-        assert(SurvivorUI.BeginPreparedCombat());local cancelled=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+        assert(SurvivorUI.BeginPreparedCombat());local cancelled=Internal('narrative','preparationTimer')
         AdvanceVisualTime(.10);bag.visible=true;AdvanceVisualTime(.05)
         assert(cancelled.running and not frames.HSCombatCountdown.visible and not RunSession.IsInventoryOpen(),
             'The local observer alone must not cancel a synchronized countdown')
@@ -2105,7 +2106,7 @@ for _,id in ipairs(SurvivorConfig.startingWeapons)do
 end
 assert(AnyasLongNight.RetrySame());SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
 local staleReady,staleCanStart=latestReady,latestCanStart
-assert(SurvivorUI.BeginPreparedCombat());local staleTimer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+assert(SurvivorUI.BeginPreparedCombat());local staleTimer=Internal('narrative','preparationTimer')
 assert(RunSession.Finish('test')and staleTimer.destroyed and not SurvivorUI.IsCombatPreparationVisible())
 assert(AnyasLongNight.RetrySame());SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation();Waiting(1)
 assert(not staleCanStart()and not staleReady(),'Previous-run preparation closures must fail their expected run/hero guards')
@@ -2159,7 +2160,7 @@ SurvivorUI.AdvanceNarrative();SurvivorUI.SkipConversation()
 ClickFrame(frames.ScriptDialogButton700);ClickFrame(frames.ScriptDialogButton701);ClickFrame(start)
 assert(completed==0 and LiveTimers(1)==0 and SurvivorUI.IsCombatPreparationVisible())
 allowed=true;ClickFrame(start);ClickFrame(start)
-local first=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+local first=Internal('narrative','preparationTimer')
 assert(first and LiveTimers(1)==1 and not root.visible and not start.visible and countdown.visible)
 SurvivorUI.SetRestInventoryVisible(true)
 assert(first.running and not countdown.visible and SurvivorUI.IsCombatPreparationVisible(),
@@ -2171,27 +2172,27 @@ assert(not SurvivorUI.InterruptCombatPreparation()and not countdown.visible and 
 first.callback();AdvanceVisualTime(5)
 assert(LiveTimers(1)==0 and completed==0 and SurvivorUI.IsCombatPreparationVisible(),
     'Interrupting preserves the invitation but requires another deliberate start click')
-assert(SurvivorUI.BeginPreparedCombat());local second=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+assert(SurvivorUI.BeginPreparedCombat());local second=Internal('narrative','preparationTimer')
 allowed=false;AdvanceVisualTime(1)
 assert(second.destroyed and completed==0 and root.visible and start.visible)
 allowed=true;AdvanceVisualTime(4);assert(completed==0 and LiveTimers(1)==0)
-assert(SurvivorUI.BeginPreparedCombat());local replaced=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+assert(SurvivorUI.BeginPreparedCombat());local replaced=Internal('narrative','preparationTimer')
 SurvivorUI.ShowCombatPreparation(3,function()
     assert(not SurvivorUI.IsCombatPreparationVisible(),'Detach the completed gate before its gameplay callback')
     completed=completed+10
     SurvivorUI.ShowCombatPreparation(4,Ready,CanStart)
 end,CanStart)
 assert(replaced.destroyed);replaced.callback();assert(completed==0 and root.visible)
-ClickFrame(start);local third=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer');AdvanceVisualTime(3)
+ClickFrame(start);local third=Internal('narrative','preparationTimer');AdvanceVisualTime(3)
 assert(third.destroyed and completed==10 and SurvivorUI.IsCombatPreparationVisible()and root.visible)
-ClickFrame(start);local fourth=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+ClickFrame(start);local fourth=Internal('narrative','preparationTimer')
 third.callback();assert(fourth.running and LiveTimers(1)==1 and completed==10,
     'A consumed timer cannot cancel the new preparation created by its completion callback')
 SurvivorUI.HidePanel();fourth.callback()
 assert(fourth.destroyed and completed==10 and not SurvivorUI.IsNarrativeVisible()
     and not root.visible and not start.visible and not countdown.visible and LiveTimers(1)==0)
 SurvivorUI.ShowCombatPreparation(5,Ready,CanStart);ClickFrame(start)
-local fifth=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+local fifth=Internal('narrative','preparationTimer')
 SurvivorUI.ShowStageIntro(2,Ready);fifth.callback()
 assert(fifth.destroyed and not SurvivorUI.IsCombatPreparationVisible()and frames.AnyasLongNightStageIntro.visible)
 SurvivorUI.HidePanel();assert(#unsafeFrameCalls==0 and completed==10)
@@ -2221,14 +2222,14 @@ local function AssertCleared(timer)
     timer.callback();assert(completed==0,'Failed preparation callbacks stay inert after cleanup')
 end
 SurvivorUI.ShowCombatPreparation(1,function()error('injected prepared gameplay failure')end,function()return true end)
-ClickFrame(frames.HSCombatPreparationStart);local timer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+ClickFrame(frames.HSCombatPreparationStart);local timer=Internal('narrative','preparationTimer')
 local ok,message=pcall(AdvanceVisualTime,3)
 assert(not ok and message:find('injected prepared gameplay failure')and failures==1);AssertCleared(timer)
 state='STAGE_CLEAR';local checking=false
 SurvivorUI.ShowCombatPreparation(1,Ready,function()
     if checking then error('injected preparation guard failure')end;return true
 end)
-ClickFrame(frames.HSCombatPreparationStart);timer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+ClickFrame(frames.HSCombatPreparationStart);timer=Internal('narrative','preparationTimer')
 checking=true;ok,message=pcall(AdvanceVisualTime,1)
 assert(not ok and message:find('injected preparation guard failure')and failures==2);AssertCleared(timer)
 local timerStart=TimerStart
@@ -2243,7 +2244,7 @@ assert(timers[#timers].destroyed and not SurvivorUI.IsCombatPreparationVisible()
 local pause,destroy=PauseTimer,DestroyTimer
 for _,fault in ipairs({'pause','destroy'})do
     state='STAGE_CLEAR';SurvivorUI.ShowCombatPreparation(1,Ready,function()return true end)
-    ClickFrame(frames.HSCombatPreparationStart);timer=Local(SurvivorUI.BeginPreparedCombat,'preparationTimer')
+    ClickFrame(frames.HSCombatPreparationStart);timer=Internal('narrative','preparationTimer')
     local pauseCalls,destroyCalls=0,0
     function PauseTimer(handle)
         if handle==timer then pauseCalls=pauseCalls+1;if fault=='pause'then error('injected countdown pause failure')end end

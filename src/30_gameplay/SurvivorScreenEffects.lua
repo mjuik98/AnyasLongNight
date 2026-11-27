@@ -30,7 +30,7 @@ do
         if active then timeStopFilterOwned = true end
         local function Paint(alpha)
             timeStopFilterAlpha = alpha
-            if SurvivorConfig.IsLocalPlayer() then
+            if SurvivorUtil.IsLocalPlayer() then
                 local color, opacity = config.color, math.floor(alpha + 0.5)
                 SetCineFilterDuration(0)
                 SetCineFilterStartColor(color[1], color[2], color[3], opacity)
@@ -38,7 +38,7 @@ do
                 DisplayCineFilter(opacity > 0)
             end
         end
-        if SurvivorConfig.IsLocalPlayer() then
+        if SurvivorUtil.IsLocalPlayer() then
             SetCineFilterTexture(config.texture)
             SetCineFilterBlendMode(BLEND_MODE_BLEND)
             SetCineFilterTexMapFlags(TEXMAP_FLAG_NONE)
@@ -84,7 +84,7 @@ do
     end
     local function PaintHitVignette(alpha)
         hitAlpha = alpha
-        if not hitVignette or not SurvivorConfig.IsLocalPlayer() then return end
+        if not hitVignette or not SurvivorUtil.IsLocalPlayer() then return end
         local opacity = math.floor(alpha + 0.5)
         if opacity > 0 then
             -- Stretch to the local screen so the red edges sit on its real borders.

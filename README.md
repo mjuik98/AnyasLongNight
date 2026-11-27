@@ -95,7 +95,7 @@ npm run check:base
 - **코어 엔진**(missile·zone·chain·orbit·strike·cone·pierce): 엔진 기준값은 `SurvivorConfig.weaponEngines[engine].base`, 레벨별 성장표는 같은 항목의 `levels`에 있습니다. 같은 엔진을 쓰는 다른 무기는 `SurvivorConfig.weaponBases`에서 일부 값만 바꿉니다. 엔진의 기준 무기(안야 무기)는 엔진의 기본 연출을 씁니다.
 - **프로필 엔진**(nova·field·meteor·summon·orb·boomerang): 무기별 기준값은 `SurvivorConfig.weaponProfiles`에 있습니다. 공통 성장 공식을 쓰며 엔진 항목의 `radiusRange`(범위가 사정거리 보너스로도 증가)·`pulseHaste`(공격 간격이 쿨다운 감소로 단축)로 차이를 둡니다.
 
-엔진 하나는 `SurvivorConfig.weaponEngines`의 항목 하나입니다. 설정 파일에는 데이터(기준값·성장표·`phase`·`carry`·`single`·`volley`·`fixed`·보스 보상 필드)를 두고, 로드 시 `SurvivorAugments`가 성장 공식 `fields`와 툴팁 행 `rows`를, `SurvivorCombat`이 시전 함수 `cast(id, shot)`를 같은 항목에 등록합니다. 엔진을 추가하거나 바꿀 때 이 세 곳을 엔진 이름으로 찾으면 되며, 생명주기·디스패치 코드는 수정하지 않습니다. 함수가 빠진 엔진은 로드 시 오류로 멈춥니다.
+엔진 하나는 `SurvivorConfig.weaponEngines`의 항목 하나입니다. 설정 파일에는 데이터(기준값·성장표·`phase`·`carry`·`single`·`volley`·`fixed`·보스 보상 필드)를 두고, 로드 시 `SurvivorAugments`가 성장 공식 `fields`와 툴팁 행 `rows`를, `SurvivorCombatWeapons`가 시전 함수 `cast(id, shot)`를 같은 항목에 등록합니다. 모든 엔진의 시전은 같은 형식입니다. `shot`이 없으면 무기 자신의 현재 능력치로, 있으면 추가 공격 스냅샷(`{weapon, index}`)으로 발동합니다. 진화의 `mode`는 `SurvivorCombatWeapons`의 `modeEngines`에 등록된 엔진에서만 동작하며, 등록되지 않은 조합은 로드 시 오류로 멈춥니다. 엔진을 추가하거나 바꿀 때 이 세 곳을 엔진 이름으로 찾으면 되며, 생명주기·디스패치 코드는 수정하지 않습니다. 함수가 빠진 엔진은 로드 시 오류로 멈춥니다.
 
 - `phase`: 무기 쿨다운 시계는 전투(`SurvivorCombat.TickWeapons`)가 관리합니다. `early` 엔진(프로필 엔진·순찰 칼날)은 상태 갱신 전에, `late` 엔진은 해당 틱의 적 생성 후에 `weaponOrder` 순서로 발동합니다. 시계는 스테이지 시작 시 초기화됩니다.
 - `carry`: 장판처럼 초과 시간을 다음 쿨다운으로 넘깁니다. `single`: 추가 공격마다 해당 개수 필드를 1로 줄입니다. `volley`: 기본·추가 칼날을 한 번에 생성합니다.
@@ -178,12 +178,14 @@ npm run check:base
 | `dist/submission/AnyasLongNight.w3x` | release 제출 맵 |
 | `dist/AnyasLongNight-development.w3x` | 개발 프로필 맵 |
 | `dist/backups` | 빌드·원본 동기화 전 백업 및 빌드 manifest |
-| `src/00_bootstrap/SurvivorConfig.lua` | 영웅·무기·태그·전투 수치·보급 상자 설정 |
-| `src/00_bootstrap/AnyasLongNight.lua` | 초기화·시작·재도전 등 전체 생명주기 |
+| `src/00_bootstrap/SurvivorConfig.lua` | 영웅·무기(네이티브 표시 로우코드 포함)·태그·전투 수치·보급 상자 설정 |
+| `src/00_bootstrap/SurvivorUtil.lua` | 모든 모듈이 쓰는 공용 도우미(실행 소유자·로컬 플레이어 확인·핸들 존재 확인·지형 높이·표시 실패 격리·프레임 이벤트) |
+| `src/00_bootstrap/AnyasLongNight.lua` | 초기화·시작·게임플레이 단계·스테이지 전환·종료 등 실행 생명주기 |
+| `src/30_gameplay/SurvivorSetup.lua`·`SurvivorProgression.lua`·`SurvivorDebugCommands.lua` | 생명주기에서 분리한 시작 설정 선택, 레벨 보상 대기열·성장 카드 선택, `-hs` 채팅 명령 |
 | `src/05_vendor` | ALICE·초기화(TotalInitialization)·디버그(DebugUtils)·핸들 타입(HandleType) 라이브러리 |
 | `src/20_system` | 성장·장비·세션·계측 |
 | `src/30_gameplay` | 전투·스테이지·스토리·수색·UI·네이티브 표시·정지 관리 |
-| `src/30_gameplay/SurvivorCombat*.lua` | 전투 본체(실행 상태 테이블·객체·피해 판정·무기·시간 정지·생명주기)와 분리된 상태 이상(`Status`)·세트/태그 효과(`Sets`)·적 공격 패턴(`Hazards`)·보급 상자(`Supplies`)·영웅 생존(피해 기록·그림자 탈출·보호막, `Hero`)·적 생성/조종(`Enemies`) |
+| `src/30_gameplay/SurvivorCombat*.lua` | 전투 본체(실행 상태 테이블·객체·피해 판정·시간 정지·생명주기·상위 계층 호출 포트)와 분리된 무기 엔진(`Weapons`)·상태 이상(`Status`)·세트/태그 효과(`Sets`)·적 공격 패턴(`Hazards`)·보급 상자(`Supplies`)·영웅 생존(피해 기록·그림자 탈출·보호막, `Hero`)·적 생성/조종(`Enemies`) |
 | `src/30_gameplay/SurvivorUI.lua` 외 | UI 본체와 분리된 화면 효과(`SurvivorScreenEffects`)·기본 HUD 숨김(`SurvivorNativeHUD`)·피해 통계판(`SurvivorDamageBoard`)·자막/알림(`SurvivorSpeech`)·스토리 장면/수색 준비(`SurvivorNarrativeUI`) |
 | `build/source-order.json` | Lua 소스 결합 순서 |
 | `build/build.mjs` | 빌드 CLI(테스트 맵·프로필 출력). `build/lib`의 공개 함수를 다시 내보냄 |
@@ -277,10 +279,13 @@ release/development 빌드의 기본 입력은 정식 테스트 맵입니다. �
 6. 네이티브 String/Texture에 일반 프레임용 가시성 API를 적용하지 않습니다. 인벤토리 덮개·월드 렌더링 프레임과 선택 유닛별 세부 패널을 수동 가시성 복원 대상으로 추가하지 않습니다. 검정 배경의 실제 import 경로는 `AnyasLongNightUI\Black.tga`입니다.
 7. 장면 종료 시 선택 영웅 표시/선택 → 초상화 유닛 제거 → 카메라 복원 → 기본 UI 복원 순서를 유지합니다. 중복·지연 close 콜백이 새 장면을 정리하지 않도록 세대 번호를 확인합니다. Lua `pcall`은 엔진 메모리 오류를 복구하지 못합니다.
 8. 정적 검사·네이티브 모의 실행과 실제 Warcraft III/World Editor 검증을 구분합니다.
-9. 새 Lua 모듈은 `build/source-order.json`에 의존 순서대로 추가하고, 그 모듈을 읽는 회귀 스위트의 소스 목록(`build/check/harness.mjs`의 `combat`·`uiModules` 등)에도 넣습니다.
-10. 한 판에 속한 상태는 모듈 지역 변수로 흩지 않고 실행 상태 테이블에 둡니다. 기본값의 유일한 출처는 전투 `SurvivorCombat`의 `NewRun()`, 생명주기 `AnyasLongNight`의 `NewRun()`·`ResetStageClocks`, 장비 `SurvivorEquipment`의 `NewRun()`, 원정 `SurvivorExpedition`의 `NewRun()`(스테이지 종료 시 기록과 스테이지 번호만 이어받음), 스토리 `SurvivorStory`의 `NewRun()`(단서·대사 기록)·`NewScene()`(열린 장면), 스테이지 `SurvivorStage`의 `NewRun()`(경기장)·`NewPresentation()`(적용된 구역의 장식·지형·통행)입니다. 정리는 네이티브 호출 전에 새 테이블로 바꿔 소유권을 먼저 떼어 냅니다. 판을 넘어 유지하는 값(장비 UI 수정 번호, 장면 세대 번호, 요약 모드·본 장면 기록)만 따로 지역 변수로 둡니다. 분리된 전투 모듈은 같은 테이블을 `Attach`로 받습니다. 회귀 스위트는 개별 지역 변수 대신 `CombatRun()`·`LifecycleRun()`·`EquipmentRun()`·`StoryRun()`·`StoryScene()`·`StageRun()`·`StageView()`·`ExpeditionRun()`으로 이 테이블을 읽고 씁니다.
+9. 새 Lua 모듈은 `build/source-order.json`에 의존 순서대로 추가하고, 그 모듈을 읽는 회귀 스위트의 소스 목록(`build/check/harness.mjs`의 `config`·`combat`·`lifecycle`·`uiModules` 등)에도 넣습니다. 회귀 스위트는 모듈 내부 지역 변수를 `Internal(모듈, 이름)`·`SetInternal(모듈, 이름, 값)`으로만 읽고 씁니다. 모듈 이름과 파일의 대응은 `build/check/mocks.mjs`의 `internalFiles` 한곳에 있어, 함수를 다른 파일로 옮기면 그 표만 고칩니다. 같은 이름의 다른 값이 둘 이상이면 오류로 멈춥니다.
+10. 한 판에 속한 상태는 모듈 지역 변수로 흩지 않고 실행 상태 테이블에 둡니다. 기본값의 유일한 출처는 전투 `SurvivorCombat`의 `NewRun()`, 생명주기 `AnyasLongNight`의 `NewRun()`·`ResetStageClocks`(레벨 보상 필드는 `SurvivorProgression`이 `Attach`로 받아 씀), 장비 `SurvivorEquipment`의 `NewRun()`, 원정 `SurvivorExpedition`의 `NewRun()`(스테이지 종료 시 기록과 스테이지 번호만 이어받음), 스토리 `SurvivorStory`의 `NewRun()`(단서·대사 기록)·`NewScene()`(열린 장면), 스테이지 `SurvivorStage`의 `NewRun()`(경기장)·`NewPresentation()`(적용된 구역의 장식·지형·통행)입니다. 정리는 네이티브 호출 전에 새 테이블로 바꿔 소유권을 먼저 떼어 냅니다. 판을 넘어 유지하는 값(장비 UI 수정 번호, 장면 세대 번호, 요약 모드·본 장면 기록)만 따로 지역 변수로 둡니다. 분리된 전투 모듈은 같은 테이블을 `Attach`로 받습니다. 회귀 스위트는 개별 지역 변수 대신 `CombatRun()`·`LifecycleRun()`·`EquipmentRun()`·`StoryRun()`·`StoryScene()`·`StageRun()`·`StageView()`·`ExpeditionRun()`으로 이 테이블을 읽고 씁니다.
 11. 스테이지별 규칙(수색 지점 배치·보스 약화 단서·위험 보상 등급·용암 주기·광폭화·지원군·근접 크기)은 `SurvivorConfig.encounters[stage]`에 두고 코드에서 스테이지 번호로 분기하지 않습니다.
-12. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
+12. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorUtil.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
+
+13. 스테이지 전환(보스 정리 → 막간/엔딩 → 보상 → 결과, 구역 소개 → 준비 → 카운트다운)은 `AnyasLongNight`의 `run.transition` 단계와 전환마다 새로 받는 `run.transitionTicket`으로 관리합니다. 지연 콜백은 자기 단계와 티켓이 현재일 때만 동작하므로, 새 단계를 추가할 때 별도 플래그를 두지 않습니다.
+14. 전투 계층(`SurvivorCombat*`)은 UI·원정·네이티브 로드아웃을 직접 부르지 않고 `SurvivorCombat`의 `outside` 포트(분리 모듈은 `Outside`)로만 부릅니다.
 
 AI 에이전트용 추가 지침은 [CLAUDE.md](CLAUDE.md)에 있습니다.
 

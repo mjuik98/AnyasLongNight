@@ -13,7 +13,7 @@ do
     function SurvivorDamageBoard.RestoreMinimize()
         local original = originalMinimized
         originalMinimized, quiet = nil, false
-        if original == false and board and SurvivorConfig.IsLocalPlayer()
+        if original == false and board and SurvivorUtil.IsLocalPlayer()
             and IsMultiboardMinimized(board) then
             MultiboardMinimize(board, false)
         end
@@ -29,7 +29,7 @@ do
     end
     -- shown: the combat HUD is visible; quietly folds while a subtitle or urgent notice shows.
     function SurvivorDamageBoard.Display(shown, quietly)
-        if not board or not SurvivorConfig.IsLocalPlayer() then return end
+        if not board or not SurvivorUtil.IsLocalPlayer() then return end
         if shown and quietly then
             -- Fold once on entry; subsequent native corner clicks belong to the player.
             if not quiet then
@@ -82,7 +82,7 @@ do
     end
     -- refresh: redraw the rows even when the board was already expanded.
     function SurvivorDamageBoard.RefreshExpansion(refresh)
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         local open = board ~= nil and build ~= nil and visible and not IsMultiboardMinimized(board)
         if open and (refresh or not expanded) then
             -- The 0.1-second UI observer fills newly expanded rows immediately.

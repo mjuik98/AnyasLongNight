@@ -61,7 +61,7 @@ do
         return image
     end
     local function Listen(frame, event, callback)
-        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, function(message) RunSession.Fail(message) end)
+        SurvivorUtil.BindFrameEvent(triggers, frame, event, callback, function(message) RunSession.Fail(message) end)
     end
     local function Button(parent, name, width, height, x, y, callback)
         -- Native button artwork on a glue control, without command-button focus.
@@ -75,7 +75,7 @@ do
         Listen(button, FRAMEEVENT_CONTROL_CLICK, function()
             -- A clicked glue button keeps focus, and hovering another button then flickers
             -- between the two highlights. Toggling enable on the clicker drops that focus.
-            if SurvivorConfig.IsLocalPlayer() and BlzFrameGetEnable(button) then
+            if SurvivorUtil.IsLocalPlayer() and BlzFrameGetEnable(button) then
                 BlzFrameSetEnable(button, false)
                 BlzFrameSetEnable(button, true)
             end
@@ -116,7 +116,7 @@ do
     -- the preview window, the one hole in the black shade. The sky behind it is black and
     -- the far clip plane stops before the ground below, so only the hero shows.
     local function AimPreview()
-        if not SurvivorConfig.IsLocalPlayer() or not previewSpot then return end
+        if not SurvivorUtil.IsLocalPlayer() or not previewSpot then return end
         local shot = SurvivorConfig.setupPreview
         SetCameraPosition(previewSpot.cameraX, previewSpot.y)
         SetCameraField(CAMERA_FIELD_TARGET_DISTANCE, shot.distance, 0)
@@ -141,7 +141,7 @@ do
             RemoveUnit(previewUnit)
             previewUnit, previewSkin = nil, nil
         end
-        if previewSpot and SurvivorConfig.IsLocalPlayer() then
+        if previewSpot and SurvivorUtil.IsLocalPlayer() then
             SetCameraBounds(savedBounds.minX, savedBounds.minY, savedBounds.minX, savedBounds.maxY,
                 savedBounds.maxX, savedBounds.maxY, savedBounds.maxX, savedBounds.minY)
             ResetToGameCamera(0)
@@ -161,7 +161,7 @@ do
         -- of selection and targeting, and without an attack it never acquires anything.
         local carrier = FourCC("hfoo")
         if ALICE_ExcludeTypes then ALICE_ExcludeTypes(carrier) end
-        previewUnit = CreateUnit(SurvivorConfig.Owner(), carrier, x, y, 270) -- Faces the camera.
+        previewUnit = CreateUnit(SurvivorUtil.Owner(), carrier, x, y, 270) -- Faces the camera.
         assert(previewUnit and GetUnitTypeId(previewUnit) == carrier, "Could not create the hero preview")
         previewSkin = hero.previewSkin
         BlzSetUnitSkin(previewUnit, hero.previewSkin)
@@ -187,7 +187,7 @@ do
         local holeY = rootTop + panelTop - previewHeight / 2
         previewSpot = {cameraX = x - (holeX - 0.4) * scale, y = y,
             z = shot.lift + shot.height - (holeY - 0.3) * scale}
-        if SurvivorConfig.IsLocalPlayer() then
+        if SurvivorUtil.IsLocalPlayer() then
             savedBounds = {minX = GetCameraBoundMinX(), minY = GetCameraBoundMinY(),
                 maxX = GetCameraBoundMaxX(), maxY = GetCameraBoundMaxY()}
             ResetToGameCamera(0)
@@ -303,7 +303,7 @@ do
         summaryCallback = isSummary or function() return AnyasLongNight.IsStorySummary() end
         toggleSummaryCallback = onToggleSummary or function() return AnyasLongNight.ToggleStorySummary() end
         local parent = BlzGetFrameByName("ConsoleUIBackdrop", 0)
-        if not SurvivorConfig.ValidFrame(parent) then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
+        if not SurvivorUtil.ValidFrame(parent) then parent = BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, 0) end
         -- Layout groups carry no mouse surface; only their actual buttons take input.
         root = BlzCreateFrameByType("BACKDROP", "AnyasLongNightSetupRoot", parent, "", 0)
         BlzFrameSetTexture(root, "AnyasLongNightUI\\Transparent.tga", 0, true)

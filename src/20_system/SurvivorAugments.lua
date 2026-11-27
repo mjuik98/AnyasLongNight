@@ -114,6 +114,17 @@ do
         assert(catalog[id] and catalog[id].kind == "weapon", "Registered weapon missing from catalog " .. id)
         catalog[id].element, catalog[id].hero = weapon.element, weapon.hero
     end
+    -- order is the growth-card order (offers, rerolls); it lists every weapon and trinket once.
+    do
+        local listed = {}
+        for _, id in ipairs(order) do
+            assert(catalog[id] and not listed[id], "Invalid or repeated growth order entry " .. id)
+            listed[id] = true
+        end
+        for id, entry in pairs(catalog) do
+            assert(listed[id] or entry.kind ~= "weapon" and entry.kind ~= "trinket", "Growth order misses " .. id)
+        end
+    end
     local multiCounts, multiDamage = {1, 1, 2, 2, 2, 3, 3}, {0.30, 0.45, 0.30, 0.40, 0.50, 0.35, 0.45}
     -- Each max-level weapon chooses one permanent branch without another equipment requirement.
     -- The id is "<weapon>_<key>". multiply/add/set change stats.weapons[weapon] fields;

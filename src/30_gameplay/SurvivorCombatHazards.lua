@@ -5,11 +5,11 @@
 SurvivorCombatHazards = {}
 do
     local hero, units, objects, difficulty = nil, {}, {}, SurvivorConfig.difficulties.normal
-    local Alive = SurvivorConfig.UnitLive
-    local Height = SurvivorConfig.TerrainZ
+    local Alive = SurvivorUtil.UnitLive
+    local Height = SurvivorUtil.TerrainZ
     local Enemy, HostileStopped, SetUnitPause, UnitTime, ImpactPoint, FaceMissile, HurtHero
     local CreateObject, DestroyObject, TrackHostile, ZoneLifetime, WarningStrip, SegmentDistanceSquared, MoveEnemy
-    local Stage, Boss, BossDefeated, Bounds, EnemyCount, ExtendWarning
+    local Stage, Boss, BossDefeated, Bounds, EnemyCount, ExtendWarning, Outside
     function SurvivorCombatHazards.Bind(combat)
         Enemy, HostileStopped = combat.Enemy, combat.HostileStopped
         SetUnitPause, UnitTime = combat.SetUnitPause, combat.UnitTime
@@ -20,6 +20,7 @@ do
         -- Values the combat owner changes during a run are read when needed.
         Stage, Boss, BossDefeated, Bounds = combat.Stage, combat.Boss, combat.BossDefeated, combat.Bounds
         EnemyCount, ExtendWarning = combat.EnemyCount, combat.ExtendWarning
+        Outside = combat.Outside -- Presentation and expedition state (SurvivorCombat's outside port).
     end
     -- A run's hero, unit records, owned objects and difficulty.
     function SurvivorCombatHazards.Attach(run)
@@ -216,8 +217,8 @@ do
             BlzSetSpecialEffectZ(arrow, Height(px, py) + 5)
         end
         ExtendWarning(RunSession.GetElapsed() + c.warning)
-        SurvivorUI.Alert(c.warning + 1, "|cffff7060무리 돌진|r · 붉은 통로 바깥으로 벗어나세요", 55, "rush")
-        SurvivorUI.Cue("elite")
+        Outside.Alert(c.warning + 1, "|cffff7060무리 돌진|r · 붉은 통로 바깥으로 벗어나세요", 55, "rush")
+        Outside.Cue("elite")
         TrackHostile(warning)
         ALICE_Create(warning)
         return true
@@ -337,7 +338,7 @@ do
         -- The stage's expedition finding softens one boss special (see encounters[].advantage).
         local advantage = SurvivorConfig.encounters[stage].advantage
         local informed = not record.elite and advantage ~= nil and advantage.special == kind
-            and SurvivorExpedition.UseAdvantage(stage)
+            and Outside.UseAdvantage(stage)
         self.noTrail = informed and advantage.noTrail == true
         ExtendWarning(RunSession.GetElapsed() + self.delay)
         record.special = self
@@ -410,10 +411,10 @@ do
         if pattern == "cycle" then pattern = ({"dash", "wave", "chains", "cross"})[(record.patternCount - 1) % 4 + 1] end
         local x, y, delay = GetUnitX(hero), GetUnitY(hero), SurvivorConfig.bossBlastDelay
         if support and (record.patternCount - 1) % support.every == 0 then
-            local cancelled = advantage and advantage.cancelsSupport and SurvivorExpedition.UseAdvantage(stage)
+            local cancelled = advantage and advantage.cancelsSupport and Outside.UseAdvantage(stage)
             if not cancelled then record.supportAt = UnitTime(record) + support.delay end
         end
-        if advantage and advantage.blastDelay and advantage.pattern == pattern and SurvivorExpedition.UseAdvantage(stage) then
+        if advantage and advantage.blastDelay and advantage.pattern == pattern and Outside.UseAdvantage(stage) then
             delay = delay + advantage.blastDelay
         end
         if pattern == "dash" or pattern == "wave" or pattern == "chains" then

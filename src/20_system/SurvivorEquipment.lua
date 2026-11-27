@@ -7,68 +7,78 @@ do
     local catalog = {
         {id = "Hs01", base = "gcel", slot = "Gloves", name = "수색자의 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
-            description = "모든 무기 피해 +5%", bonuses = {all = {damagePct = 0.05}}},
+            description = "모든 무기 피해 +5%", bonuses = {all = {damagePct = 0.05}},
+            flavor = "안야가 수색길에 챙겨 온 오래된 장갑."},
         {id = "Hs02", base = "bspd", slot = "Boots", name = "낡은 순찰 장화",
             icon = "ReplaceableTextures\\CommandButtons\\BTNBootsOfSpeed.blp",
-            description = "이동 속도 +10", bonuses = {all = {moveSpeed = 10}}},
-        {id = "Hs03", base = "ciri", slot = "Chest", name = "잿불 수호의 로브", set = "ember",
+            description = "이동 속도 +10", bonuses = {all = {moveSpeed = 10}},
+            flavor = "무너진 길에도 돌아갈 발자국을 남긴다."},
+        {id = "Hs03", hero = "anya", base = "ciri", slot = "Chest", name = "잿불 수호의 로브", set = "ember",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
             description = "최대 생명력 +150", bonuses = {all = {maxLife = 150}}},
-        {id = "Hs04", base = "cnob", slot = "Head", name = "잿불 추적자의 관", set = "ember",
+        {id = "Hs04", hero = "anya", base = "cnob", slot = "Head", name = "잿불 추적자의 관", set = "ember",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmutPurple.blp",
             description = "잿불 화살 발사 수 +1",
             bonuses = {firebolt = {extraProjectiles = 1}}},
-        {id = "Hs05", base = "gcel", slot = "Gloves", name = "불길 직조의 장갑",
+        {id = "Hs05", hero = "anya", base = "gcel", slot = "Gloves", name = "불길 직조의 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
             description = "잿불 발자취 지속 +1초 / 반경 +20%p",
             bonuses = {flamefield = {duration = 1, areaPct = 0.20}}},
-        {id = "Hs06", base = "cnob", slot = "Head", name = "폭풍 부름의 관",
+        {id = "Hs06", hero = "anya", base = "cnob", slot = "Head", name = "폭풍 부름의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
             description = "폭풍의 부름 횟수 +1 / 피해 +15%p",
             bonuses = {monsoon = {extraStrikes = 1, damagePct = 0.15}}},
-        {id = "Hs07", base = "gcel", slot = "Gloves", name = "검무사의 장갑",
+        {id = "Hs07", hero = "anya", base = "gcel", slot = "Gloves", name = "검무사의 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGauntletsOfOgrePower.blp",
             description = "그림자 베기 각도 +30도 / 거리 +20%p",
             bonuses = {frontslash = {angle = 30, areaPct = 0.20}}},
-        {id = "Hs08", base = "ciri", slot = "Chest", name = "서리술사의 로브",
+        {id = "Hs08", hero = "anya", base = "ciri", slot = "Chest", name = "서리술사의 로브",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
             description = "서리 화살 관통 대상 +1 / 둔화 지속 +1초",
             bonuses = {frostshard = {extraPierce = 1, slowDuration = 1}}},
-        {id = "Hs09", base = "cnob", slot = "Head", name = "서리심장의 관",
+        {id = "Hs09", hero = "anya", base = "cnob", slot = "Head", name = "서리심장의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNCirclet.blp",
             description = "서리 폭발 범위 +20% / 둔화 지속 +1초",
             bonuses = {frostnova = {areaPct = 0.20, duration = 1}}},
-        {id = "Hs10", base = "ciri", slot = "Chest", name = "눈보라 기록관의 외투",
+        {id = "Hs10", hero = "anya", rarity = "rare", base = "ciri", slot = "Chest", name = "눈보라 기록관의 외투",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRobeOfTheMagi.blp",
             description = "납골당의 눈보라 피해 +15% / 지속 +1초",
-            bonuses = {blizzard = {damagePct = 0.15, duration = 1}}},
-        {id = "Hs11", base = "gcel", slot = "Gloves", name = "낙성을 부르는 장갑",
+            bonuses = {blizzard = {damagePct = 0.15, duration = 1}},
+            flavor = "눈보라 속에서도 기록을 감싸 지켜 낸 외투."},
+        {id = "Hs11", hero = "anya", rarity = "rare", base = "gcel", slot = "Gloves", name = "낙성을 부르는 장갑",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
             description = "잿불 낙성 충돌 피해 +25%",
-            bonuses = {meteor = {damagePct = 0.25}}},
-        {id = "Hs12", base = "cnob", slot = "Head", name = "폭풍 구슬의 관",
+            bonuses = {meteor = {damagePct = 0.25}},
+            flavor = "검게 그을린 손끝에서 붉은 빛이 떨어진다."},
+        {id = "Hs12", hero = "anya", rarity = "rare", base = "cnob", slot = "Head", name = "폭풍 구슬의 관",
             icon = "ReplaceableTextures\\CommandButtons\\BTNHelmOfValor.blp",
             description = "폭풍 구슬 범위 +20% / 최대 지속 +0.5초",
-            bonuses = {thunderorb = {areaPct = 0.20, duration = 0.5}}},
-        {id = "Hs13", base = "bspd", slot = "Boots", name = "귀환 검객의 장화",
+            bonuses = {thunderorb = {areaPct = 0.20, duration = 0.5}},
+            flavor = "오래전 폭풍의 잔향이 관 안에 맴돈다."},
+        {id = "Hs13", hero = "anya", base = "bspd", slot = "Boots", name = "귀환 검객의 장화",
             icon = "ReplaceableTextures\\CommandButtons\\BTNBootsOfSpeed.blp",
             description = "귀환 칼날 피해 +20% / 타격 크기 +15%",
             bonuses = {returnblade = {damagePct = 0.20, areaPct = 0.15}}},
         {id = "Hs14", base = "penr", slot = "Trinket", name = "빛바랜 목걸이",
             icon = "ReplaceableTextures\\CommandButtons\\BTNPendantOfEnergy.blp",
-            description = "최대 생명력 +50", bonuses = {all = {maxLife = 50}}},
+            description = "최대 생명력 +50", bonuses = {all = {maxLife = 50}},
+            flavor = "주인의 이름은 지워졌지만 무게는 남아 있다."},
         {id = "Hs15", base = "ram3", slot = "Ring", name = "병사의 반지",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRingLionHead.blp",
-            description = "모든 무기 피해 +4%", bonuses = {all = {damagePct = 0.04}}},
+            description = "모든 무기 피해 +4%", bonuses = {all = {damagePct = 0.04}},
+            flavor = "이름 없는 병사가 끝까지 지녔던 반지."},
         {id = "Hs16", base = "rlif", slot = "Ring", name = "정찰병의 반지",
             icon = "ReplaceableTextures\\CommandButtons\\BTNRingSkull.blp",
-            description = "모든 무기 쿨다운 3.8% 감소", bonuses = {all = {speedPct = 0.04}}},
+            description = "모든 무기 쿨다운 3.8% 감소", bonuses = {all = {speedPct = 0.04}},
+            flavor = "흔적을 찾는 손에 익숙한 작은 반지."},
         {id = "Hs17", base = "ofro", slot = "Primary", name = "순찰자의 발톱",
             icon = "ReplaceableTextures\\CommandButtons\\BTNClawsOfAttack.blp",
-            description = "모든 무기 피해 +8%", bonuses = {all = {damagePct = 0.08}}},
+            description = "모든 무기 피해 +8%", bonuses = {all = {damagePct = 0.08}},
+            flavor = "길을 가로막은 것들을 조용히 걷어 낸다."},
         {id = "Hs18", base = "lhst", slot = "Offhand", name = "해진 주문서",
             icon = "ReplaceableTextures\\CommandButtons\\BTNBookOfTheDead.blp",
-            description = "모든 무기 쿨다운 4.8% 감소", bonuses = {all = {speedPct = 0.05}}},
+            description = "모든 무기 쿨다운 4.8% 감소", bonuses = {all = {speedPct = 0.05}},
+            flavor = "찢어진 여백에도 사용할 주문은 남아 있다."},
         -- Putress weapon gear. Hs01, Hs02 and Hs14..Hs18 stay shared by both heroes.
         {id = "Hs19", base = "gcel", slot = "Gloves", name = "독침 통", hero = "putress",
             icon = "ReplaceableTextures\\CommandButtons\\BTNGlove.blp",
@@ -245,14 +255,11 @@ do
         {key = "Offhand", slot = "Offhand", base = "lhst", name = "봉인서", icon = "BTNBookOfTheDead.blp", rarity = "epic", stat = "speedPct", value = 0.15, specialized = true, text = "소속 세트 계열 무기 쿨다운 13.0% 감소"},
         {key = "Trinket", slot = "Trinket", base = "penr", name = "부적", icon = "BTNPendantOfEnergy.blp", rarity = "epic", stat = "damagePct", value = 0.10, specialized = true, text = "최대 생명력 +100 / 소속 세트 계열 무기 피해 +10%p"},
     }
+    -- Single gear names its hero (none = shared) and rarity (default common). A set that
+    -- lists an entry in its existing pieces takes it over below: name, set, rarity, hero, flavor.
     local existingById = {}
-    -- Shared gear has no hero; Anya-only gear is every other original item.
-    local sharedGear = {Hs01 = true, Hs02 = true, Hs14 = true, Hs15 = true, Hs16 = true, Hs17 = true, Hs18 = true}
     for _, entry in ipairs(catalog) do
         entry.rarity = entry.rarity or "common"
-        -- Keep all existing rawcodes, stats and equipment slots intact.
-        if entry.id == "Hs10" or entry.id == "Hs11" or entry.id == "Hs12" then entry.rarity = "rare" end
-        if not sharedGear[entry.id] then entry.hero = entry.hero or "anya" end
         existingById[entry.id] = entry
     end
     for _, id in ipairs(setOrder) do
@@ -279,19 +286,6 @@ do
             set.pieces[#set.pieces + 1] = entry.id
         end
     end
-    local flavor = {
-        Hs01 = "안야가 수색길에 챙겨 온 오래된 장갑.",
-        Hs02 = "무너진 길에도 돌아갈 발자국을 남긴다.",
-        Hs10 = "눈보라 속에서도 기록을 감싸 지켜 낸 외투.",
-        Hs11 = "검게 그을린 손끝에서 붉은 빛이 떨어진다.",
-        Hs12 = "오래전 폭풍의 잔향이 관 안에 맴돈다.",
-        Hs14 = "주인의 이름은 지워졌지만 무게는 남아 있다.",
-        Hs15 = "이름 없는 병사가 끝까지 지녔던 반지.",
-        Hs16 = "흔적을 찾는 손에 익숙한 작은 반지.",
-        Hs17 = "길을 가로막은 것들을 조용히 걷어 낸다.",
-        Hs18 = "찢어진 여백에도 사용할 주문은 남아 있다.",
-    }
-    for _, entry in ipairs(catalog) do entry.flavor = entry.flavor or flavor[entry.id] end
     -- Keyed by each set's first weapon; set tier texts already use these element words.
     -- Set cards tag the school of the set's first weapon (SurvivorConfig.elements).
     local function ElementTag(weapon) return SurvivorAugments.ElementTag(SurvivorConfig.weapons[weapon].element, true) end
@@ -476,7 +470,7 @@ do
     local function ObservePendingRewards(bag, capacity, slots)
         local bagged, equipped, pending = nil, nil, 0
         for item, record in pairs(run.owned) do
-            if record.pendingReward and SurvivorConfig.ItemExists(item) then
+            if record.pendingReward and SurvivorUtil.ItemExists(item) then
                 if not bagged then
                     bagged = {}
                     for i = 1, capacity do if bag[i] then bagged[bag[i]] = true end end
@@ -703,7 +697,7 @@ do
         local count = 0
         if not run.hero then return count end
         for item, record in pairs(run.owned) do
-            if record.pendingReward and SurvivorConfig.ItemExists(item)
+            if record.pendingReward and SurvivorUtil.ItemExists(item)
                 and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then count = count + 1 end
         end
         return count
@@ -733,7 +727,7 @@ do
         if not run.hero then return end
         local x, y = GetUnitX(run.hero), GetUnitY(run.hero)
         for item, record in pairs(run.owned) do
-            if record.pendingReward and SurvivorConfig.ItemExists(item) then
+            if record.pendingReward and SurvivorUtil.ItemExists(item) then
                 if inventory.bagged[item] or inventory.equipped[item] then Received(item, record)
                 elseif inventory.count < inventory.capacity and (not nearOnly or elapsed >= (record.retry or 0)) then
                     local dx, dy = GetItemX(item) - x, GetItemY(item) - y
@@ -841,7 +835,7 @@ do
         for _, item in ipairs(SurvivorEquipment.PreviewCleanup(preview.kind, preview.keepFamily).items) do allowed[item] = true end
         -- Never delete newly arrived items or items equipped/locked since the preview.
         for _, item in ipairs(preview.items) do
-            if allowed[item] and SurvivorConfig.ItemExists(item) then
+            if allowed[item] and SurvivorUtil.ItemExists(item) then
                 allowed[item], run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil, nil
                 RemoveItem(item)
                 -- Removing a carried item can raise a drop event that re-records the dead handle.
@@ -881,7 +875,7 @@ do
         local function Refresh(item)
             if item and not seen[item] then
                 seen[item] = true
-                if SurvivorConfig.ItemExists(item) then RefreshTooltip(item, run.equippedIds) end
+                if SurvivorUtil.ItemExists(item) then RefreshTooltip(item, run.equippedIds) end
                 run.tooltipDirty[item] = nil
             end
         end
@@ -911,7 +905,7 @@ do
         -- The run owner passes the UI notifier; this system never reaches into gameplay UI.
         assert(type(onNotify) == "function", "Equipment needs a notifier")
         -- Notices also run inside Step's item loop and pickup events: report, never end the run.
-        run.notify = function(text) SurvivorConfig.Present("equipment notice", onNotify, text) end
+        run.notify = function(text) SurvivorUtil.Present("equipment notice", onNotify, text) end
         -- AInv holds level-up trinket indicators; AIni/AEqu hold physical dropped gear.
         for _, code in ipairs({"AInv", "AIni", "AEqu"}) do
             local id = FourCC(code)
@@ -922,7 +916,7 @@ do
         run.eventTrigger = CreateTrigger()
         for _, event in ipairs({EVENT_PLAYER_UNIT_EQUIP_ITEM, EVENT_PLAYER_UNIT_UNEQUIP_ITEM,
             EVENT_PLAYER_UNIT_PICKUP_ITEM, EVENT_PLAYER_UNIT_DROP_ITEM}) do
-            TriggerRegisterPlayerUnitEvent(run.eventTrigger, SurvivorConfig.Owner(), event, nil)
+            TriggerRegisterPlayerUnitEvent(run.eventTrigger, SurvivorUtil.Owner(), event, nil)
         end
         local function OnItemEvent()
             -- Event timing may precede native slot mutation. Read slots after the transaction.
@@ -951,7 +945,7 @@ do
         if run.hero == nil then return nil end
         local ground, oldest, oldestTime = 0, nil, math.huge
         for item, record in pairs(run.owned) do
-            if SurvivorConfig.ItemExists(item) and not record.pendingReward
+            if SurvivorUtil.ItemExists(item) and not record.pendingReward
                 and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
                 ground = ground + 1
                 if record.expires < oldestTime then oldest, oldestTime = item, record.expires end
@@ -1001,7 +995,7 @@ do
         local x, y = GetUnitX(run.hero), GetUnitY(run.hero)
         local radius = SurvivorConfig.equipmentPickupRadius
         for item, record in pairs(run.owned) do
-            if not SurvivorConfig.ItemExists(item) then
+            if not SurvivorUtil.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
                 run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
             elseif inventory.bagged[item] or inventory.equipped[item] then Received(item, record)
@@ -1033,7 +1027,7 @@ do
     -- Regression fixtures exercise ordinary-floor cleanup and protected rewards.
     function SurvivorEquipment.ClearGround()
         for item, record in pairs(run.owned) do
-            if not SurvivorConfig.ItemExists(item) then
+            if not SurvivorUtil.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
                 run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
             elseif not record.pendingReward and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
@@ -1045,7 +1039,7 @@ do
     function SurvivorEquipment.PrepareRest()
         if not run.hero then return end
         for item, record in pairs(run.owned) do
-            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
+            if SurvivorUtil.ItemExists(item) and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
                 record.restPickup = not record.noAuto
                 SetItemPosition(item, GetUnitX(run.hero), GetUnitY(run.hero))
             end
@@ -1057,7 +1051,7 @@ do
         local inventory = ReadInventory()
         CollectPendingRewards(false, RunSession.GetElapsed(), inventory)
         for item, record in pairs(run.owned) do
-            if not SurvivorConfig.ItemExists(item) then
+            if not SurvivorUtil.ItemExists(item) then
                 if record.pendingReward then TouchUI() end
                 run.owned[item], run.locked[item], run.tooltipDirty[item], run.tooltipCache[item] = nil, nil, nil, nil
             elseif inventory.bagged[item] or inventory.equipped[item] then
@@ -1070,7 +1064,7 @@ do
     end
     function SurvivorEquipment.CarryGroundToStage()
         for item, record in pairs(run.owned) do
-            if SurvivorConfig.ItemExists(item) and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
+            if SurvivorUtil.ItemExists(item) and not UnitHasItemBagged(run.hero, item) and not UnitHasItemEquipped(run.hero, item) then
                 SetItemPosition(item, GetUnitX(run.hero), GetUnitY(run.hero))
                 record.expires = RunSession.GetElapsed() + SurvivorConfig.equipmentGroundLifetime
                 record.carried, record.restPickup, record.retry = false, false, RunSession.GetElapsed() + 3
@@ -1086,7 +1080,7 @@ do
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         RunSession.DestroyTrigger(errors, "equipment trigger", old.eventTrigger)
         for item in pairs(old.owned) do
-            Attempt("equipment item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
+            Attempt("equipment item", function() SurvivorUtil.RemoveItemIfPresent(item) end)
         end
         Attempt("equipment UI revision", TouchUI)
         if #errors > 0 then error(table.concat(errors, "\n"), 0) end

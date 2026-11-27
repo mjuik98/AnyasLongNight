@@ -4,15 +4,9 @@
 -- Indicator item objects have iprn=0/idrp=0: excluded from random loot and death drops.
 SurvivorNativeLoadout = {}
 do
-    local weapons = {firebolt = "HsW1", flamefield = "HsW2", chainlightning = "HsW3", orbitblade = "HsW4",
-        monsoon = "HsW5", frontslash = "HsW6", frostshard = "HsW7",
-        frostnova = "HsW8", blizzard = "HsW9", meteor = "HsWA", thunderorb = "HsWB", returnblade = "HsWC",
-        plaguedart = "HsWD", plaguetrail = "HsWE", corrosion = "HsWF", plaguepool = "HsWG",
-        deathcoil = "HsWH", soulchain = "HsWI", wraithguard = "HsWJ", shadowscythe = "HsWK",
-        plaguejar = "HsWL", catalyst = "HsWM", boilingflask = "HsWN", acidvials = "HsWO",
-        banshee = "HsWP", shadowarcher = "HsWQ", plaguezombie = "HsWR", experiment = "HsWS"}
-    local trinkets = {power = "HsT1", haste = "HsT2", reach = "HsT3", velocity = "HsT4", magnitude = "HsT5", longevity = "HsT6", multicast = "HsT7",
-        vitality = "HsT8", renewal = "HsT9", stride = "HsTA", armor = "HsTB"}
+    -- Indicator rawcodes come from SurvivorConfig (weapons[id].rawcode, trinketRawcodes).
+    local weapons, trinkets = {}, SurvivorConfig.trinketRawcodes
+    for id, weapon in pairs(SurvivorConfig.weapons) do weapons[id] = weapon.rawcode end
     local weaponPositions = {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {2, 1}, {3, 1}}
     local hero, build
     local ownsStatDetails = false
@@ -42,7 +36,7 @@ do
         return talentGranted - talentSpent, talentEarned, talentEarned - talentGranted
     end
     local function DeliverTalentPoint()
-        for item in pairs(pointItems) do if not SurvivorConfig.ItemExists(item) then pointItems[item] = nil end end
+        for item in pairs(pointItems) do if not SurvivorUtil.ItemExists(item) then pointItems[item] = nil end end
         if deliveringTalent or talentGranted >= talentEarned or refreshSerial < talentRetry or IsUnitPaused(hero) then return end
         talentRetry = refreshSerial + 20 -- Retry rejected pickups without a new timer or a busy item loop.
         local item = CreateItem(FourCC(SurvivorConfig.talents.pointItem), GetUnitX(hero), GetUnitY(hero))
@@ -56,7 +50,7 @@ do
         if hero ~= owner then return end
         if accepted then
             talentGranted = talentGranted + 1
-            if not SurvivorConfig.ItemExists(item) then pointItems[item] = nil end
+            if not SurvivorUtil.ItemExists(item) then pointItems[item] = nil end
         else pointItems[item] = nil; RemoveItem(item) end
     end
     local function ReconcileTalents()
@@ -80,7 +74,7 @@ do
         return changed
     end
     function SurvivorNativeLoadout.GrantStageTalent(index)
-        assert(SurvivorConfig.UnitExists(hero), "Talent points need a live loadout")
+        assert(SurvivorUtil.UnitExists(hero), "Talent points need a live loadout")
         if index <= talentEarned then return false end
         assert(index == talentEarned + 1 and index <= #SurvivorConfig.talents.tiers, "Invalid talent point stage")
         talentEarned, talentRetry = index, 0
@@ -132,10 +126,10 @@ do
     end
     local function EnsureTrinket(id, main)
         local item = items[id]
-        if SurvivorConfig.ItemExists(item) and main.positions[item] ~= nil then return item, false end
+        if SurvivorUtil.ItemExists(item) and main.positions[item] ~= nil then return item, false end
         -- The native inventory can reject additions while the hero is paused for
         -- a level-up choice. Keep the learned level and create its indicator later.
-        if IsUnitPaused(hero) or not SurvivorConfig.UnitLive(hero) then return nil, false end
+        if IsUnitPaused(hero) or not SurvivorUtil.UnitLive(hero) then return nil, false end
         -- A native UI move into the expanded bag must not hide a learned trinket
         -- forever or alter its bonuses. Restore only our indicator, never other gear.
         local empty
@@ -197,14 +191,14 @@ do
     end
     -- Combat calls this on every pause transition, before units resume.
     function SurvivorNativeLoadout.RefreshStatDisplays()
-        if not SurvivorConfig.UnitExists(hero) then return end
+        if not SurvivorUtil.UnitExists(hero) then return end
         -- Combat sets this for every pause reason (see SurvivorCombat.SetPaused); the
         -- regeneration flag is not used here because interactive panels keep it false.
         local paused = build.stats.combatPaused == true
         for _, display in ipairs(statDisplays) do RefreshStatDisplay(display, paused) end
     end
     function SurvivorNativeLoadout.Refresh()
-        if not SurvivorConfig.UnitExists(hero) then return end
+        if not SurvivorUtil.UnitExists(hero) then return end
         SurvivorMetrics.Count("loadout.refreshes")
         refreshSerial = refreshSerial + 1
         DeliverTalentPoint()
@@ -323,12 +317,12 @@ do
         local errors = {}
         local function Attempt(label, action) RunSession.Attempt(errors, label, action) end
         for item in pairs(oldPoints) do
-            Attempt("talent point item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
+            Attempt("talent point item", function() SurvivorUtil.RemoveItemIfPresent(item) end)
         end
         for _, item in pairs(oldItems) do
-            Attempt("indicator item", function() SurvivorConfig.RemoveItemIfPresent(item) end)
+            Attempt("indicator item", function() SurvivorUtil.RemoveItemIfPresent(item) end)
         end
-        if SurvivorConfig.UnitExists(oldHero) then
+        if SurvivorUtil.UnitExists(oldHero) then
             local talents = SurvivorConfig.talents
             local function Remove(code) Attempt("ability " .. code, function() UnitRemoveAbility(oldHero, FourCC(code)) end) end
             if ownedController then Remove(talents.controller) end

@@ -4,10 +4,10 @@
 SurvivorCombatHero = {}
 do
     local run = nil
-    local Alive = SurvivorConfig.UnitLive
-    local Height = SurvivorConfig.TerrainZ
+    local Alive = SurvivorUtil.UnitLive
+    local Height = SurvivorUtil.TerrainZ
     local CleanupCall = RunSession.Attempt
-    local Enemy, UnitTimeStopped, CreateObject, ZoneLifetime, HeroYaw, MeleeGuard
+    local Enemy, UnitTimeStopped, CreateObject, ZoneLifetime, HeroYaw, MeleeGuard, Outside
     -- Per hero and stage; the playing hero speaks its own escape line.
     local escapeLines = {
         anya = {"위험했네… 여기서 벗어나자.", "불길이 코앞이었어. 빠지자.", "냉기가 스며들기 전에 물러나자.",
@@ -18,6 +18,7 @@ do
     function SurvivorCombatHero.Bind(combat)
         Enemy, UnitTimeStopped = combat.Enemy, combat.UnitTimeStopped
         CreateObject, ZoneLifetime, HeroYaw, MeleeGuard = combat.CreateObject, combat.ZoneLifetime, combat.HeroYaw, combat.MeleeGuard
+        Outside = combat.Outside -- Presentation and expedition state (SurvivorCombat's outside port).
     end
     -- The run table owned by SurvivorCombat (hero, units, bounds, escape/ward/damage log fields).
     function SurvivorCombatHero.Attach(state) run = state end
@@ -63,7 +64,7 @@ do
         run.escapeEffect, run.escapeOwnsInvulnerability = nil, false
         run.escapeUntil = 0
         local errors = {}
-        if release and SurvivorConfig.UnitExists(run.hero) then
+        if release and SurvivorUtil.UnitExists(run.hero) then
             CleanupCall(errors, "escape invulnerability", function() SetUnitInvulnerable(run.hero, false) end)
         end
         if effect then CleanupCall(errors, "escape effect", function() DestroyEffect(effect) end) end
@@ -71,7 +72,7 @@ do
     end
     local function EscapeLanding(source)
         local x, y = GetUnitX(run.hero), GetUnitY(run.hero)
-        local hasSource = source ~= run.hero and SurvivorConfig.UnitExists(source)
+        local hasSource = source ~= run.hero and SurvivorUtil.UnitExists(source)
         local angle = hasSource and Atan2(y - GetUnitY(source), x - GetUnitX(source))
             or HeroYaw()
         local enemies = {}
@@ -141,14 +142,14 @@ do
         run.stageEscapeUses[run.stage] = (run.stageEscapeUses[run.stage] or 0) + 1
         entry.escaped, entry.damage = true, 0
         -- The escape is already applied; its cue, notice and line are presentation only.
-        SurvivorConfig.Present("escape cue", SurvivorUI.Cue, "escape")
-        SurvivorConfig.Present("escape alert", SurvivorUI.Alert, 6,
+        SurvivorUtil.Present("escape cue", Outside.Cue, "escape")
+        SurvivorUtil.Present("escape alert", Outside.Alert, 6,
             "|cffbbaaff그림자 탈출 · " .. (moved and "순간 이동" or "제자리 보호")
             .. string.format("|r\n생명력 최소 %d%% · %g초 무적\n다음 스테이지에서 재충전",
                 math.floor(SurvivorConfig.escapeLifeFloor * 100 + 0.5), SurvivorConfig.escapeDuration), 50, "escape")
-        local heroId, profile = SurvivorConfig.HeroOf(hero)
+        local heroId, profile = SurvivorUtil.HeroOf(hero)
         local lines = escapeLines[heroId] or escapeLines.anya
-        SurvivorConfig.Present("escape line", SurvivorUI.Say, profile.name, lines[run.stage] or lines[1])
+        SurvivorUtil.Present("escape line", Outside.Say, profile.name, lines[run.stage] or lines[1])
     end
     -- The hero's damage event: post-mitigation, before HP subtraction; catches native melee too.
     function SurvivorCombatHero.OnDamaged(damage)
@@ -156,13 +157,13 @@ do
         local hero, source, now = run.hero, GetEventDamageSource(), RunSession.GetElapsed()
         if not RunSession.IsRunning() or now < run.escapeUntil then BlzSetEventDamage(0); return end
         if UnitTimeStopped(source) then BlzSetEventDamage(0); return end
-        if SurvivorExpedition.RiskActive() and Enemy(source) then damage = damage * SurvivorConfig.riskChallenge.enemyDamage end
+        if Outside.RiskActive() and Enemy(source) then damage = damage * SurvivorConfig.riskChallenge.enemyDamage end
         if MeleeGuard(now) then damage = damage * 0.85 end
         if run.ward > 0 and now < run.wardUntil then
             local absorbed = math.min(run.ward, damage)
             run.ward, damage = run.ward - absorbed, damage - absorbed
         end
-        local sourceName = source ~= hero and SurvivorConfig.UnitExists(source) and GetUnitName(source) or "환경"
+        local sourceName = source ~= hero and SurvivorUtil.UnitExists(source) and GetUnitName(source) or "환경"
         local context = run.damageContext
         local entry = {time = now, damage = math.min(damage, GetWidgetLife(hero)),
             name = sourceName .. " / " .. (context and context.name or "일반 공격"),
@@ -172,8 +173,8 @@ do
         if damage > 0 then
             if #run.recentDamage == 5 then table.remove(run.recentDamage, 1) end
             run.recentDamage[#run.recentDamage + 1] = entry
-            if not entry.escaped and SurvivorUI.HitFlash then
-                SurvivorConfig.Present("hit vignette", SurvivorUI.HitFlash, damage / BlzGetUnitMaxHP(hero))
+            if not entry.escaped then
+                SurvivorUtil.Present("hit vignette", Outside.HitFlash, damage / BlzGetUnitMaxHP(hero))
             end
         end
     end

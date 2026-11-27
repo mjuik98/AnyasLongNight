@@ -17,7 +17,7 @@ do
     local expeditionView
     -- Local rendering only: the native panels are observed on the local client.
     function SurvivorLootUI.IsExpanded() return expanded and inventoryOpen end
-    local ValidFrame = SurvivorConfig.ValidFrame
+    local ValidFrame = SurvivorUtil.ValidFrame
     local function Set(frame, property, value)
         local cached = rendered[frame]
         if not cached then cached = {}; rendered[frame] = cached end
@@ -46,7 +46,7 @@ do
         BlzFrameSetPoint(frame, FRAMEPOINT_TOPLEFT, parent, FRAMEPOINT_TOPLEFT, x, y)
         BlzFrameSetText(frame, text)
         -- Map lifetime: Init runs only once.
-        SurvivorConfig.BindFrameEvent(triggers, frame, FRAMEEVENT_CONTROL_CLICK, function()
+        SurvivorUtil.BindFrameEvent(triggers, frame, FRAMEEVENT_CONTROL_CLICK, function()
             BlzFrameSetEnable(frame, false); BlzFrameSetEnable(frame, true)
             if rendered[frame] then rendered[frame].enabled = nil end
             local state = RunSession.GetState()

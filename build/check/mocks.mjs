@@ -187,24 +187,91 @@ function Up(fn,key,seen)
 end
 function Local(fn,key) local v,f=Up(fn,key); assert(f,"Missing upvalue "..key); return v end
 function SetLocal(fn,key,v) local _,f,i=Up(fn,key); assert(f,"Missing upvalue "..key); debug.setupvalue(f,i,v) end
+-- Game-module internals by logical module and local name. Suites never name the public
+-- function whose closure happens to hold a local: moving a local or function to another
+-- file changes only this table. A module may span files whose bound copies of a primitive
+-- (the weapon module's Hit, its attached run) hold the same value: reads accept them, a
+-- write needs exactly one cell. Vendor (ALICE) internals keep using Local/SetLocal.
+local internalFiles = {
+    lifecycle = {"AnyasLongNight", "SurvivorSetup"}, progression = {"SurvivorProgression"},
+    debug = {"SurvivorDebugCommands"}, combat = {"SurvivorCombat", "SurvivorCombatWeapons"},
+    sets = {"SurvivorCombatSets"}, status = {"SurvivorCombatStatus"}, hazards = {"SurvivorCombatHazards"},
+    ui = {"SurvivorUI"}, narrative = {"SurvivorNarrativeUI"}, speech = {"SurvivorSpeech"},
+    screen = {"SurvivorScreenEffects"}, board = {"SurvivorDamageBoard"}, hud = {"SurvivorNativeHUD"},
+    loot = {"SurvivorLootUI"}, loadout = {"SurvivorNativeLoadout"}, inventory = {"SurvivorInventoryPause"},
+    metrics = {"SurvivorMetrics"}, augments = {"SurvivorAugments"}, equipment = {"SurvivorEquipment"},
+    story = {"SurvivorStory"}, stage = {"SurvivorStage"}, expedition = {"SurvivorExpedition"},
+}
+-- Every function defined in the module's files that globals reach (tables up to three
+-- levels deep, closures through their upvalues); cached per module and rebuilt once on a miss.
+local internalFunctions = {}
+local function OwnedFunctions(module)
+    local files=assert(internalFiles[module],"Unknown internal module "..tostring(module))
+    local function Owned(fn)
+        local source=debug.getinfo(fn,"S").source
+        for _,file in ipairs(files) do if source:sub(-#file-5)=="/"..file..".lua" then return true end end
+        return false
+    end
+    local seen,queue={}, {}
+    local function Visit(value,depth)
+        if seen[value] then return end
+        if type(value)=="function" then seen[value]=true; if Owned(value) then queue[#queue+1]=value end
+        elseif type(value)=="table" and depth<3 then seen[value]=true; for _,child in pairs(value) do Visit(child,depth+1) end end
+    end
+    for name,value in pairs(_G) do if name~="_G" and name~="package" then Visit(value,0) end end
+    local head=1
+    while head<=#queue do
+        local fn=queue[head]; head=head+1
+        for i=1,255 do
+            local name,value=debug.getupvalue(fn,i); if not name then break end
+            if type(value)=="function" and not seen[value] then seen[value]=true; if Owned(value) then queue[#queue+1]=value end end
+        end
+    end
+    internalFunctions[module]=queue
+    return queue
+end
+-- Every distinct upvalue cell named key among those functions, as {function, index, value}.
+local function InternalCells(module,key,rebuilt)
+    local found,cells={}, {}
+    for _,fn in ipairs(internalFunctions[module] or OwnedFunctions(module)) do
+        for i=1,255 do
+            local name,value=debug.getupvalue(fn,i); if not name then break end
+            local id=name==key and debug.upvalueid(fn,i)
+            if id and not found[id] then found[id]=true; cells[#cells+1]={fn,i,value} end
+        end
+    end
+    if #cells==0 and not rebuilt then OwnedFunctions(module); return InternalCells(module,key,true) end
+    assert(#cells>0,"Missing internal "..module.."."..key)
+    return cells
+end
+function Internal(module,key)
+    local cells=InternalCells(module,key)
+    for i=2,#cells do assert(rawequal(cells[i][3],cells[1][3]),"Ambiguous internal "..module.."."..key) end
+    return cells[1][3]
+end
+function SetInternal(module,key,value)
+    local cells=InternalCells(module,key)
+    assert(#cells==1,"Ambiguous internal "..module.."."..key)
+    debug.setupvalue(cells[1][1],cells[1][2],value)
+end
 -- The current combat run table (SurvivorCombat's NewRun()): read or set its fields
 -- instead of reaching for individual module locals. Cleanup replaces the table, so
 -- call this again after a cleanup instead of keeping the old reference.
-function CombatRun() return Local(SurvivorCombat.Init,"run") end
+function CombatRun() return Internal("combat","run") end
 -- The lifecycle's current run record (AnyasLongNight's NewRun()); Start replaces it.
-function LifecycleRun() return Local(AnyasLongNight.NextStage,"run") end
+function LifecycleRun() return Internal("lifecycle","run") end
 -- Equipment's run (hero, trigger, owned item records, tooltip state); Init and Cleanup replace it.
-function EquipmentRun() return Local(SurvivorEquipment.Init,"run") end
+function EquipmentRun() return Internal("equipment","run") end
 -- The story record (clues, transcript, stage) that Reset replaces, and the open scene
 -- (portraits, actors, camera, motion) that every Cleanup replaces.
-function StoryRun() return Local(SurvivorStory.Reset,"run") end
-function StoryScene() return Local(SurvivorStory.Cleanup,"scene") end
+function StoryRun() return Internal("story","run") end
+function StoryScene() return Internal("story","scene") end
 -- The stage arena of this run (rect, bounds, ambience owners) that Cleanup replaces, and
 -- the applied stage's view (scenery, weather, painted terrain, pathing) that each Apply replaces.
-function StageRun() return Local(SurvivorStage.Cleanup,"run") end
-function StageView() return Local(SurvivorStage.Apply,"view") end
+function StageRun() return Internal("stage","run") end
+function StageView() return Internal("stage","view") end
 -- Expedition's run (journal records, current stage markers); EndStage and Reset replace it.
-function ExpeditionRun() return Local(SurvivorExpedition.Reset,"run") end
+function ExpeditionRun() return Internal("expedition","run") end
 function NewCombat(weapon)
     world,actors,hits={}, {}, {}; state="RUNNING"; now=0
     local hero=CreateUnit(0,"hero",0,0,0)

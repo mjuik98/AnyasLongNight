@@ -1,5 +1,5 @@
 // Run lifecycle: stage transitions, enemies, pauses, teardown, failures and ALICE scheduling.
-import {augments, combat, config, equipment, metrics, suite} from './harness.mjs';
+import {augments, combat, config, equipment, metrics, suite, lifecycle} from './harness.mjs';
 import {gearMocks, mocks} from './mocks.mjs';
 suite('all five boss transitions wait for cleanup and explicit story continuation', mocks + String.raw`
 function ALICE_CallPeriodic(fn) periodic=fn;return fn end
@@ -17,14 +17,14 @@ SurvivorStory={ShowInterlude=function(index,hero,callback)
 end,ShowEnding=function(hero,callback)
     assert(not SurvivorCombat.IsClearing());story=callback;storyStage=5
 end}
-`, [config, metrics, augments, combat, 'src/20_system/RunSession.lua', 'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-local step=Local(AnyasLongNight.BeginRun,"Step")
+`, [config, metrics, augments, combat, 'src/20_system/RunSession.lua', lifecycle], String.raw`
+local step=Internal("lifecycle","Step")
 for stage=1,5 do
     local hero,build,units=NewCombat("orbitblade")
     story,storyStage,rewards,restCalls,inventoryStops=nil,nil,0,0,0
-    LifecycleRun().stage=stage;LifecycleRun().stageTransition=false
+    LifecycleRun().stage=stage;LifecycleRun().transition=nil
     LifecycleRun().hero=hero;LifecycleRun().build=build;LifecycleRun().stats=build.stats
-    SetLocal(step,"selectedDifficulty","normal");LifecycleRun().rerollsRemaining=0
+    SetInternal("lifecycle","selectedDifficulty","normal");LifecycleRun().rerollsRemaining=0
     CombatRun().bossDefeated=true
     for i=1,80 do EnemyAt(units,i,300,false) end
     local finished=false
@@ -38,9 +38,9 @@ for stage=1,5 do
     assert(story and storyStage==stage and RunSession.GetElapsed()==elapsed)
     assert(not finished and rewards==0,"Story continued without player input")
     assert(not AnyasLongNight.NextStage(),"Next stage bypassed story")
-    local serial=Local(step,"runSerial");SetLocal(step,"runSerial",serial+1)
+    local ticket=LifecycleRun().transitionTicket;LifecycleRun().transitionTicket={}
     story();assert(not finished and rewards==0,"A story callback from an older run must not act on the current run")
-    SetLocal(step,"runSerial",serial)
+    LifecycleRun().transitionTicket=ticket
     story()
     if stage<5 then
         assert(rewards==1 and restCalls==1 and inventoryStops==0 and not finished)
@@ -60,7 +60,7 @@ print=function()end
 SurvivorInventoryPause.Cleanup=function() inventoryStops=inventoryStops+1;error('injected observer failure') end
 local hero,build,units=NewCombat("orbitblade")
 story,storyStage,rewards,restCalls,inventoryStops=nil,nil,0,0,0
-LifecycleRun().stage=5;LifecycleRun().stageTransition=false
+LifecycleRun().stage=5;LifecycleRun().transition=nil
 LifecycleRun().hero=hero;LifecycleRun().build=build;LifecycleRun().stats=build.stats
 CombatRun().bossDefeated=true
 local reason
@@ -419,7 +419,7 @@ assert(#speech==2 and speech[1]:find('지원 요청') and speech[2]==SurvivorExp
 assert(SurvivorExpedition.GetSceneReply(4) and SurvivorExpedition.GetSceneReply(4)~=SurvivorExpedition.GetReply(4))
 SurvivorExpedition.Reset()
 -- The playing hero speaks the subtitles; Putress has a full line set of its own.
-local chapters=Local(SurvivorExpedition.BeginStage,'chapters')
+local chapters=Internal('expedition','chapters')
 for index,chapter in ipairs(chapters)do
     local own=assert(chapter.putress,'Putress lines for chapter '..index)
     assert(#own.beats==#chapter.beats,'Putress beats match chapter '..index)
@@ -448,7 +448,7 @@ SurvivorExpedition.Reset()
 SurvivorUI.Say=function(speaker,text)speech[#speech+1]=text end
 for index=1,5 do
     speech={};Begin(index,7000+index*1000);hero.x,hero.y=0,0
-    local opens=Local(SurvivorExpedition.RiskOffer,'RiskWindow')()
+    local opens=Internal('expedition','RiskWindow')()
     now=7000+index*1000+opens;SurvivorExpedition.Step(.02,now)
     risk=ExpeditionRun().risk;hero.x,hero.y=risk.x,risk.y
     assert(SurvivorExpedition.AcceptRisk() and speech[#speech] and speech[#speech]~='','Every stage has its own risk line')
@@ -531,10 +531,10 @@ SurvivorCombat={DamageReport=function()Mark('report');return ''end,Cleanup=funct
 SurvivorStage={Cleanup=function()Mark('stage')end}
 SurvivorExpedition={EndStage=function()Mark('expedition')end,Reset=function()Mark('expeditionReset')end}
 messages={};print=function(message)messages[#messages+1]=tostring(message)end
-`, [config,metrics,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-local finish=Local(AnyasLongNight.BeginRun,'Finish')
-SetLocal(finish,'RefreshDamageBoard',function()Mark('board')end)
-SetLocal(finish,'ResultDetails',function()Mark('details');return {}end)
+`, [config,metrics,'src/20_system/RunSession.lua',lifecycle], String.raw`
+local finish=Internal('lifecycle','Finish')
+SetInternal('lifecycle','RefreshDamageBoard',function()Mark('board')end)
+SetInternal('lifecycle','ResultDetails',function()Mark('details');return {}end)
 for _,label in ipairs({'expedition','board','details','report','panel','effects','story','inventory','camera','loadout','equipment','combat','stage','result'})do
     attempts,resumes,shownReason,failAt,messages={},0,nil,label,{}
     LifecycleRun().hero=CreateUnit(0,'hero',0,0,0);LifecycleRun().build={}
@@ -555,7 +555,7 @@ for _,label in ipairs({'expedition','board','details','report','panel','effects'
 end
 -- A restart attempts the same subsystem list (plus per-run resets), then prints
 -- each cleanup failure without blocking the new run.
-local start=Local(AnyasLongNight.BeginRun,'Start')
+local start=Internal('lifecycle','Start')
 local restartSteps={'panel','effects','storyReset','expeditionReset','inventory','camera','loadout','equipment','combat','stage'}
 for _,label in ipairs(restartSteps)do
     attempts,failAt,messages={},label,{}
@@ -568,8 +568,8 @@ for _,label in ipairs(restartSteps)do
     assert(levelTrigger.destroyed,'Restart releases the level trigger')
 end
 -- A search reward can come from a kill inside a weapon hit loop: its board refresh is presentation.
-local reward=Local(AnyasLongNight.NextStage,'ExpeditionReward')
-SetLocal(reward,'RefreshDamageBoard',function()error('injected board failure')end)
+local reward=Internal('lifecycle','ExpeditionReward')
+SetInternal('lifecycle','RefreshDamageBoard',function()error('injected board failure')end)
 messages={};assert(pcall(reward,'search'),'A failed board refresh never fails the kill reward')
 assert(table.concat(messages,'\n'):find('damage board') and table.concat(messages,'\n'):find('injected board failure'))
 `);
@@ -594,12 +594,12 @@ SurvivorNativeLoadout={Cleanup=function()loadoutCleaned=true end}
 SurvivorEquipment={Cleanup=function()equipmentCleaned=true end}
 SurvivorStage={Init=function()end,Apply=function()end,Cleanup=function()stageCleaned=true end}
 SurvivorExpedition={Reset=function()end,EndStage=function()end}
-`, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-SetLocal(AnyasLongNight.BeginRun,'initialized',true)
-SetLocal(AnyasLongNight.BeginRun,'setupPhase','MENU')
-SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','normal')
-SetLocal(AnyasLongNight.BeginRun,'selectedWeapon','firebolt')
-SetLocal(AnyasLongNight.BeginRun,'selectedTrinket','power')
+`, [config,metrics,augments,combat,'src/20_system/RunSession.lua',lifecycle], String.raw`
+SetInternal('lifecycle','initialized',true)
+SetInternal('lifecycle','setupPhase','MENU')
+SetInternal('lifecycle','selectedDifficulty','normal')
+SetInternal('lifecycle','selectedWeapon','firebolt')
+SetInternal('lifecycle','selectedTrinket','power')
 local createGroup=CreateGroup
 CreateGroup=function()error('injected group initialization failure')end
 assert(not AnyasLongNight.BeginRun())
@@ -614,10 +614,10 @@ assert(world[#world].removed and CombatRun().hero==nil and CombatRun().queryGrou
 for _,trigger in ipairs(triggers)do assert(trigger.destroyed)end
 assert(AnyasLongNight.CanRetrySame() and resultReason=='error')
 -- Combat owns the hero before its own validation can fail.
-failName=false;SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','injected-missing')
+failName=false;SetInternal('lifecycle','selectedDifficulty','injected-missing')
 assert(not AnyasLongNight.RetrySame())
 assert(world[#world].removed and CombatRun().hero==nil,'A combat validation failure still removes the created hero')
-SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','normal')
+SetInternal('lifecycle','selectedDifficulty','normal')
 `);
 
 suite('hero death defers run teardown to the next step, a post-start or startup-pause failure shows one detailed result and a pending teardown blocks stage actions', mocks + String.raw`
@@ -659,12 +659,12 @@ SurvivorStage={Init=noop,Apply=noop,Cleanup=noop,LineClear=function()return true
 SurvivorExpedition={Reset=noop,EndStage=noop,BeginStage=noop,SetPaused=noop,Step=noop,OnKill=noop,
     RiskActive=function()return false end}
 messages={};print=function(message)messages[#messages+1]=tostring(message)end
-`, [config,metrics,augments,combat,'src/20_system/RunSession.lua','src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-SetLocal(AnyasLongNight.BeginRun,'initialized',true)
-SetLocal(AnyasLongNight.BeginRun,'setupPhase','MENU')
-SetLocal(AnyasLongNight.BeginRun,'selectedDifficulty','normal')
-SetLocal(AnyasLongNight.BeginRun,'selectedWeapon','firebolt')
-SetLocal(AnyasLongNight.BeginRun,'selectedTrinket','power')
+`, [config,metrics,augments,combat,'src/20_system/RunSession.lua',lifecycle], String.raw`
+SetInternal('lifecycle','initialized',true)
+SetInternal('lifecycle','setupPhase','MENU')
+SetInternal('lifecycle','selectedDifficulty','normal')
+SetInternal('lifecycle','selectedWeapon','firebolt')
+SetInternal('lifecycle','selectedTrinket','power')
 assert(AnyasLongNight.BeginRun() and RunSession.GetState()=='STAGE_CLEAR')
 assert(RunSession.EndStageClear() and RunSession.IsRunning())
 local hero=CombatRun().hero
@@ -708,7 +708,7 @@ assert(CombatRun().hero==nil and AnyasLongNight.CanRetrySame(),'The failed start
 -- A teardown requested while paused keeps the STAGE_CLEAR name until the watchdog
 -- consumes it; stage actions must not start a transition the teardown then discards.
 assert(AnyasLongNight.RetrySame() and RunSession.GetState()=='STAGE_CLEAR' and intros==1)
-LifecycleRun().stageTransition=false
+LifecycleRun().transition="result" -- As if the boss reward was claimed: only the pending teardown blocks it.
 local applied=0;SurvivorStage.Apply=function()applied=applied+1 end
 RunSession.RequestFail('injected paused failure')
 assert(RunSession.GetState()=='STAGE_CLEAR' and RunSession.IsPending())
@@ -731,7 +731,7 @@ local function Kill(u)
 end
 local function Burst(units,build)
     build.stats.sets.gravewarden=true
-    local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.FireMissile,'Hit')
+    local apply=SurvivorCombatStatus.Apply;local hit=Internal('combat','Hit')
     local near=EnemyAt(units,100,100,false);near.life=100000
     local cursed=EnemyAt(units,100,0,false);cursed.life=100000
     apply(cursed,'plaguedart',{curse=cfg.curseMax},1);hit(cursed,40,'plaguedart',false,false,1,{})
@@ -745,12 +745,12 @@ SurvivorCombat.Cleanup()
 _,build,units=NewCombat('plaguedart');now=5
 assert(Burst(units,build),'A new run restarts at time zero and must not inherit the previous run cooldown')
 now=10
-local procVisual=Local(SurvivorCombatSets.StatusDeath,'ProcVisual')
-SetLocal(SurvivorCombatSets.StatusDeath,'ProcVisual',function()error('injected proc failure')end)
+local procVisual=Internal('sets','ProcVisual')
+SetInternal('sets','ProcVisual',function()error('injected proc failure')end)
 Burst(units,build)
 assert(not pcall(FlushRunSession),'The injected failure surfaces once the deferred request is consumed')
-assert(Local(SurvivorCombatSets.StatusDeath,'inStatusProc')==false,'A failed proc must release the reentry guard')
-SetLocal(SurvivorCombatSets.StatusDeath,'ProcVisual',procVisual)
+assert(Internal('sets','inStatusProc')==false,'A failed proc must release the reentry guard')
+SetInternal('sets','ProcVisual',procVisual)
 now=20
 assert(Burst(units,build),'Status-death set effects keep working after a failed proc')
 SurvivorCombat.Cleanup()
@@ -839,7 +839,7 @@ local _,_,units=NewCombat('plaguedart')
 assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
     finish=function(reason)finished=reason;SurvivorCombat.Cleanup()end}))
 CombatRun().onKill=function()killed=killed+1 end
-local hit=Local(SurvivorCombat.FireMissile,'Hit')
+local hit=Internal('combat','Hit')
 local enemy=EnemyAt(units,100,0,false);enemy.life=10
 onDamage=function(u)
     if u.life>0 then return end
@@ -911,7 +911,7 @@ local _,_,units=NewCombat('plaguedart')
 assert(RunSession.Start(function()end,{pause=function()end,resume=function()end,
     finish=function(reason)finished=reason;SurvivorCombat.Cleanup()end}))
 CombatRun().onKill=function()error('injected kill reward failure')end
-local hit=Local(SurvivorCombat.FireMissile,'Hit')
+local hit=Internal('combat','Hit')
 local enemy=EnemyAt(units,100,0,false);enemy.life=10
 onDamage=function(u)
     if u.life>0 then return end
@@ -953,21 +953,21 @@ local _,build,units=NewCombat('plaguedart')
 local kills=0
 CombatRun().onKill=function()kills=kills+1 end
 build.stats.sets.gravewarden=true
-local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.FireMissile,'Hit')
+local apply=SurvivorCombatStatus.Apply;local hit=Internal('combat','Hit')
 local near=EnemyAt(units,100,100,false);near.life=100000
 local cursed=EnemyAt(units,100,0,false);cursed.life=100000
 now=10 -- Past the initial soul-burst cooldown; the curse is applied at this time.
 apply(cursed,'plaguedart',{curse=SurvivorConfig.status.curseMax},1);hit(cursed,40,'plaguedart',false,false,1,{})
-local procVisual=Local(SurvivorCombatSets.StatusDeath,'ProcVisual')
-SetLocal(SurvivorCombatSets.StatusDeath,'ProcVisual',function()error('injected proc failure')end)
+local procVisual=Internal('sets','ProcVisual')
+SetInternal('sets','ProcVisual',function()error('injected proc failure')end)
 cursed.life=0;GetTriggerUnit=function()return cursed end
 for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
-SetLocal(SurvivorCombatSets.StatusDeath,'ProcVisual',procVisual)
+SetInternal('sets','ProcVisual',procVisual)
 assert(kills==1,'A failed death proc must not cancel the kill reward')
 assert(#failures==0 and not RunSession.IsRunning(),'A death-event failure is deferred, never raised inside the hit loop')
 FlushRunSession()
 assert(#failures==1 and failures[1]:find('injected proc failure'),'The proc failure reaches RunSession.Fail')
-assert(Local(SurvivorCombatSets.StatusDeath,'inStatusProc')==false,'The status-death guard is released')
+assert(Internal('sets','inStatusProc')==false,'The status-death guard is released')
 -- Hero damage: Debug.try would only print; the run owner must hear about it.
 local hero=CombatRun().hero
 local risk=SurvivorExpedition.RiskActive
@@ -1169,7 +1169,7 @@ assert(type(observerBefore)=='function' and type(observerAfter)=='function')
 SurvivorMetrics.Count('fixture.count',3)
 local started=SurvivorMetrics.Begin();SurvivorMetrics.End('fixture.time',started)
 local token=observerBefore(5);observerAfter(token,5,7)
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert(counters['fixture.count']==3 and counters['resume.cycles']==1 and counters['resume.removedPairs']==7)
 local steps=0
 assert(RunSession.Start(function()steps=steps+1 end,{pause=function()end,resume=function()end,finish=function()end}))
@@ -1205,7 +1205,7 @@ local actor={firstPair={}};actor.lastPair={actor=actor};backlog[#backlog+1]=acto
 SurvivorMetrics.Enable(true);ALICE_Halt(false);ALICE_Resume()
 assert(master.running and master.callback==main)
 main()
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert(released==1 and destroyed==1 and #backlog==0)
 assert(counters['resume.cycles']==1 and counters['resume.backlogActors']==1)
 assert(counters['resume.removedActors']==1 and counters['resume.removedPairs']==1)
@@ -1266,8 +1266,8 @@ local function actor(host)
     a.isGlobal,a.isAnonymous=true,true;a.alreadyDestroyed=nil;a.references[host]=true;registry[host]=a;return a
 end
 local selfActor=actor();SetLocal(makePair,'SELF_INTERACTION_ACTOR',selfActor)
-local hero,build,units=NewCombat('firebolt');local create=Local(SurvivorCombat.FireMissile,'CreateObject')
-local lifetime=Local(SurvivorCombat.FireMissile,'ZoneLifetime');local originalCreate=ALICE_Create
+local hero,build,units=NewCombat('firebolt');local create=Internal('combat','CreateObject')
+local lifetime=Internal('combat','ZoneLifetime');local originalCreate=ALICE_Create
 local function effect(life)
     local e={identifier='hsSnow',x=0,y=0,z=0,life=life,isAnonymous=true,selfInteractions=lifetime}
     ALICE_Create=function()end;create(e,SurvivorConfig.slashModel,1);ALICE_Create=originalCreate
@@ -1371,7 +1371,7 @@ assert(replacement==doomed,'The actual vendor actor pool is reused before resume
 local replacementPair=createPair(live,replacement,normal)
 assert(replacementPair==normalPair,'The actual vendor pair pool is reused before resume')
 SurvivorMetrics.Enable(true);ALICE_Resume();main()
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert(counters['resume.backlogActors']==0 and counters['resume.removedPairs']==0 and counters['resume.removedActors']==0)
 assert(ALICE_Tick==tick+1 and master.running)
 assert(staleActorCalls==0 and liveCallbacks==1 and replacement.host==replacementHost and not replacementPair.destructionQueued
@@ -1379,7 +1379,7 @@ assert(staleActorCalls==0 and liveCallbacks==1 and replacement.host==replacement
 
 -- Drive the actual combat timer through real vendor Kill, DestroyPair and Release.
 local vendorCreate=ALICE_Create;ALICE_Create=function()end
-local hero,build,units=NewCombat('orbitblade');SurvivorCombat.CastBlades()
+local hero,build,units=NewCombat('orbitblade');SurvivorCombatWeapons.Cast("orbitblade")
 ALICE_Create=vendorCreate
 local objects=CombatRun().objects;local callbacksBefore=callbacks
 for object in pairs(objects)do
@@ -1403,7 +1403,7 @@ ALICE_Resume();main();assert(counters['resume.backlogActors']==0)
 SurvivorCombat.Cleanup()
 
 -- Cancellation leaves the vendor queue owned by ALICE; an old timer cannot touch a new run.
-hero,build,units=NewCombat('orbitblade');ALICE_Create=function()end;SurvivorCombat.CastBlades();ALICE_Create=vendorCreate
+hero,build,units=NewCombat('orbitblade');ALICE_Create=function()end;SurvivorCombatWeapons.Cast("orbitblade");ALICE_Create=vendorCreate
 for object in pairs(CombatRun().objects)do
     local registered=actor(object);for i=1,4 do createPair(registered,actor(),normal)end
 end
@@ -1763,7 +1763,7 @@ for _,entry in ipairs(SurvivorEquipment.Catalog())do
         assert(scope=='all' or entry.hero==nil or SurvivorConfig.weapons[scope].hero==entry.hero,'Gear bonuses target only their own hero or an explicit shared tag: '..entry.id)
     end
 end
-local roll=Local(SurvivorEquipment.OnKill,'RollIndex')
+local roll=Internal('equipment','RollIndex')
 local hero,build=NewGear('deathcoil',6)
 local seen={}
 for i=1,400 do
@@ -1793,7 +1793,7 @@ suite('putress set effects spread poison, burst cursed deaths and strengthen rea
 function AddLightningEx()return {}end
 `, [config, metrics, augments, combat], String.raw`
 local hero,build,units=NewCombat('plaguedart')
-local apply=SurvivorCombatStatus.Apply;local hit=Local(SurvivorCombat.FireMissile,'Hit')
+local apply=SurvivorCombatStatus.Apply;local hit=Internal('combat','Hit')
 local cfg=SurvivorConfig.status
 local function Kill(u)
     u.life=0;GetTriggerUnit=function()return u end
@@ -1888,7 +1888,7 @@ for _,definition in ipairs(definitions)do
     end
 end
 local hero,build=NewGear('banshee',12)
-local roll=Local(SurvivorEquipment.OnKill,'RollIndex');local weighted=Local(roll,'WeightedChoice')
+local roll=Internal('equipment','RollIndex');local weighted=Internal('equipment','WeightedChoice')
 local maxWeight,choice
 function GetRandomInt(a,b)maxWeight=b;return choice or a end
 assert(weighted({'Hu02','Ha01'})=='Hu02'and maxWeight==4,'A relevant tag item has three times the normal weight')
@@ -1954,7 +1954,7 @@ local hero,build=NewGear("firebolt",6)
 hero.equipped[1],hero.equipped[2]=CreateItem("He05",0,0),CreateItem("He05",0,0)
 SurvivorEquipment.Reconcile()
 assert(math.abs(build.stats.weapons.firebolt.damage-SurvivorConfig.weaponEngines.missile.base.damage*1.20)<0.0001)
-local sources,equipped=Local(SurvivorEquipment.Reconcile,"Sources")(Local(SurvivorEquipment.Reconcile,"ReadSlots")())
+local sources,equipped=Internal("equipment","Sources")(Internal("equipment","ReadSlots")())
 assert(sources["set:ember:2"]==nil,"Two identical rings must not activate a two-piece set")
 local text=SurvivorEquipment.Describe("He05",equipped)
 assert(text:find("1/9") and not text:find("기본 능력치는 각각 적용") and not text:find("동일 장비의 세트 개수는 1개"))

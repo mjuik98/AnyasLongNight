@@ -4,6 +4,7 @@
   "src/05_vendor/HandleType.lua",
   "src/05_vendor/ALICE.lua",
   "src/00_bootstrap/SurvivorConfig.lua",
+  "src/00_bootstrap/SurvivorUtil.lua",
   "src/20_system/SurvivorMetrics.lua",
   "src/20_system/RunSession.lua",
   "src/20_system/SurvivorAugments.lua",
@@ -17,6 +18,7 @@
   "src/30_gameplay/SurvivorCombatSupplies.lua",
   "src/30_gameplay/SurvivorCombatHero.lua",
   "src/30_gameplay/SurvivorCombatEnemies.lua",
+  "src/30_gameplay/SurvivorCombatWeapons.lua",
   "src/30_gameplay/SurvivorCombat.lua",
   "src/30_gameplay/SurvivorScreenEffects.lua",
   "src/30_gameplay/SurvivorNativeHUD.lua",
@@ -28,5 +30,8 @@
   "src/30_gameplay/SurvivorNativeLoadout.lua",
   "src/30_gameplay/SurvivorInventoryPause.lua",
   "src/30_gameplay/SurvivorSetupUI.lua",
+  "src/30_gameplay/SurvivorSetup.lua",
+  "src/30_gameplay/SurvivorProgression.lua",
+  "src/30_gameplay/SurvivorDebugCommands.lua",
   "src/00_bootstrap/AnyasLongNight.lua"
 ]

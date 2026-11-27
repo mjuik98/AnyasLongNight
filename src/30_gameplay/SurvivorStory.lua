@@ -91,7 +91,7 @@ do
     end
     local function GuardCamera(x, y, duration)
         StopCameraTransition()
-        if SurvivorConfig.IsLocalPlayer() and scene.cameraBounds then
+        if SurvivorUtil.IsLocalPlayer() and scene.cameraBounds then
             -- Read the in-flight target too, so rapid page clicks do not cut an unfinished pan.
             local previous = duration > 0 and {x = GetCameraTargetPositionX(), y = GetCameraTargetPositionY()} or nil
             -- Keep the old and new targets available for the existing smooth pan.
@@ -109,7 +109,7 @@ do
             if scene.cameraGuardTimer ~= timer then return end -- A new page/cleanup cancelled this shot.
             local ok, message = pcall(function()
                 StopCameraTransition()
-                if SurvivorConfig.IsLocalPlayer() and scene.cameraBounds then
+                if SurvivorUtil.IsLocalPlayer() and scene.cameraBounds then
                     SetBounds(x - 64, y - 64, x + 64, y + 64)
                 end
             end)
@@ -120,7 +120,7 @@ do
         -- Warcraft's 315 degrees looks down at 45 degrees; +45 looks up from underground.
         -- Aim slightly in front of the actors so they sit above the dialogue panel.
         GuardCamera(x, y - 220, duration)
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         if duration == 0 then SetCameraPosition(x, y - 220)
         else PanCameraToTimed(x, y - 220, duration) end
         SetCameraField(CAMERA_FIELD_TARGET_DISTANCE, distance, duration)
@@ -130,7 +130,7 @@ do
         SetCameraField(CAMERA_FIELD_ROLL, 0, duration)
     end
     local function CaptureCamera()
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         scene.camera = {}
         -- Native bounds already exclude camera margins; do not add those margins again.
         scene.cameraBounds = {minX = GetCameraBoundMinX(), minY = GetCameraBoundMinY(),
@@ -189,14 +189,14 @@ do
         local units, effects, states = old.portraitUnits, old.sceneEffects, old.actorStates
         local restoreCamera, restoreBounds, hadPortrait = old.camera, old.cameraBounds, old.portraitHero ~= nil
         if hadPortrait then Attempt(errors, "portrait selection", function()
-            if SurvivorConfig.IsLocalPlayer() then ClearSelection() end
+            if SurvivorUtil.IsLocalPlayer() then ClearSelection() end
         end) end
         if hero then Attempt(errors, "hero visibility", function()
-            if SurvivorConfig.UnitExists(hero) then ShowUnit(hero, true) end
+            if SurvivorUtil.UnitExists(hero) then ShowUnit(hero, true) end
         end) end
         if restoreHero then Attempt(errors, "hero selection", function()
-            if SurvivorConfig.UnitLive(restoreHero)
-                and SurvivorConfig.IsLocalPlayer() then
+            if SurvivorUtil.UnitLive(restoreHero)
+                and SurvivorUtil.IsLocalPlayer() then
                 ClearSelection()
                 SelectUnit(restoreHero, true)
             end
@@ -205,10 +205,10 @@ do
         -- SurvivorUI restores its HUD containers only after this cleanup returns.
         for _, unit in pairs(units) do
             Attempt(errors, "portrait visibility", function()
-                if SurvivorConfig.UnitExists(unit) then ShowUnit(unit, false) end
+                if SurvivorUtil.UnitExists(unit) then ShowUnit(unit, false) end
             end)
             Attempt(errors, "portrait unit", function()
-                if SurvivorConfig.UnitExists(unit) then RemoveUnit(unit) end
+                if SurvivorUtil.UnitExists(unit) then RemoveUnit(unit) end
             end)
         end
         for _, effect in ipairs(effects) do
@@ -222,7 +222,7 @@ do
             -- Each operation is independent: a failed hide must not prevent removal.
             Attempt(errors, "story effect", function() DestroyEffect(effect) end)
         end
-        if restoreCamera and SurvivorConfig.IsLocalPlayer() then
+        if restoreCamera and SurvivorUtil.IsLocalPlayer() then
             if restoreBounds then Attempt(errors, "camera bounds", function()
                 SetBounds(restoreBounds.minX, restoreBounds.minY, restoreBounds.maxX, restoreBounds.maxY)
             end) end
@@ -231,7 +231,7 @@ do
                 SetCameraField(field, value, 0)
             end) end
             Attempt(errors, "hero camera", function()
-                if SurvivorConfig.UnitLive(restoreHero) then
+                if SurvivorUtil.UnitLive(restoreHero) then
                     SetCameraPosition(GetUnitX(restoreHero), GetUnitY(restoreHero))
                     SetCameraTargetController(restoreHero, 0, 0, false)
                 end
@@ -241,7 +241,7 @@ do
     end
     local function BeginScene(hero)
         SurvivorStory.Cleanup()
-        assert(SurvivorConfig.UnitLive(hero), "Story scene needs the live gameplay hero")
+        assert(SurvivorUtil.UnitLive(hero), "Story scene needs the live gameplay hero")
         scene.hiddenHero = hero
         ShowUnit(hero, false)
         if SurvivorStage.SetDialogueAmbience then pcall(SurvivorStage.SetDialogueAmbience, true) end
@@ -251,13 +251,13 @@ do
             point and point.y or GetRectCenterY(bounds)
         scene.sceneX, scene.sceneY = x, y
         CaptureCamera()
-        if SurvivorConfig.IsLocalPlayer() then ResetToGameCamera(0) end
+        if SurvivorUtil.IsLocalPlayer() then ResetToGameCamera(0) end
         FrameScene(x, y, 1350, 0)
         return x, y
     end
     local function BeginPortraits(hero, createUnits)
         if not hero then return end -- Compatibility for old text-only briefing callers.
-        assert(SurvivorConfig.UnitLive(hero), "Story portraits need the live gameplay hero")
+        assert(SurvivorUtil.UnitLive(hero), "Story portraits need the live gameplay hero")
         scene.portraitHero = hero
         if not scene.camera then CaptureCamera() end
         -- Text-only compatibility callers retain their current shot.
@@ -298,10 +298,10 @@ do
         end
     end
     local function SelectSpeaker(speaker)
-        if not scene.portraitHero or not SurvivorConfig.IsLocalPlayer() then return end
+        if not scene.portraitHero or not SurvivorUtil.IsLocalPlayer() then return end
         ClearSelection()
         local unit = scene.portraitUnits[speaker]
-        if SurvivorConfig.UnitExists(unit) then SelectUnit(unit, true) end
+        if SurvivorUtil.UnitExists(unit) then SelectUnit(unit, true) end
         -- "수색 기록" and summary pages deliberately have a neutral, unselected portrait.
     end
     local function Actor(model, x, y, scale, colorPlayer)
@@ -320,7 +320,7 @@ do
     end
     local function Move(effect, x, y, height)
         local state = assert(scene.actorStates[effect], "Missing story actor state")
-        BlzSetSpecialEffectPosition(effect, x, y, SurvivorConfig.TerrainZ(x, y) + (height or 0))
+        BlzSetSpecialEffectPosition(effect, x, y, SurvivorUtil.TerrainZ(x, y) + (height or 0))
         state.x, state.y, state.height = x, y, height or 0
     end
     local function Yaw(effect, angle)
@@ -341,7 +341,7 @@ do
         inspect = [[Sound\Interface\PickUpItem.wav]],
     }
     local function Cue(kind)
-        if not SurvivorConfig.IsLocalPlayer() or type(CreateSound) ~= "function" then return end
+        if not SurvivorUtil.IsLocalPlayer() or type(CreateSound) ~= "function" then return end
         local sound = scene.sceneSoundCache[kind]
         local ok = pcall(function()
             if not sound then

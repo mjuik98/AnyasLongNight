@@ -7,7 +7,7 @@ do
     local hiddenFrames = {}
     local cinematicFrames, cinematicSaved, cinematicAncestors = {}, {}, {}
     local cinematicMode
-    local ValidNativeFrame = SurvivorConfig.ValidFrame
+    local ValidNativeFrame = SurvivorUtil.ValidFrame
     local function CacheHiddenFrame(frame)
         if ValidNativeFrame(frame) then hiddenFrames[#hiddenFrames + 1] = frame end
     end
@@ -18,7 +18,7 @@ do
         return ValidNativeFrame(child) and child or nil
     end
     function SurvivorNativeHUD.HideDecorations()
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         for _, frame in ipairs(hiddenFrames) do
             if ValidNativeFrame(frame) and BlzFrameIsVisible(frame) then BlzFrameSetVisible(frame, false) end
         end
@@ -41,7 +41,7 @@ do
     -- Restores every container a scene hid; a failed native stays saved for a later retry.
     function SurvivorNativeHUD.Restore()
         cinematicMode = nil
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         local pending, failures = cinematicSaved, {}
         cinematicSaved = {}
         for frame, state in pairs(pending) do
@@ -59,7 +59,7 @@ do
     function SurvivorNativeHUD.Apply(mode)
         AcquireCinematicFrames()
         cinematicMode = mode
-        if not SurvivorConfig.IsLocalPlayer() then return end
+        if not SurvivorUtil.IsLocalPlayer() then return end
         local hidden = {}
         for _, entry in ipairs(cinematicFrames) do
             if ValidNativeFrame(entry.frame) and (mode == "intro" or mode == "setup" or not entry.introOnly) then

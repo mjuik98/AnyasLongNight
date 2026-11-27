@@ -111,6 +111,9 @@ SurvivorConfig = {
     rerollsPerRun = 3, rerollCapacity = 5, rerollsPerStage = 1,
     excludesPerRun = 3,
     startingTrinkets = {"power", "haste", "velocity", "magnitude", "reach", "longevity", "multicast", "vitality", "renewal", "stride", "armor"},
+    -- Growth trinket -> native indicator item rawcode (SurvivorNativeLoadout and the build tools).
+    trinketRawcodes = {power = "HsT1", haste = "HsT2", reach = "HsT3", velocity = "HsT4", magnitude = "HsT5", longevity = "HsT6",
+        multicast = "HsT7", vitality = "HsT8", renewal = "HsT9", stride = "HsTA", armor = "HsTB"},
     startingWeapon = "firebolt",
     startingWeapons = {"firebolt", "chainlightning", "orbitblade", "frostshard"},
     -- Playable heroes. A locked hero would be listed in setup but could not start a run.
@@ -137,65 +140,66 @@ SurvivorConfig = {
     -- screenScale corrects the field-of-view screen-to-world conversion; two in-game shots at
     -- distances 500 and 420 both measured about 1.12 at 16:9.
     setupPreview = {distance = 420, pitch = 0, fov = 70, height = 45, lift = 1500, clip = 600, screenScale = 1.12},
-    -- Weapon id -> owning hero, firing engine and catalog traits. weaponOrder is the cast order.
+    -- Weapon id -> owning hero, native indicator rawcode (SurvivorNativeLoadout and the build
+    -- tools read it here), firing engine and catalog traits. weaponOrder is the cast order.
     weaponOrder = {"frostnova", "blizzard", "meteor", "thunderorb", "returnblade", "orbitblade",
         "firebolt", "flamefield", "chainlightning", "monsoon", "frontslash", "frostshard",
         "plaguepool", "plaguejar", "catalyst", "boilingflask", "shadowscythe", "wraithguard",
         "deathcoil", "plaguetrail", "soulchain", "acidvials", "corrosion", "plaguedart", "banshee", "shadowarcher", "plaguezombie", "experiment"},
     weapons = {
-        firebolt = {hero = "anya", tags = {"유도"}, engine = "missile", element = "화염", projectile = true},
-        flamefield = {hero = "anya", tags = {"장판"}, engine = "zone", element = "화염"},
-        meteor = {hero = "anya", tags = {"낙하", "폭발"}, engine = "meteor", element = "화염"},
-        chainlightning = {hero = "anya", tags = {"연쇄"}, engine = "chain", element = "번개"},
-        monsoon = {hero = "anya", tags = {"낙하"}, engine = "strike", element = "번개"},
-        thunderorb = {hero = "anya", tags = {"유도", "연쇄"}, engine = "orb", element = "번개", projectile = true},
-        orbitblade = {hero = "anya", tags = {"근접"}, engine = "orbit", element = "칼날"},
-        frontslash = {hero = "anya", tags = {"근접"}, engine = "cone", element = "칼날"},
-        returnblade = {hero = "anya", tags = {"관통"}, engine = "boomerang", element = "칼날", projectile = true},
-        frostshard = {hero = "anya", tags = {"관통"}, engine = "pierce", element = "얼음", projectile = true},
-        frostnova = {hero = "anya", tags = {"폭발"}, engine = "nova", element = "얼음"},
-        blizzard = {hero = "anya", tags = {"장판"}, engine = "field", element = "얼음"},
+        firebolt = {hero = "anya", rawcode = "HsW1", tags = {"유도"}, engine = "missile", element = "화염", projectile = true},
+        flamefield = {hero = "anya", rawcode = "HsW2", tags = {"장판"}, engine = "zone", element = "화염"},
+        meteor = {hero = "anya", rawcode = "HsWA", tags = {"낙하", "폭발"}, engine = "meteor", element = "화염"},
+        chainlightning = {hero = "anya", rawcode = "HsW3", tags = {"연쇄"}, engine = "chain", element = "번개"},
+        monsoon = {hero = "anya", rawcode = "HsW5", tags = {"낙하"}, engine = "strike", element = "번개"},
+        thunderorb = {hero = "anya", rawcode = "HsWB", tags = {"유도", "연쇄"}, engine = "orb", element = "번개", projectile = true},
+        orbitblade = {hero = "anya", rawcode = "HsW4", tags = {"근접"}, engine = "orbit", element = "칼날"},
+        frontslash = {hero = "anya", rawcode = "HsW6", tags = {"근접"}, engine = "cone", element = "칼날"},
+        returnblade = {hero = "anya", rawcode = "HsWC", tags = {"관통"}, engine = "boomerang", element = "칼날", projectile = true},
+        frostshard = {hero = "anya", rawcode = "HsW7", tags = {"관통"}, engine = "pierce", element = "얼음", projectile = true},
+        frostnova = {hero = "anya", rawcode = "HsW8", tags = {"폭발"}, engine = "nova", element = "얼음"},
+        blizzard = {hero = "anya", rawcode = "HsW9", tags = {"장판"}, engine = "field", element = "얼음"},
         -- Putress: per-level status tables (poison stacks, curse stacks, reaction multiplier).
         -- thrown = delivered by a Bezier arc that lands on the locked target point; throwModel/throwScale
         -- pick the flying model (default throw.model), model stays the landing/residue effect.
         -- modelScale enlarges a profile weapon's own model; opaque keeps it fully visible.
         -- tint overrides the school tint (a grey fog becomes a green poison pool); throwTint only the flying model.
-        plaguedart = {hero = "putress", tags = {"관통"}, engine = "pierce", element = "독", projectile = true,
+        plaguedart = {hero = "putress", rawcode = "HsWD", tags = {"관통"}, engine = "pierce", element = "독", projectile = true,
             poison = {2, 2, 3, 3, 3, 4, 4}, model = [[Abilities\Weapons\ChimaeraAcidMissile\ChimaeraAcidMissile.mdl]]},
-        plaguetrail = {hero = "putress", tags = {"장판"}, engine = "zone", element = "독",
+        plaguetrail = {hero = "putress", rawcode = "HsWE", tags = {"장판"}, engine = "zone", element = "독",
             poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Units\Undead\PlagueCloud\PlagueCloud.mdl]]},
-        corrosion = {hero = "putress", tags = {"근접"}, engine = "cone", element = "독",
+        corrosion = {hero = "putress", rawcode = "HsWF", tags = {"근접"}, engine = "cone", element = "독",
             poison = {3, 3, 4, 4, 4, 5, 5}, model = [[Abilities\Weapons\GreenDragonMissile\GreenDragonMissile.mdl]],
             hitModel = [[abilities\spells\undead\minddeath\mindcontroldeath.mdl]]},
-        plaguepool = {hero = "putress", tags = {"장판"}, engine = "field", element = "독", projectile = true, thrown = true,
+        plaguepool = {hero = "putress", rawcode = "HsWG", tags = {"장판"}, engine = "field", element = "독", projectile = true, thrown = true,
             poison = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\CloudOfFog\CloudOfFog.mdl]], tint = {120, 255, 90},
             throwModel = [[abilities\weapons\blightweavermissile\blightweavermissile.mdl]], throwScale = 2.2},
-        deathcoil = {hero = "putress", tags = {"유도"}, engine = "missile", element = "어둠", projectile = true,
+        deathcoil = {hero = "putress", rawcode = "HsWH", tags = {"유도"}, engine = "missile", element = "어둠", projectile = true,
             curse = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Undead\DeathCoil\DeathCoilMissile.mdl]]},
-        soulchain = {hero = "putress", tags = {"연쇄"}, engine = "chain", element = "어둠",
+        soulchain = {hero = "putress", rawcode = "HsWI", tags = {"연쇄"}, engine = "chain", element = "어둠",
             curse = {1, 1, 1, 1, 1, 1, 1}, lightning = "SPLK", model = [[Abilities\Spells\Undead\Curse\CurseTarget.mdl]]},
-        wraithguard = {hero = "putress", tags = {"근접"}, engine = "orbit", element = "어둠",
+        wraithguard = {hero = "putress", rawcode = "HsWJ", tags = {"근접"}, engine = "orbit", element = "어둠",
             cursedBonus = {0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3}, model = [[Abilities\Weapons\AvengerMissile\AvengerMissile.mdl]]},
-        shadowscythe = {hero = "putress", tags = {"관통"}, engine = "boomerang", element = "어둠", projectile = true,
+        shadowscythe = {hero = "putress", rawcode = "HsWK", tags = {"관통"}, engine = "boomerang", element = "어둠", projectile = true,
             curse = {1, 1, 1, 1, 1, 1, 1}, returnBonus = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5},
             model = [[Abilities\Spells\NightElf\shadowstrike\shadowstrike.mdl]], modelScale = 1.6, opaque = true},
-        plaguejar = {hero = "putress", tags = {"낙하", "폭발"}, engine = "meteor", element = "연금술", falling = true,
+        plaguejar = {hero = "putress", rawcode = "HsWL", tags = {"낙하", "폭발"}, engine = "meteor", element = "연금술", falling = true,
             poison = {1, 1, 1, 1, 1, 1, 1}, reaction = {1, 1, 1, 1, 1, 1, 1},
             throwModel = [[Abilities\Spells\Other\StrongDrink\BrewmasterMissile.mdl]], throwScale = 2.6, throwTint = {255, 0, 255}},
-        catalyst = {hero = "putress", tags = {"폭발"}, engine = "nova", element = "연금술",
+        catalyst = {hero = "putress", rawcode = "HsWM", tags = {"폭발"}, engine = "nova", element = "연금술",
             reaction = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}, model = [[abilities\spells\undead\shadownova\shadownova.mdl]]},
-        boilingflask = {hero = "putress", tags = {"유도", "연쇄"}, engine = "orb", element = "연금술", projectile = true,
+        boilingflask = {hero = "putress", rawcode = "HsWN", tags = {"유도", "연쇄"}, engine = "orb", element = "연금술", projectile = true,
             reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Weapons\RedDragonBreath\RedDragonMissile.mdl]], modelScale = 1.4},
-        acidvials = {hero = "putress", tags = {"낙하"}, engine = "strike", element = "연금술", falling = true,
+        acidvials = {hero = "putress", rawcode = "HsWO", tags = {"낙하"}, engine = "strike", element = "연금술", falling = true,
             reaction = {1, 1, 1, 1, 1, 1, 1}, model = [[Abilities\Spells\Other\AcidBomb\BottleImpact.mdl]],
             throwModel = [[Abilities\Spells\Other\AcidBomb\BottleMissile.mdl]]},
-        banshee = {hero = "anya", tags = {"소환"}, engine = "summon", element = "얼음", summonKind = "banshee", opaque = true,
+        banshee = {hero = "anya", rawcode = "HsWP", tags = {"소환"}, engine = "summon", element = "얼음", summonKind = "banshee", opaque = true,
             model = [[Units\Undead\Banshee\Banshee.mdl]]},
-        shadowarcher = {hero = "anya", tags = {"소환"}, engine = "summon", element = "칼날", summonKind = "archer", opaque = true,
+        shadowarcher = {hero = "anya", rawcode = "HsWQ", tags = {"소환"}, engine = "summon", element = "칼날", summonKind = "archer", opaque = true,
             model = [[Units\Creeps\SkeletonArcher\SkeletonArcher.mdl]]},
-        plaguezombie = {hero = "putress", tags = {"소환"}, engine = "summon", element = "독", summonKind = "zombie", opaque = true,
+        plaguezombie = {hero = "putress", rawcode = "HsWR", tags = {"소환"}, engine = "summon", element = "독", summonKind = "zombie", opaque = true,
             poison = {1, 1, 2, 2, 2, 3, 3}, model = [[Units\Undead\Ghoul\Ghoul.mdl]]},
-        experiment = {hero = "putress", tags = {"소환"}, engine = "summon", element = "연금술", summonKind = "brute", opaque = true,
+        experiment = {hero = "putress", rawcode = "HsWS", tags = {"소환"}, engine = "summon", element = "연금술", summonKind = "brute", opaque = true,
             model = [[Units\Undead\Abomination\Abomination.mdl]]},
     },
     -- One colour per weapon school: UI tags use the hex colour; tint multiplies
@@ -361,6 +365,18 @@ do
         listed[id] = true
     end
     for id in pairs(c.weapons) do assert(listed[id], "Weapon missing from cast order " .. id) end
+    local rawcodes = {}
+    for id, weapon in pairs(c.weapons) do
+        assert(type(weapon.rawcode) == "string" and weapon.rawcode:match("^HsW[1-9A-S]$") and not rawcodes[weapon.rawcode],
+            "Weapon needs a unique indicator rawcode " .. id)
+        rawcodes[weapon.rawcode] = true
+    end
+    for _, id in ipairs(c.startingTrinkets) do
+        local code = c.trinketRawcodes[id]
+        assert(code and code:match("^HsT[1-9AB]$") and not rawcodes[code], "Trinket needs a unique indicator rawcode " .. id)
+        rawcodes[code] = true
+    end
+    for id in pairs(c.trinketRawcodes) do assert(rawcodes[c.trinketRawcodes[id]], "Rawcode for an unlisted trinket " .. id) end
     for id, weapon in pairs(c.weapons) do
         local engine = c.weaponEngines[weapon.engine]
         assert((engine.profile == true) == (c.weaponProfiles[id] ~= nil), "Profile engines need a weaponProfiles entry " .. id)
@@ -393,69 +409,6 @@ end
 
 function SurvivorConfig.StageTiming(stage)
     return assert(SurvivorConfig.stageTimings[stage], "Invalid stage timing")
-end
-
--- The playing hero's id and profile, read from its unit type (default hero otherwise).
-function SurvivorConfig.HeroOf(unit)
-    local typeId = unit and GetUnitTypeId(unit)
-    for _, id in ipairs(SurvivorConfig.heroOrder) do
-        if SurvivorConfig.heroes[id].unitId == typeId then return id, SurvivorConfig.heroes[id] end
-    end
-    return SurvivorConfig.defaultHero, SurvivorConfig.heroes[SurvivorConfig.defaultHero]
-end
--- The single human player who owns the run.
-function SurvivorConfig.Owner()
-    return Player(SurvivorConfig.playerId)
-end
--- Guards local-only presentation; reads GetLocalPlayer on every call rather than caching it.
-function SurvivorConfig.IsLocalPlayer()
-    return GetLocalPlayer() == SurvivorConfig.Owner()
-end
--- Frame lookups can return nil, 0 or a released handle.
-function SurvivorConfig.ValidFrame(frame)
-    return frame ~= nil and frame ~= 0 and GetHandleId(frame) ~= 0
-end
--- A unit handle that still refers to a unit (removed units report type 0).
-function SurvivorConfig.UnitExists(unit)
-    return unit ~= nil and GetUnitTypeId(unit) ~= 0
-end
-function SurvivorConfig.UnitLive(unit)
-    return SurvivorConfig.UnitExists(unit) and UnitAlive(unit)
-end
--- An item handle that still refers to an item (removed items report type 0).
-function SurvivorConfig.ItemExists(item)
-    return item ~= nil and GetItemTypeId(item) ~= 0
-end
--- Callers that collect cleanup errors keep their own existence check outside or inside the attempt.
-function SurvivorConfig.RemoveItemIfPresent(item)
-    if SurvivorConfig.ItemExists(item) then RemoveItem(item) end
-end
--- Terrain height at a point. One map-lifetime probe serves every module; never remove it.
-local terrainProbe = nil
-function SurvivorConfig.TerrainZ(x, y)
-    if terrainProbe == nil then terrainProbe = Location(x, y) else MoveLocation(terrainProbe, x, y) end
-    return GetLocationZ(terrainProbe)
-end
--- Presentation (cues, notices, speech, screen flashes) called from hit, death or
--- pickup loops. Like the screen-effect reset in SurvivorUI.BeginRun, a failure is
--- reported but never ends the run; gameplay state changes stay outside this call.
-function SurvivorConfig.Present(label, action, ...)
-    local ok, message = pcall(action, ...)
-    if not ok then print("[AnyasLongNight presentation] " .. label .. ": " .. tostring(message)) end
-    return ok
-end
--- Owner-only frame event. Bootstrap loads before the run owner, so the caller
--- passes the failure handler (gameplay modules pass RunSession.Fail).
-function SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, onError)
-    assert(type(onError) == "function", "Frame events need a failure handler")
-    local trigger = CreateTrigger()
-    triggers[#triggers + 1] = trigger
-    BlzTriggerRegisterFrameEvent(trigger, frame, event)
-    TriggerAddAction(trigger, function()
-        if GetTriggerPlayer() ~= SurvivorConfig.Owner() then return end
-        local ok, message = pcall(callback)
-        if not ok then onError(message) end
-    end)
 end
 
 function SurvivorConfig.SpawnRate(difficultyId, stage, stageElapsed)

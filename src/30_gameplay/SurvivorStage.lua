@@ -140,17 +140,17 @@ do
         end
         local variant = math.floor(Variation(math.floor(x / 128) * 31 + math.floor(y / 128) * 17, index) * 4)
         SetTerrainType(x, y, FourCC(tile), variant, 1, 1)
-        if blighted ~= nil then SetBlightPoint(SurvivorConfig.Owner(), x, y, blighted) end
+        if blighted ~= nil then SetBlightPoint(SurvivorUtil.Owner(), x, y, blighted) end
     end
     -- Restores the cells of a view that ClearPresentation already detached.
     local function RestoreTerrain(errors, restore)
         AttemptEach(errors, "stage terrain", restore, function(cell)
             SetTerrainType(cell.x, cell.y, cell.tile, cell.variation, 1, 1)
-            SetBlightPoint(SurvivorConfig.Owner(), cell.x, cell.y, cell.blighted)
+            SetBlightPoint(SurvivorUtil.Owner(), cell.x, cell.y, cell.blighted)
         end)
     end
     local function Ground(effect, x, y)
-        BlzSetSpecialEffectZ(effect, SurvivorConfig.TerrainZ(x, y))
+        BlzSetSpecialEffectZ(effect, SurvivorUtil.TerrainZ(x, y))
     end
     local function Scenery(model, x, y, scale, angle, color)
         local effect = AddSpecialEffect(model, x, y)

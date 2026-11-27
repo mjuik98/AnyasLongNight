@@ -1,5 +1,5 @@
 // Combat: supplies, spawning, weapons, status effects, sets and boss telegraphs.
-import {augments, combat, config, metrics, suite} from './harness.mjs';
+import {augments, combat, config, metrics, suite, lifecycle} from './harness.mjs';
 import {bossTelegraphMocks, mocks} from './mocks.mjs';
 suite('breakable supplies spawn on accessible ground, reward once, pause and clean without enemy kills', mocks + String.raw`
 PATHING_TYPE_WALKABILITY,PLAYER_NEUTRAL_PASSIVE='walk',24
@@ -31,7 +31,7 @@ CombatRun().onBonus=function(kind)rewards[#rewards+1]=kind end
 CombatRun().onKill=function()kills=kills+1 end
 CombatRun().onDeath=function()deaths=deaths+1 end
 local update=SurvivorCombatSupplies.Update
-local hit=Local(SurvivorCombat.FireMissile,'Hit')
+local hit=Internal('combat','Hit')
 local function Props()local list={};for u,r in pairs(units)do if r.bonus and r.alive then list[#list+1]=u end end;return list end
 local items=CombatRun().bonusItems
 local function OnlyItem()local item=next(items);assert(item and next(items,item)==nil);return item end
@@ -52,7 +52,7 @@ assert((prop.x-hero.x)^2+(prop.y-hero.y)^2>=SurvivorConfig.bonusProps.distanceMi
 UnitDamageTarget(CreateUnit(12,'enemy',0,0,0),prop,999);assert(prop.life==2,'Enemies cannot break supplies')
 state='CHOOSING';UnitDamageTarget(hero,prop,999);assert(prop.life==2)
 SurvivorCombat.SetPaused(true);SurvivorCombat.SetPaused(false);assert(prop.paused)
-state='RUNNING';SurvivorCombat.FireMissile();assert(actors[#actors].target==prop,'Homing weapons select supplies')
+state='RUNNING';SurvivorCombatWeapons.Cast("firebolt");assert(actors[#actors].target==prop,'Homing weapons select supplies')
 hit(prop,999,'firebolt');assert(prop.life==1 and #rewards==0)
 hit(prop,999,'firebolt');assert(prop.life==0 and #rewards==0,'Destruction drops an item without granting its reward')
 local drop=OnlyItem();assert(drop.id==SurvivorConfig.bonusProps.recovery.itemId and drop.x==prop.x and drop.y==prop.y)
@@ -190,10 +190,10 @@ local boss=EnemyAt(units,700,0,false);units[boss].boss=true;units[boss].nextBlas
 units[boss].baseColor={180,100,230,255}
 local fire=SurvivorCombatHazards.FireEnemyMissile
 fire(source,{projectileSpeed=420,damage=12});local missile=actors[#actors]
-local warn=Local(SurvivorCombat.WarnLava,'WarnBossBlast');warn(0,0,200,1.8,true);local blast=actors[#actors]
+local warn=Internal('hazards','WarnBossBlast');warn(0,0,200,1.8,true);local blast=actors[#actors]
 SurvivorCombatHazards.WarnPlague(source,units[source]);local plague=actors[#actors]
 SurvivorCombatHazards.StartSpecial('dash',units[elite],elite);local dash=actors[#actors]
-SurvivorCombat.FireMissile();local friendly=actors[#actors];assert(friendly.identifier=='hsMissile')
+SurvivorCombatWeapons.Cast("firebolt");local friendly=actors[#actors];assert(friendly.identifier=='hsMissile')
 SurvivorCombat.StopTime()
 assert(source.paused and elite.paused and boss.paused and not hero.paused and not build.stats.combatPaused)
 assert(source.timeScale==0 and missile.visual.timeScale==0 and blast.markers[1].timeScale==0)
@@ -203,7 +203,7 @@ local mx,my,life=missile.x,missile.y,missile.life
 for i=1,30 do missile:selfInteractions();blast:selfInteractions();plague:selfInteractions();dash:selfInteractions()end
 assert(missile.x==mx and missile.y==my and missile.life==life and blast.life==1.8 and plague.elapsed==0 and dash.elapsed==0)
 local fx=friendly.x;friendly:selfInteractions();assert(friendly.x~=fx,'Friendly projectiles continue moving')
-local hit=Local(SurvivorCombat.FireMissile,'Hit');local hp=source.life;hit(source,10,'firebolt');assert(source.life<hp,'Frozen enemies can still be attacked')
+local hit=Internal('combat','Hit');local hp=source.life;hit(source,10,'firebolt');assert(source.life<hp,'Frozen enemies can still be attacked')
 eventUnit,eventSource,eventDamage=hero,source,20;CombatRun().damageTrigger.action();assert(eventDamage==0,'Native enemy attacks cannot land during stop')
 now=.5;SurvivorCombatStatus.Freeze(source,.8)
 state='CHOOSING';SurvivorCombat.SetPaused(true,'CHOICE');SurvivorCombat.UpdateStatus(.02)
@@ -222,7 +222,7 @@ local courier=SurvivorCombat.SpawnCourier({{x=100,y=100},{x=500,y=100}})
 assert(courier.paused and courier.color[1]==105 and courier.color[2]==94 and units[courier].baseColor[1]==235,
     'A courier spawned during time stop keeps its new gold base color underneath the dimming')
 local dying=EnemyAt(units,900,0,false);units[dying].baseColor={80,160,240,255}
-Local(SurvivorCombat.StopTime,'StopUnitTime')(dying,units[dying],8)
+Internal('combat','StopUnitTime')(dying,units[dying],8)
 assert(dying.color[1]==36);dying.life=0;eventUnit=dying;CombatRun().deathTrigger.action()
 assert(dying.color[1]==80 and dying.timeScale==1,'A unit killed during stop restores its death animation and color')
 local lateShot=units[late].nextShot
@@ -271,8 +271,8 @@ function SuspendHeroXP(u,on)u.xpSuspended=on end
 function AddHeroXP(u,amount)assert(not u.xpSuspended);u.xp=(u.xp or 0)+amount;u.level=4 end
 purges,stops=0,0
 SurvivorCombat={PurgeNearby=function()purges=purges+1;return 2 end,StopTime=function()stops=stops+1 end}
-`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-local reward=Local(AnyasLongNight.BeginRun,'BonusReward')
+`, [config,lifecycle], String.raw`
+local reward=Internal('lifecycle','BonusReward')
 local hero=CreateUnit(0,'hero',0,0,0);hero.maxLife=500;hero.life=200
 LifecycleRun().hero=hero;LifecycleRun().stage=1
 reward('recovery');assert(hero.life==300)
@@ -301,12 +301,12 @@ SurvivorCombat={BossDefeated=function()return false end,Counts=function()return 
     Spawn=function()regularSpawns=regularSpawns+1;return true end,
     TickWeapons=function()return {},{} end,CastWeapons=function()end,
     UpdateStatus=function()end,UpdateEnemies=function()end,WarnLava=function()end}
-`, [config,'src/00_bootstrap/AnyasLongNight.lua'], String.raw`
-local step=Local(AnyasLongNight.BeginRun,'Step')
+`, [config,lifecycle], String.raw`
+local step=Internal('lifecycle','Step')
 LifecycleRun().hero=CreateUnit(0,'hero',0,0,0)
 LifecycleRun().stats={weapons={}}
-SetLocal(step,'selectedDifficulty','normal')
-SetLocal(step,'RefreshDamageBoard',function()end)
+SetInternal('lifecycle','selectedDifficulty','normal')
+SetInternal('lifecycle','RefreshDamageBoard',function()end)
 for index,expected in ipairs({{120,180},{180,240},{240,300},{240,300},{240,300}})do
     local timing=SurvivorConfig.StageTiming(index)
     assert(timing.bossStart==expected[1] and timing.duration==expected[2])
@@ -324,10 +324,10 @@ for index,expected in ipairs({{120,180},{180,240},{240,300},{240,300},{240,300}}
     now=1000+expected[2];step(.02,now)
     assert(finishedReason=='timeout','Each deadline is relative to the current stage start')
 end
-local wave=Local(AnyasLongNight.BeginRun,'SpawnWave')
+local wave=Internal('lifecycle','SpawnWave')
 local oldStageRates,oldMinuteRates={1,1.35,1.75,2.2,2.7},{1,1.6,2.4,3.4}
 for difficulty,weight in pairs({easy=.8,normal=1,hard=1.1})do
-    SetLocal(wave,'selectedDifficulty',difficulty)
+    SetInternal('lifecycle','selectedDifficulty',difficulty)
     for index,stageWeight in ipairs(oldStageRates)do
         LifecycleRun().stage=index;LifecycleRun().bossStarted=false
         for minute,timeWeight in ipairs(oldMinuteRates)do
@@ -410,8 +410,8 @@ assert(not SurvivorAugments.CanReroll(b,o,1) and not SurvivorAugments.CanExclude
 
 suite('spatial candidates preserve swept 2D/3D hits and isolate nested queries', mocks, [config, metrics, augments, combat], String.raw`
 local hero,build,units=NewCombat("orbitblade")
-local candidates=Local(SurvivorCombat.CastBlades,"Candidates")
-local release=Local(SurvivorCombat.CastBlades,"ReleaseCandidates")
+local candidates=Internal("combat","Candidates")
+local release=Internal("combat","ReleaseCandidates")
 local expectedChecks,actualChecks=0,0
 for i=1,150 do EnemyAt(units,(i%15-7)*200,(math.floor(i/15)-5)*200,i%7==0) end
 local function distance(px,py,pz,ax,ay,az,bx,by,bz)
@@ -448,7 +448,7 @@ SurvivorCombat.Cleanup()
 hero,build,units=NewCombat("frostshard")
 local near=EnemyAt(units,20,0,false);local far=EnemyAt(units,80,0,false)
 local above=EnemyAt(units,25,0,true);local dead=EnemyAt(units,10,0,false);dead.life=0
-SurvivorCombat.FireFrostShard(); local shard=actors[#actors]
+SurvivorCombatWeapons.Cast("frostshard"); local shard=actors[#actors]
 shard.x,shard.y,shard.z,shard.dx,shard.dy,shard.dz=0,0,60,1,0,0
 shard.speed,shard.hitRadius,shard.pierces=6000,1,1
 shard.selfInteractions(shard)
@@ -459,7 +459,7 @@ SurvivorCombat.Cleanup()
 -- Actual blade callback preserves per-target cooldown and excludes flying enemies.
 hero,build,units=NewCombat("orbitblade")
 local target=EnemyAt(units,0,0,false);local flying=EnemyAt(units,0,0,true)
-SurvivorCombat.CastBlades();local blade=actors[1]
+SurvivorCombatWeapons.Cast("orbitblade");local blade=actors[1]
 blade.orbit,blade.x,blade.y,blade.hitRadius=0,0,0,65
 blade.selfInteractions(blade);blade.selfInteractions(blade)
 assert(#hits==1 and hits[1].unit==target)
@@ -469,7 +469,7 @@ SurvivorCombat.Cleanup()
 -- Return blade remembers each leg independently; a paused callback does no work.
 hero,build,units=NewCombat("returnblade")
 target=EnemyAt(units,20,0,false)
-SurvivorCombat.CastExtra("returnblade");blade=actors[1]
+SurvivorCombatWeapons.Cast("returnblade");blade=actors[1]
 blade.speed,blade.radius=5000,5
 blade.selfInteractions(blade);assert(#hits==1)
 state="CHOOSING";local life=blade.life;blade.selfInteractions(blade);assert(blade.life==life and #hits==1)
@@ -480,7 +480,7 @@ SurvivorCombat.Cleanup()
 hero,build,units=NewCombat("frontslash")
 build.stats.weapons.frontslash.duration=0.5
 target=EnemyAt(units,50,0,false);local behind=EnemyAt(units,-50,0,false)
-SurvivorCombat.CastFrontSlash(); local area
+SurvivorCombatWeapons.Cast("frontslash"); local area
 for _,a in ipairs(actors) do if a.identifier=="hsSlashArea" then area=a end end
 assert(area);area.selfInteractions(area);assert(#hits==1 and hits[1].unit==target)
 behind.x=60;area.selfInteractions(area);assert(#hits==2 and hits[2].unit==behind)
@@ -491,19 +491,19 @@ hero,build,units=NewCombat("orbitblade")
 local alphaWrites=0
 BlzSetSpecialEffectAlpha=function(effect,value) effect.alpha=value;alphaWrites=alphaWrites+1 end
 BlzSetSpecialEffectColor=function(effect,r,g,b)effect.color={r,g,b}end
-SurvivorCombat.CastBlades();blade=actors[1];assert(blade.visual.alpha==255)
+SurvivorCombatWeapons.Cast("orbitblade");blade=actors[1];assert(blade.visual.alpha==255)
 assert(blade.visual.color[1]==235 and blade.visual.color[2]==245 and blade.visual.color[3]==255)
 CombatRun().warningUntil=10
 SurvivorCombat.UpdateStatus(0.02);assert(blade.visual.alpha==150)
 local writes=alphaWrites
 for i=1,100 do SurvivorCombat.UpdateStatus(0.02) end
 assert(alphaWrites==writes)
-SurvivorCombat.CastBlades();assert(actors[#actors].visual.alpha==150)
+SurvivorCombatWeapons.Cast("orbitblade");assert(actors[#actors].visual.alpha==150)
 now=11;SurvivorCombat.UpdateStatus(0.02)
 for _,a in ipairs(actors) do assert(a.visual.alpha==255) end
 SurvivorCombat.Cleanup()
 hero,build,units=NewCombat('frontslash');target=EnemyAt(units,50,0,false)
-SurvivorCombat.CastFrontSlash()
+SurvivorCombatWeapons.Cast("frontslash")
 for _,a in ipairs(actors)do
     if a.identifier=='hsSlash'or a.identifier=='hsSlashHit'then assert(a.visual.alpha==255)end
 end
@@ -512,7 +512,7 @@ for _,a in ipairs(actors)do
     if a.identifier=='hsSlash'or a.identifier=='hsSlashHit'then assert(a.visual.alpha==150)end
 end
 SurvivorCombat.Cleanup()
-hero,build,units=NewCombat('returnblade');EnemyAt(units,100,0,false);SurvivorCombat.CastExtra('returnblade')
+hero,build,units=NewCombat('returnblade');EnemyAt(units,100,0,false);SurvivorCombatWeapons.Cast('returnblade')
 assert(actors[1].visual.alpha==140,'Unrelated blade weapons keep their existing visibility policy')
 SurvivorCombat.Cleanup()
 `);
@@ -528,7 +528,7 @@ local hero,build,units=NewCombat('chainlightning')
 build.stats.weapons.chainlightning.targets=4
 local targets={EnemyAt(units,100,0,false),EnemyAt(units,200,0,true),EnemyAt(units,300,0,false)}
 EnemyAt(units,2000,0,false);targets[1].life=10
-SurvivorCombat.CastChainLightning()
+SurvivorCombatWeapons.Cast("chainlightning")
 assert(#hits==3 and #actors==6,'One beam and one impact for each distinct target in reach')
 local impacts,beams={},{}
 for _,actor in ipairs(actors)do
@@ -655,7 +655,7 @@ SurvivorCombat.Cleanup()
 suite('bounded cleanup, frozen time, completion once, and restart cancellation', mocks, [config, metrics, augments, combat], String.raw`
 local hero,build,units=NewCombat("orbitblade")
 for i=1,150 do EnemyAt(units,i*10,300,false) end
-for i=1,40 do SurvivorCombat.CastBlades() end
+for i=1,40 do SurvivorCombatWeapons.Cast("orbitblade") end
 state="STAGE_CLEAR";local done,ticks=0,0;local before=now
 SurvivorCombat.ClearBattlefieldAsync(function() done=done+1 end)
 assert(SurvivorCombat.IsClearing() and removed==0)
@@ -691,7 +691,7 @@ suite('combat teardown continues after native failures and permits a fresh initi
 for _,failureKind in ipairs({'DestroyTrigger','DestroyEffect','ALICE_Kill','RemoveUnit','PauseTimer','DestroyGroup'})do
     local hero,build,units=NewCombat('orbitblade')
     for i=1,3 do EnemyAt(units,i*50,0,false)end
-    SurvivorCombat.CastBlades()
+    SurvivorCombatWeapons.Cast("orbitblade")
     local object=actors[1];object.markers={AddSpecialEffect('marker',0,0),AddSpecialEffect('marker',0,0)}
     local markers=object.markers
     local group=CombatRun().queryGroup
@@ -722,7 +722,7 @@ end
 suite('range damage preserves target order, 3D hits, slow effects and nested queries while reducing native checks', mocks,
     [config,metrics,augments,combat], String.raw`
 local hero,build,units=NewCombat('blizzard')
-local areaHit=Local(SurvivorCombat.CastMonsoon,'AreaHit')
+local areaHit=Internal('combat','AreaHit')
 local ground=EnemyAt(units,100,0,false)
 local boundary=EnemyAt(units,200,0,false)
 local flying=EnemyAt(units,0,0,true)
@@ -736,7 +736,7 @@ SurvivorMetrics.Enable(true)
 areaHit({x=0,y=0,z=60,radius=200,weapon='blizzard',slow=.2,slowDuration=2},20)
 assert(#hits==#expected)
 for i,u in ipairs(expected)do assert(hits[i].unit==u and math.abs(u.speed-176)<.001 and units[u].slows.blizzard.expires==2)end
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert(counters['blizzard.area.calls']==1 and counters['blizzard.area.distanceChecks']<=#expected+1)
 assert(counters['blizzard.area.orderScans']>counters['blizzard.area.distanceChecks'],
     'Retain table order scans while avoiding far-away native distance/height checks')
@@ -768,10 +768,10 @@ local hero,build,units=NewCombat('frostshard')
 for i=1,150 do EnemyAt(units,2000+i,0,false)end
 local target=EnemyAt(units,100,0,false);local other=EnemyAt(units,120,0,false)
 local slow=SurvivorCombatStatus.Slow;local freeze=SurvivorCombatStatus.Freeze
-local statuses=Local(SurvivorCombatStatus.Update,'statusUnits')
+local statuses=Internal('status','statusUnits')
 SurvivorCombat.TrackWeapons({'blizzard','frostshard'})
 SurvivorMetrics.Enable(true);SurvivorCombat.UpdateStatus(.02)
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert(counters['status.unitChecks']==0,'Unaffected enemies must not enter the 50Hz status traversal')
 slow(target,.2,1,'blizzard');slow(target,.2,2,'frostshard');assert(freeze(target,.6))
 slow(other,.4,.8,'frostshard')
@@ -796,7 +796,7 @@ slow(other,.2,3,'blizzard');GetTriggerUnit=function()return other end
 for _,trigger in ipairs(triggers)do if trigger.event=='death' and not trigger.destroyed then trigger.action()end end
 assert(statuses[other]==nil,'Deaths detach active status ownership immediately')
 SurvivorCombat.Cleanup();SurvivorMetrics.Enable(false)
-hero,build,units=NewCombat('frostshard');assert(next(Local(SurvivorCombatStatus.Update,'statusUnits'))==nil)
+hero,build,units=NewCombat('frostshard');assert(next(Internal('status','statusUnits'))==nil)
 SurvivorCombat.Cleanup()
 `);
 
@@ -810,7 +810,7 @@ for _,u in ipairs({target,boss})do units[u].baseColor={210,150,90,220}end
 local apply=SurvivorCombatStatus.Apply
 local slow=SurvivorCombatStatus.Slow
 local freeze=SurvivorCombatStatus.Freeze
-local statuses=Local(SurvivorCombatStatus.Update,'statusUnits')
+local statuses=Internal('status','statusUnits')
 local function Color(u,r,g,b,a)
     assert(u.color[1]==r and u.color[2]==g and u.color[3]==b and u.color[4]==a,
         'Unexpected RGB/alpha: '..table.concat(u.color,','))
@@ -851,7 +851,7 @@ SurvivorCombat.ClearBattlefield();Color(boss,210,150,90,220)
 assert(next(statuses)==nil)
 SurvivorCombat.Cleanup()
 hero,build,units=NewCombat('plaguedart')
-assert(next(Local(SurvivorCombatStatus.Update,'statusUnits'))==nil)
+assert(next(Internal('status','statusUnits'))==nil)
 SurvivorCombat.Cleanup()
 `);
 
@@ -860,11 +860,11 @@ suite('passive frost stacks preserve accumulation without polling expired states
 local hero,build,units=NewCombat('frostshard');build.stats.sets.frost=true
 local target=EnemyAt(units,100,0,false)
 local slow=SurvivorCombatStatus.Slow;local setHit=SurvivorCombatSets.SetHit
-local statuses=Local(SurvivorCombatStatus.Update,'statusUnits');local stacks=Local(SurvivorCombatStatus.Update,'frostStackUnits')
+local statuses=Internal('status','statusUnits');local stacks=Internal('status','frostStackUnits')
 slow(target,.3,2,'frostshard');setHit(target,10,'frostshard');now=3;SurvivorCombat.UpdateStatus(.02)
 assert(units[target].slows==nil and statuses[target]==nil and units[target].frostHits==1 and stacks[target])
 SurvivorMetrics.Enable(true);for i=1,1500 do now=now+.02;SurvivorCombat.UpdateStatus(.02)end
-assert(Local(SurvivorMetrics.Report,'counters')['status.unitChecks']==0)
+assert(Internal('metrics','counters')['status.unitChecks']==0)
 slow(target,.3,2,'frostshard');setHit(target,10,'frostshard');assert(units[target].frostHits==2)
 now=now+3;SurvivorCombat.UpdateStatus(.02);assert(statuses[target]==nil and stacks[target])
 build.stats.sets.frost=false;SurvivorCombat.UpdateStatus(.02);assert(units[target].frostHits==0 and next(stacks)==nil)
@@ -872,7 +872,7 @@ build.stats.sets.frost=true;slow(target,.3,2,'frostshard');setHit(target,10,'fro
 GetTriggerUnit=function()return target end
 for _,t in ipairs(triggers)do if t.event=='death' and not t.destroyed then t.action()end end
 assert(stacks[target]==nil and statuses[target]==nil);SurvivorCombat.Cleanup()
-assert(next(Local(SurvivorCombatStatus.Update,'frostStackUnits'))==nil)
+assert(next(Internal('status','frostStackUnits'))==nil)
 SurvivorMetrics.Enable(false)
 print('  expired frost: 1500 updates, 0 status unit checks')
 `);
@@ -885,13 +885,13 @@ local first=EnemyAt(units,100,0,false);local tie=EnemyAt(units,-100,0,false)
 local edge=EnemyAt(units,200,0,true);local far=EnemyAt(units,2500,0,false)
 build.stats.weapons.frostnova.range=200;randomBounds={}
 local expected={};for u,record in pairs(units)do if record.enemy and u.x*u.x+u.y*u.y<=200^2 then expected[#expected+1]=u end end
-SurvivorCombat.CastExtra('frostnova')
+SurvivorCombatWeapons.Cast('frostnova')
 assert(#randomBounds==#expected);for i,b in ipairs(randomBounds)do assert(i==b,'Reservoir random bounds must retain the original units order')end
 local nova;for _,a in ipairs(actors)do if a.identifier=='hsNova' then nova=a end end
 assert(nova.x==expected[1].x and nova.y==expected[1].y,'Preserve the random-selected target in table order')
 build.stats.sets.ember=true;hits={}
 local expire=SurvivorCombatSets.ExpireEmber
-local nested=false;local areaHit=Local(SurvivorCombat.CastMonsoon,'AreaHit')
+local nested=false;local areaHit=Internal('combat','AreaHit')
 onDamage=function()if not nested then nested=true;areaHit({x=far.x,y=far.y,z=60,radius=1,weapon='meteor',slow=0},1)end end
 expire({x=0,y=0,z=0,radius=200,damage=5,weapon='flamefield'});onDamage=nil
 local outer={};for _,hit in ipairs(hits)do if hit.damage==10 then outer[#outer+1]=hit.unit end end
@@ -909,11 +909,11 @@ SurvivorStage.LineClear=function(ax,ay,bx,by)return by>=0 end
 local xReads,yReads=0,0;local oldX,oldY=GetUnitX,GetUnitY
 GetUnitX=function(u)xReads=xReads+1;return oldX(u)end;GetUnitY=function(u)yReads=yReads+1;return oldY(u)end
 SurvivorMetrics.Enable(true)
-Local(SurvivorCombat.Init,'Shatter')(dead,units[dead])
+SurvivorCombatWeapons.Shatter(dead,units[dead])
 assert(#actors==3 and xReads<=5 and yReads<=5,'Nearby coordinates are read once and top-three selection skips distant native reads')
 assert(actors[1].dx==1 and actors[1].dy==0 and actors[2].dx==1 and actors[2].dy==0 and actors[3].dx==0 and actors[3].dy==1,
     'Shatter retains distance then handle ordering, including ties and line-of-sight exclusions')
-assert((Local(SurvivorMetrics.Report,'counters')['shatter.area.orderScans']or 0)==0,
+assert((Internal('metrics','counters')['shatter.area.orderScans']or 0)==0,
     'Independent nearest ordering does not need the full enemy table traversal')
 GetUnitX,GetUnitY=oldX,oldY;SurvivorCombat.Cleanup();SurvivorMetrics.Enable(false)
 `);
@@ -930,7 +930,7 @@ GroupEnumUnitsInRange=function(group,...)
     enumerate(group,...)
     for i=1,math.floor(#group/2)do local j=#group-i+1;group[i],group[j]=group[j],group[i]end
 end
-SurvivorMetrics.Enable(true);SurvivorCombat.FireMissile()
+SurvivorMetrics.Enable(true);SurvivorCombatWeapons.Cast("firebolt")
 local missile=actors[1];assert(missile.target==primary);missile.speed=50000;missile.selfInteractions(missile)
 GroupEnumUnitsInRange=enumerate
 assert(#hits==13 and hits[1].unit==primary and hits[1].damage==build.stats.weapons.firebolt.damage)
@@ -939,7 +939,7 @@ for i=1,12 do assert(hits[i+1].unit==nearby[i] and hits[i+1].damage==build.stats
 assert(primary.life==100000-build.stats.weapons.firebolt.damage,'The primary is excluded from secondary explosion damage')
 assert(nearby[13].life==100000 and nearby[14].life==100000,'Explosion keeps its twelve-target cap')
 for _,u in ipairs(far)do assert(u.life==100000)end
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert((counters['firebolt.area.orderScans']or 0)==0 and counters['firebolt.area.queries']==1)
 SurvivorCombat.Cleanup();SurvivorMetrics.Enable(false)
 `);
@@ -995,7 +995,7 @@ state='RUNNING'
 for _=1,40 do if not impact.cleaned then impact.selfInteractions(impact)end end
 assert(impact.cleaned and #hits==1,'The impact visual expires without any extra hits')
 for _,actor in ipairs(actors)do assert(actor.identifier~='hsExtraZone','Meteor must not register a zone')end
-Local(SurvivorConfig.weaponEngines.field.cast,'NewZone')('flamefield',0,0,w,w.damage)
+Internal('combat','NewZone')('flamefield',0,0,w,w.damage)
 assert(actors[#actors].visual.model==SurvivorConfig.zoneModel,'Other flame zones retain their own effect')
 SurvivorCombat.Cleanup()
 `);
@@ -1152,12 +1152,12 @@ suite('tag-set explosions and falling attacks have bounded cooldowns and never r
 for _,weapon in ipairs({'frostnova','meteor','catalyst','plaguejar'})do
     local hero,build,units=NewCombat(weapon);build.stats.sets.destroyer=true
     local target=EnemyAt(units,100,0,false);local nearby=EnemyAt(units,120,0,false)
-    local rawHit=Local(SurvivorCombat.FireMissile,'Hit')
+    local rawHit=Internal('combat','Hit')
     local function hit(target,damage,id)rawHit(target,damage,id,nil,nil,1,{poison=0,curse=0,reaction=0})end
     units[target].curse,units[target].curseUntil=3,10
     for _=1,3 do hit(target,100,weapon)end
     assert(#hits==5 and math.abs(100000-nearby.life-40)<1e-8,'Exactly one small explosion after three direct hits: '..weapon)
-    local record=Local(SurvivorCombatSets.SetHit,'tagState')
+    local record=Internal('sets','tagState')
     assert(record.burstHits==0 and record.burstReady==2,'Secondary explosion damage does not count toward another proc')
     assert(not units[nearby].poison and not units[nearby].curse,'Set explosions do not apply status or reactions')
     local expected=100000-3*124-40*1.24
@@ -1166,7 +1166,7 @@ for _,weapon in ipairs({'frostnova','meteor','catalyst','plaguejar'})do
     now=2;hit(target,100,weapon);assert(nearby.life==99920)
     local before=nearby.life;state='CHOOSING';hit(target,100,weapon);assert(nearby.life==before)
     state='RUNNING';SurvivorCombat.BeginStage(2,now)
-    assert(Local(SurvivorCombatSets.SetHit,'tagState').burstHits==0)
+    assert(Internal('sets','tagState').burstHits==0)
     SurvivorCombat.Cleanup()
 end
 for _,weapon in ipairs({'meteor','monsoon','plaguejar','acidvials'})do
@@ -1185,14 +1185,14 @@ for _,weapon in ipairs({'meteor','monsoon','plaguejar','acidvials'})do
     local damage=build.stats.weapons[weapon].damage
     assert(#hits==1 and math.abs(hits[1].damage-damage*.4)<1e-8,'Extra falling damage resolves once, without normal payloads')
     assert(extra.x==x and extra.y==y,'The extra payload does not follow a moving target')
-    local counters=Local(SurvivorCombatSets.SetHit,'tagState')
+    local counters=Internal('sets','tagState')
     assert(counters.fall[weapon].hits==0 and counters.burstHits==0,'The extra landing never chains into other set effects')
     for _=1,4 do SurvivorCombat.CastWeapon(weapon)end;assert(#Extras()==0,'Four-second cooldown')
     now=4;SurvivorCombat.CastWeapon(weapon);assert(#Extras()==1)
     extra=Extras()[1];build.stats.sets.bombardier=false
     local before=#hits;repeat extra.selfInteractions(extra)until extra.cleaned
     assert(#hits==before,'Removing the set cancels a pending set landing')
-    SurvivorCombat.BeginStage(2,now);assert(next(Local(SurvivorCombatSets.SetHit,'tagState').fall)==nil)
+    SurvivorCombat.BeginStage(2,now);assert(next(Internal('sets','tagState').fall)==nil)
     SurvivorCombat.Cleanup()
 end
 `);
@@ -1217,7 +1217,7 @@ for _,kind in ipairs({'destroyer','bombardier','conductor'})do
     local outside=EnemyAt(units,280,0,false)
     local kills=0;CombatRun().onKill=function()kills=kills+1 end
     if kind=='destroyer'then
-        local hit=Local(SurvivorCombat.FireMissile,'Hit')
+        local hit=Internal('combat','Hit')
         for _=1,3 do hit(primary,100,'plaguejar',nil,nil,1,{poison=0,curse=0,reaction=0})end
     elseif kind=='bombardier'then
         local cast=SurvivorCombatSets.RecordFallingCast
@@ -1242,18 +1242,18 @@ for _,weapon in ipairs({'banshee','shadowarcher','plaguezombie','experiment'})do
     SurvivorCombat.CastWeapon(weapon)
     local summon;for _,a in ipairs(actors)do if a.summon then summon=a;break end end
     summon.x,summon.y=60,0
-    local attack=Local(SurvivorConfig.weaponEngines.summon.cast,'SummonAttack')
+    local attack=Internal('combat','SummonAttack')
     local function Attack(damage,scale)
         local before=#actors;assert(attack(summon,w,damage,scale))
         for i=before+1,#actors do local a=actors[i];if a.identifier=='hsSummonArrow'then a.speed=50000;a.selfInteractions(a)end end
     end
     for i=1,6 do Attack(w.damage,1);assert(hits[#hits].damage==w.damage*(i==6 and 2 or 1),weapon)end
-    local counter=Local(SurvivorCombatSets.SetHit,'tagState').summon[weapon]
+    local counter=Internal('sets','tagState').summon[weapon]
     Attack(w.damage*.5,.5);assert(counter.hits==0,'Multicast helpers do not charge the reinforced attack')
     for _=1,6 do Attack(w.damage,1)end;assert(hits[#hits].damage==w.damage,'Reinforcement has a cooldown')
     now=2;Attack(w.damage,1);assert(hits[#hits].damage==w.damage*2)
     local life=summon.life;state='CHOOSING';summon.selfInteractions(summon);assert(summon.life==life)
-    state='RUNNING';SurvivorCombat.BeginStage(2,now);assert(next(Local(SurvivorCombatSets.SetHit,'tagState').summon)==nil)
+    state='RUNNING';SurvivorCombat.BeginStage(2,now);assert(next(Internal('sets','tagState').summon)==nil)
     SurvivorCombat.Cleanup()
 end
 for _,weapon in ipairs({'frostshard','plaguedart','returnblade','shadowscythe'})do
@@ -1295,9 +1295,7 @@ for _,weapon in ipairs({'firebolt','deathcoil','thunderorb','boilingflask'})do
         SurvivorCombat.Cleanup()
     end
     local hero,build,units=NewCombat(weapon);build.stats.sets.pursuer=true;EnemyAt(units,10,0,false)
-    local engine=SurvivorConfig.weaponEngines[SurvivorConfig.weapons[weapon].engine]
-    if engine.profile then SurvivorCombat.CastExtra(weapon,{weapon=build.stats.weapons[weapon],index=1})
-    else SurvivorCombat.FireMissile({weapon=build.stats.weapons[weapon],index=1})end
+    SurvivorCombatWeapons.Cast(weapon,{weapon=build.stats.weapons[weapon],index=1})
     local object=assert(Find());object.flightAge=.6
     if object.identifier=='hsOrb'then object.pulseClock=object.pulse end
     object.selfInteractions(object)
@@ -1321,7 +1319,7 @@ function SurvivorExpedition.RiskActive()return risk==true end
 `, [config,metrics,augments,combat], String.raw`
 for _,weapon in ipairs({'orbitblade','frontslash','wraithguard','corrosion'})do
     local hero,build,units=NewCombat(weapon);hero.life,hero.maxLife=1000,1000;build.stats.sets.bulwark=true
-    local enemy=EnemyAt(units,60,0,false);local hit=Local(SurvivorCombat.FireMissile,'Hit')
+    local enemy=EnemyAt(units,60,0,false);local hit=Internal('combat','Hit')
     hit(enemy,1,'firebolt');assert(Receive(hero,enemy,100)==100,'Other tags cannot grant melee protection')
     hit(enemy,1,weapon);assert(Receive(hero,enemy,100)==85,weapon)
     now=1;hit(enemy,1,weapon);assert(Receive(hero,enemy,100)==85,'Protection refreshes instead of stacking')
@@ -1349,7 +1347,7 @@ for _,weapon in ipairs({'flamefield','plaguetrail','blizzard','plaguepool'})do
         assert(throw);for _=1,500 do if not throw.cleaned then throw.selfInteractions(throw)end end
     end
     local zone=assert(Zone());target.x,target.y=zone.x,zone.y
-    local area=Local(SurvivorCombat.CastMonsoon,'AreaHit')
+    local area=Internal('combat','AreaHit')
     local function Pulse()
         if zone.interactions then zone.interactions.hsEnemy(zone,target)else area(zone,zone.damage)end
     end
@@ -1376,11 +1374,11 @@ for _,weapon in ipairs({'chainlightning','soulchain'})do
     assert(math.abs(hits[4].damage-hits[3].damage*.6*(1+curse*SurvivorConfig.status.curseAmp))<1e-8)
     SurvivorCombat.CastWeapon(weapon);assert(#hits==7,'Two-second cooldown is shared by casts of the same weapon')
     now=2;SurvivorCombat.CastWeapon(weapon);assert(#hits==11)
-    now=4;SurvivorCombat.CastChainLightning({weapon=build.stats.weapons[weapon],index=1})
+    now=4;SurvivorCombatWeapons.Cast(weapon,{weapon=build.stats.weapons[weapon],index=1})
     assert(#hits==14,'Additional chain casts do not receive an extra endpoint hit')
     local total=0;for _,hit in ipairs(hits)do total=total+hit.damage end
     assert(math.abs(SurvivorCombat.DamageRows({weapon})[1].damage-total)<1e-7,'All damage belongs to its original weapon')
-    SurvivorCombat.BeginStage(2,now);assert(next(Local(SurvivorCombatSets.SetHit,'tagState').relay)==nil)
+    SurvivorCombat.BeginStage(2,now);assert(next(Internal('sets','tagState').relay)==nil)
     local boss=EnemyAt(units,100,0,false);units[boss].boss=true;hits={}
     SurvivorCombat.CastWeapon(weapon);assert(#hits==2 and hits[2].unit==boss,'A single boss is a valid endpoint')
     SurvivorCombat.Cleanup()
@@ -1496,7 +1494,7 @@ suite('putress poison ticks, curse amplifies, reaction consumes poison and extra
 function AddLightningEx()return {}end
 `, [config,metrics,augments,combat], String.raw`
 local hero,build,units=NewCombat('plaguedart');local target=EnemyAt(units,150,0,false);target.life=100000
-local hit=Local(SurvivorCombat.FireMissile,'Hit');local cfg=SurvivorConfig.status
+local hit=Internal('combat','Hit');local cfg=SurvivorConfig.status
 hit(target,10,'plaguedart')
 assert(units[target].poison==build.stats.status.plaguedart.poison and units[target].poison==2)
 hits={};now=cfg.poisonTick;SurvivorCombat.UpdateStatus(.02)
@@ -1518,7 +1516,7 @@ hit(target,10,'plaguedart',false,false,.5,{poison=4});assert(units[target].poiso
 hit(target,10,'plaguedart',false,false,.5,{poison=1});assert(units[target].poison==3,'A halved stack never rounds to zero')
 hit(target,10,'plaguedart',true,false,1,{poison=4});assert(units[target].poison==3,'Set procs and ticks never add status')
 now=now+60;SurvivorCombat.UpdateStatus(.02)
-assert(units[target].poison==0 and next(Local(SurvivorCombatStatus.Update,'poisonUnits'))==nil,'Expired poison stops ticking')
+assert(units[target].poison==0 and next(Internal('status','poisonUnits'))==nil,'Expired poison stops ticking')
 -- Two poison weapons on one enemy: each share ticks with its own power and credit,
 -- and a reaction consumes both shares in proportion.
 local shared=EnemyAt(units,200,0,false);shared.life=100000
@@ -1541,7 +1539,7 @@ now=now+cfg.reactionCooldown;hit(shared,10,'plaguedart',false,false,1,{reaction=
 assert(units[shared].poison==4 and units[shared].poisonBy.plaguedart==3 and units[shared].poisonBy.plaguejar==1,
     'A reaction consumes every share in proportion')
 SurvivorCombat.Cleanup()
-assert(next(Local(SurvivorCombatStatus.Update,'poisonUnits'))==nil)
+assert(next(Internal('status','poisonUnits'))==nil)
 `);
 
 suite('putress throws follow a Bezier arc and land on the point locked at release', mocks + String.raw`
@@ -1622,7 +1620,7 @@ for role,model in pairs(roles)do
     local key=assert(model,role):lower();assert(not seen[key],role..' shares a model with '..tostring(seen[key]));seen[key]=role
 end
 local hero,build,units=NewCombat('firebolt')
-Local(SurvivorCombat.WarnLava,'WarnBossBlast')(0,0,240,1.25,true)
+Internal('hazards','WarnBossBlast')(0,0,240,1.25,true)
 local warning;for _,a in ipairs(actors)do if a.identifier=='hsBossWarning' then warning=a end end
 assert(#warning.markers==1 and warning.markers[1].model==c.warningRingModel,'A boss blast shows one ring')
 assert(warning.markers[1].scale==240/c.warningRingRadius,'The ring matches the blast radius')

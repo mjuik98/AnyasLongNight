@@ -77,7 +77,7 @@ do
     end
     local journalPages, journalIndex, currentResultPage = {}, 1, 1
     local journalChapters, journalChapter = {}, 1
-    local ValidNativeFrame = SurvivorConfig.ValidFrame
+    local ValidNativeFrame = SurvivorUtil.ValidFrame
     -- The setup screen hides the whole console like an intro; it only lifts its own mode.
     function SurvivorUI.SetSetupCinematic(active)
         if active then SurvivorUI.SetTimeStopFilter(false, true) end
@@ -198,7 +198,7 @@ do
         return frame
     end
     local function Bind(frame, event, callback)
-        SurvivorConfig.BindFrameEvent(triggers, frame, event, callback, function(message) RunSession.Fail(message) end)
+        SurvivorUtil.BindFrameEvent(triggers, frame, event, callback, function(message) RunSession.Fail(message) end)
     end
     local function ReleaseFocus(frame)
         BlzFrameSetEnable(frame, false)
@@ -214,7 +214,7 @@ do
         -- The backdrop owns its geometry and the clickable content, as in the
         -- original visible panel. Do not put it under a BUTTON at frame level 0.
         local skin = BlzCreateFrame(template, parent, 0, context)
-        assert(SurvivorConfig.ValidFrame(skin), "Missing UI backdrop: " .. template)
+        assert(SurvivorUtil.ValidFrame(skin), "Missing UI backdrop: " .. template)
         BlzFrameSetSize(skin, width, height)
         BlzFrameSetAlpha(skin, 255)
         BlzFrameSetLevel(skin, 2)
@@ -313,7 +313,7 @@ do
         actionFeedback[#actionFeedback + 1] = control
         local function LocalEvent(event, action)
             Bind(button, event, function()
-                if SurvivorConfig.IsLocalPlayer() then action() end
+                if SurvivorUtil.IsLocalPlayer() then action() end
             end)
         end
         LocalEvent(FRAMEEVENT_MOUSE_ENTER, function()
@@ -911,7 +911,7 @@ do
         BlzFrameSetVisible(panel, true)
     end
     function SurvivorUI.DebugStatus()
-        if not initialized or not SurvivorConfig.IsLocalPlayer() then return end
+        if not initialized or not SurvivorUtil.IsLocalPlayer() then return end
         print(string.format("[AnyasLongNight UI difficulty-v7] parent=%s visible=%s choosing=%s",
             parentName, tostring(BlzFrameIsVisible(panel)), tostring(choosing)))
         for i, card in ipairs(cards) do

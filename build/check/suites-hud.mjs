@@ -8,24 +8,24 @@ import {presentationMocks, timeStopFilterMocks} from './mocks.mjs';
 suite('time-stop world filter fades subtly, reverses without flashes and cancels stale timers without changing UI',
     presentationMocks + timeStopFilterMocks, [config,uiModules], String.raw`
 local set=SurvivorUI.SetTimeStopFilter
-set(true);local first=Local(set,'timeStopFilterTimer')
+set(true);local first=Internal('screen','timeStopFilterTimer')
 assert(first and filter.texture==[[ReplaceableTextures\CameraMasks\White_mask.blp]])
 assert(filter.blend=='blend'and filter.flags=='none')
 AdvanceVisualTime(.1);assert(filter.visible and filter.color[4]>=6 and filter.color[4]<=7)
-local writes=filter.writes;set(true);assert(Local(set,'timeStopFilterTimer')==first and filter.writes==writes)
+local writes=filter.writes;set(true);assert(Internal('screen','timeStopFilterTimer')==first and filter.writes==writes)
 AdvanceVisualTime(.1)
 assert(first.destroyed and filter.color[1]==145 and filter.color[2]==185 and filter.color[3]==225 and filter.color[4]==13)
-assert(Local(set,'timeStopFilterTimer')==nil)
+assert(Internal('screen','timeStopFilterTimer')==nil)
 AdvanceVisualTime(1);assert(filter.writes>writes);writes=filter.writes
 AdvanceVisualTime(1);set(true);assert(filter.writes==writes,'Holding and refreshing the stop must not repaint or restart the fade')
 set(false);AdvanceVisualTime(.1);assert(filter.visible and filter.color[4]>0 and filter.color[4]<13)
-local priorAlpha=filter.color[4];local stale=Local(set,'timeStopFilterTimer')
+local priorAlpha=filter.color[4];local stale=Internal('screen','timeStopFilterTimer')
 set(true);assert(stale.destroyed and filter.color[4]==priorAlpha,'Reacquisition reverses from the current alpha')
 stale.callback();assert(filter.color[4]==priorAlpha,'Cancelled fade-out callbacks cannot hide a refreshed filter')
 AdvanceVisualTime(.2);assert(filter.visible and filter.color[4]==13)
 set(false);AdvanceVisualTime(.3);assert(not filter.visible and filter.color[4]==0)
-assert(Local(set,'timeStopFilterTimer')==nil)
-set(true);AdvanceVisualTime(.04);stale=Local(set,'timeStopFilterTimer')
+assert(Internal('screen','timeStopFilterTimer')==nil)
+set(true);AdvanceVisualTime(.04);stale=Internal('screen','timeStopFilterTimer')
 SurvivorUI.BeginRun();assert(stale.destroyed and not filter.visible and filter.color[4]==0)
 writes=filter.writes;stale.callback();assert(filter.writes==writes)
 assert(next(frames)==nil,'World tint must not create, recolor, hide or intercept HUD/card/tooltip frames')
@@ -38,7 +38,7 @@ suite('hit vignette scales with damage, ignores chip hits during its cooldown an
     presentationMocks, [config,uiModules], String.raw`
 local c=SurvivorConfig.hitVignette
 local frame=BlzCreateFrameByType('BACKDROP','HSHitVignette',nil)
-SetLocal(SurvivorUI.HitFlash,'hitVignette',frame)
+SetInternal('screen','hitVignette',frame)
 local function Near(a,b)return math.abs(a-b)<=1 end
 local small=c.minAlpha+(c.maxAlpha-c.minAlpha)*0.01/c.fullFraction
 SurvivorUI.HitFlash(0.01);assert(frame.visible and Near(frame.alpha,small) and math.abs(frame.width-0.8)<1e-9)
@@ -48,11 +48,11 @@ AdvanceVisualTime(0.3);local faded=frame.alpha;assert(faded<c.maxAlpha and faded
 SurvivorUI.HitFlash(0.01);assert(frame.alpha==faded,'Chip damage inside the cooldown keeps fading')
 AdvanceVisualTime(c.fade-0.3+0.02);assert(not frame.visible)
 SurvivorUI.HitFlash(0.01);assert(not frame.visible,'The cooldown outlasts the fade, so constant chip damage pulses')
-AdvanceVisualTime(c.cooldown);assert(not Local(SurvivorUI.HitFlash,'hitTimerRunning'),'An idle flash stops its timer')
+AdvanceVisualTime(c.cooldown);assert(not Internal('screen','hitTimerRunning'),'An idle flash stops its timer')
 function BlzGetLocalClientWidth()return 1920 end
 function BlzGetLocalClientHeight()return 1080 end
 SurvivorUI.HitFlash(0.01);assert(frame.visible and math.abs(frame.width-0.6*16/9)<1e-9,'Edges sit on a widescreen border')
-SurvivorUI.BeginRun();assert(not frame.visible and not Local(SurvivorUI.HitFlash,'hitTimerRunning'))
+SurvivorUI.BeginRun();assert(not frame.visible and not Internal('screen','hitTimerRunning'))
 GetLocalPlayer=function()return Player(1)end
 frame.alpha=nil;SurvivorUI.HitFlash(0.5);assert(frame.alpha==nil and not frame.visible,'Only the playing client draws the flash')
 `);
@@ -68,7 +68,7 @@ now=7.9;SurvivorCombat.UpdateStatus(.02);assert(filter.visible)
 SurvivorCombat.StopTime();now=8;SurvivorCombat.UpdateStatus(.02);AdvanceVisualTime(.3);assert(filter.visible)
 now=15.9;SurvivorCombat.UpdateStatus(.02);AdvanceVisualTime(.3);assert(not filter.visible)
 SurvivorCombat.StopTime();AdvanceVisualTime(.04)
-local stale=Local(SurvivorUI.SetTimeStopFilter,'timeStopFilterTimer')
+local stale=Internal('screen','timeStopFilterTimer')
 SurvivorCombat.ClearBattlefield();assert(not filter.visible and stale.destroyed)
 stale.callback();assert(not filter.visible)
 SurvivorCombat.StopTime();AdvanceVisualTime(.2);assert(filter.visible)
@@ -376,7 +376,7 @@ GetLocalPlayer=function()return 12 end
 `,
     [config,'src/30_gameplay/SurvivorStory.lua',uiModules], String.raw`
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
-local hidden=Local(SurvivorNativeHUD.HideDecorations,'hiddenFrames')
+local hidden=Internal('hud','hiddenFrames')
 assert(#hidden==12,'Cache all named top frames, the clock and minimap controls on every client')
 for _,frame in ipairs(hidden)do assert(frame.visible and frame.enabled,'Nonlocal initialization only acquires native handles')end
 local lookups=nativeLookups
@@ -401,7 +401,7 @@ TickTimers();for _,frame in ipairs(hidden)do assert(not frame.visible,'Native UI
 assert(nativeLookups==lookups)
 state='RUNNING';SurvivorCombat.BossStatus=function()return {name='boss',current=500,max=1000}end
 SurvivorUI.UpdateDamageBoard({weapons={},evolutions={}},2,120,3,'normal');TickTimers()
-local board=Local(SurvivorDamageBoard.Update,'board')
+local board=Internal('board','board')
 assert(board.visible and board.title:find('2:00')and frames.HSEssentialHUD.visible,
     'Hiding the top console preserves the custom boss panel and native statistics title')
 SurvivorUI.Say('안야','읽을 수 있는 대사');TickTimers()
@@ -448,7 +448,7 @@ SurvivorUI.Init(function()end,function()end,function()end,function()end,function
 for i=1,5 do TickTimers()end
 local expected='` + target + String.raw`'=='GameUI'and 0 or '` + target + String.raw`'=='clock parent'and 1 or 2
 assert(clockChildCalls==expected,'Stop descending the clock hierarchy immediately after an invalid frame')
-assert(#Local(SurvivorNativeHUD.HideDecorations,'hiddenFrames')==11 and frames.NativeClock.visible,
+assert(#Internal('hud','hiddenFrames')==11 and frames.NativeClock.visible,
     'An unavailable clock leaves all other upper/minimap visibility changes intact')
 assert(frames.NativeClockMinimapParent.visible and frames.ConsoleUIBackdrop.visible and frames.HSNotice)
 `);
@@ -472,7 +472,7 @@ end
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 for i=1,5 do TickTimers()end
 assert(clockChildCalls==` + childCalls + String.raw` and frames.NativeClock.visible)
-assert(#Local(SurvivorNativeHUD.HideDecorations,'hiddenFrames')==11 and not frames.UpperButtonBarFrame.visible)
+assert(#Internal('hud','hiddenFrames')==11 and not frames.UpperButtonBarFrame.visible)
 `);
 }
 for (const absent of ['BlzFrameGetChild', 'BlzFrameGetChildrenCount']) suite('older clients safely omit ' + absent,
@@ -483,7 +483,7 @@ NativeGameUI()
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 for i=1,5 do TickTimers()end
 assert(frames.NativeClock.visible and frames.NativeClockMinimapParent.visible)
-assert(#Local(SurvivorNativeHUD.HideDecorations,'hiddenFrames')==11 and not frames.ConsoleTopBar.visible,
+assert(#Internal('hud','hiddenFrames')==11 and not frames.ConsoleTopBar.visible,
     'Missing child API skips only the clock without interrupting UI creation')
 `);
 export const blackTexture = fs.readFileSync(path.join(root, 'assets/war3mapImported/AnyasLongNightUI/Black.tga'));

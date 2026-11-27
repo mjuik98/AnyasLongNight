@@ -159,7 +159,7 @@ function BlzSetAbilityExtendedTooltip(id,text,level)
     weaponText[id..':'..level]=text;return write(id,text,level)
 end
 `, [config,metrics,augments,'src/30_gameplay/SurvivorNativeLoadout.lua'], String.raw`
-local ids=Local(SurvivorNativeLoadout.Refresh,'weapons')
+local ids=Internal('loadout','weapons')
 local function Check(id,build)
     local level=build.levels[id];local text=weaponText[ids[id]..':'..(level-1)]
     assert(text==SurvivorAugments.OwnedTooltip(id,build):gsub('\n','|n'))
@@ -449,7 +449,7 @@ AdvanceEngine(.025);SurvivorCombat.MaintainInventoryPause();assert(hero.life==10
 AdvanceEngine(.025);RunSession.SetInventoryOpen(false)
 assert(RunSession.GetState()=='CHOOSING'and hero.life==105 and Rate()==0)
 local excluded=build.excluded;build.excluded={}
-for _,id in ipairs(Local(SurvivorAugments.Roll,'order'))do build.excluded[id]=true end
+for _,id in ipairs(Internal('augments','order'))do build.excluded[id]=true end
 SurvivorAugments.Apply('recovery',build,hero)
 build.excluded=excluded
 RunSession.EndChoice()

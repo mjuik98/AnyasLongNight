@@ -268,10 +268,10 @@ suite('stage reachability reuses native samples only within one geometry build a
 SurvivorMetrics.Enable(true)
 SurvivorStage.Init({minX=-5000,minY=-5000,maxX=5000,maxY=5000})
 SurvivorStage.Apply(1)
-local counters=Local(SurvivorMetrics.Report,'counters')
+local counters=Internal('metrics','counters')
 assert(counters['stage.calls']==1 and counters['stage.geometry.cells']>0
     and counters['stage.terrain.cells']>0 and counters['stage.scenery.effects']>0)
-local flood=Local(SurvivorStage.Apply,'BuildReachable')
+local flood=Internal('stage','BuildReachable')
 local original=IsTerrainPathable
 local samples={}
 function IsTerrainPathable(x,y,...)

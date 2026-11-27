@@ -5,7 +5,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {goldObjectSpecs, parseObjectData, parseUnits, serializeObjectData, serializeUnits} from './object-data.mjs';
 import {root} from './project.mjs';
-import {growthLevels, loadItemTooltipCatalog, loadTalentCatalog, weaponObjectCount} from './catalog.mjs';
+import {growthLevels, loadItemTooltipCatalog, loadTalentCatalog, loadWeaponTooltipCatalog, weaponObjectCount} from './catalog.mjs';
 
 export const bonusUnits = [
     // Old hsBR/hsBX definitions in existing maps stay intact; only hsBC is spawned.
@@ -306,12 +306,18 @@ export function prepareNativeTalents(map, snapshots = new Map(), preparedAssets 
     return {entries,assets};
 }
 export const weaponObjectPattern = /^HsW[1-9A-S]$/;
-export const additionalWeaponObjects = [
-    ['HsWD', 'BTNEnvenomedSpear'], ['HsWE', 'BTNPlagueCloud'], ['HsWF', 'BTNCorrosiveBreath'], ['HsWG', 'BTNOrbOfVenom'],
-    ['HsWH', 'BTNDeathCoil'], ['HsWI', 'BTNCurse'], ['HsWJ', 'BTNUnholyFrenzy'], ['HsWK', 'BTNShadowStrike'],
-    ['HsWP', 'BTNBanshee'], ['HsWQ', 'BTNSkeletonArcher'], ['HsWR', 'BTNGhoul'], ['HsWS', 'BTNAbomination'],
-    ['HsWL', 'BTNUnstableConcoction'], ['HsWM', 'BTNRejuvenationPotion'], ['HsWN', 'BTNChemicalRage'], ['HsWO', 'BTNHealingSalve'],
-].map(([id, icon]) => ({id, icon: 'ReplaceableTextures\\CommandButtons\\' + icon + '.blp'}));
+// Indicators the base asset lacks (Putress weapons and summons): every weapon indicator past
+// the original Anya set HsW1..HsWC, in rawcode order, with its icon from the Lua catalog.
+const originalWeaponObject = /^HsW[1-9A-C]$/;
+export function additionalWeaponObjects(weaponCatalog = loadWeaponTooltipCatalog()) {
+    const objects = new Map();
+    for (const [key, entry] of weaponCatalog) {
+        const id = key.split(':')[0];
+        assert(weaponObjectPattern.test(id) && entry.icon, 'Weapon indicator needs a catalog icon: ' + key);
+        if (!originalWeaponObject.test(id)) objects.set(id, {id, icon: entry.icon});
+    }
+    return [...objects.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
 export const armorTrinket = {id: 'HsTB', template: 'HsTA', name: '수호의 인장',
     icon: 'ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpOne.blp'};
 // Own only the weapon level count, their zero attribute rows and the armor trinket.
@@ -336,14 +342,15 @@ function installGearRows(data, skin, catalog) {
         data.tables[1].push({oldId: item.base, newId: id, extra: [...template.extra], fields});
     }
 }
-export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatalog()) {
+export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatalog(), weaponCatalog = loadWeaponTooltipCatalog()) {
+    const additional = additionalWeaponObjects(weaponCatalog);
     const output = new Map(entries);
     const abilities = parseObjectData(entries.get('war3map.w3a'), 'ability');
     assert.deepEqual(serializeObjectData(abilities), entries.get('war3map.w3a'), 'Ability reader must round-trip losslessly');
     // Putress indicators are created from HsW1's level metadata; tooltips are filled later.
     const template = abilities.tables[1].find(row => row.newId === 'HsW1');
     assert(template && template.oldId === 'Aamk', 'Missing weapon template HsW1');
-    for (const object of additionalWeaponObjects) {
+    for (const object of additional) {
         assert(!abilities.tables[0].some(row => row.oldId === object.id), 'Weapon ID collides with a stock ability: ' + object.id);
         const rows = abilities.tables[1].filter(row => row.newId === object.id);
         assert(rows.length <= 1, 'Duplicate weapon object: ' + object.id);
@@ -372,7 +379,7 @@ export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatal
     assert.deepEqual(serializeObjectData(skins), entries.get('war3mapSkin.w3a'), 'Ability skin reader must round-trip losslessly');
     const skinTemplate = skins.tables[1].find(row => row.newId === 'HsW1');
     assert(skinTemplate && skinTemplate.oldId === 'Aamk', 'Missing weapon skin template HsW1');
-    for (const object of additionalWeaponObjects) {
+    for (const object of additional) {
         const rows = skins.tables[1].filter(row => row.newId === object.id);
         assert(rows.length <= 1, 'Duplicate weapon skin: ' + object.id);
         if (rows.length) {
@@ -414,10 +421,10 @@ export function installGrowthObjects(entries, itemCatalog = loadItemTooltipCatal
 }
 export function prepareGrowthObjects(map, snapshots = new Map(), preparedAssets = new Map()) {
     const names = ['war3map.w3a', 'war3mapSkin.w3a', 'war3map.w3t', 'war3mapSkin.w3t'];
-    const itemCatalog = loadItemTooltipCatalog(snapshots);
-    const entries = installGrowthObjects(new Map(names.map(name => [name, map.read(name)])), itemCatalog);
+    const itemCatalog = loadItemTooltipCatalog(snapshots), weaponCatalog = loadWeaponTooltipCatalog(snapshots);
+    const entries = installGrowthObjects(new Map(names.map(name => [name, map.read(name)])), itemCatalog, weaponCatalog);
     const sources = new Map(names.map(name => [name, fs.readFileSync(path.join(root, 'assets', name))]));
-    const outputs = installGrowthObjects(new Map(names.map(name => [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])), itemCatalog);
+    const outputs = installGrowthObjects(new Map(names.map(name => [name, preparedAssets.get(path.join(root, 'assets', name)) ?? sources.get(name)])), itemCatalog, weaponCatalog);
     const assets = new Map();
     for (const name of names) {
         const asset = path.join(root, 'assets', name);
