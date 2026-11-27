@@ -25,23 +25,36 @@ SurvivorStory = {
     },
 }
 do
-    local clues, sceneEffects, hiddenHero, camera = {}, {}, nil, nil
-    local sceneX, sceneY -- Scene centre.
-    local portraitUnits, portraitHero = {}, nil
+    -- The run's story record (journal clues and transcript). Reset swaps in a fresh
+    -- NewRun(), so a new field needs no second reset list.
+    local function NewRun()
+        return {currentStage = 1, clues = {}, dialogue = {}, remembered = {}}
+    end
+    -- Everything the open scene owns. Cleanup stops its timers and sounds, then swaps in
+    -- a fresh NewScene() before any native call, so late callbacks only see the empty scene.
+    local function NewScene()
+        return {
+            -- The hidden gameplay hero, the portrait owner and the proxy portrait units.
+            hiddenHero = nil, portraitHero = nil, portraitUnits = {},
+            -- Actor effects with their last pose, and the scene centre.
+            sceneEffects = {}, actorStates = {}, sceneX = nil, sceneY = nil,
+            -- Camera to restore, its bounds/focus, and the camera transition timer.
+            camera = nil, cameraBounds = nil, cameraFocus = nil, cameraGuardTimer = nil,
+            motion = nil, sceneSounds = {}, sceneSoundCache = {},
+        }
+    end
+    local run, scene = NewRun(), NewScene()
     -- Portrait units and speaker actors share red team colour, independent of the run owner.
     -- A function, not a root-level handle: natives are only called once the scene runs.
     local function PortraitRed() return Player(0) end
-    local cameraBounds, cameraFocus, cameraGuardTimer = nil, nil, nil
-    local actorStates, motion, sceneSounds, sceneSoundCache = {}, nil, {}, {}
+    -- Map-lifetime: the scene generation only grows, so a stale close hook never matches.
     local sceneGeneration = 0
     local StopMotion
-    local currentStage, dialogue, remembered = 1, {}, {}
     -- These preferences survive a retry; the current run's transcript does not.
     local summaryMode, seenScenes = false, {}
     local Attempt = RunSession.Attempt
     local function StopAudio(release)
-        local sounds = sceneSounds
-        if release then sceneSounds, sceneSoundCache = {}, {} end
+        local sounds = scene.sceneSounds
         -- Optional local cues must never stop a scene or its gameplay cleanup.
         for _, sound in ipairs(sounds) do pcall(StopSound, sound, release == true, false) end
     end
@@ -55,22 +68,22 @@ do
         if RunSession and RunSession.Fail then RunSession.Fail(message) else error(message) end
     end
     function SurvivorStory.SetSummaryMode(enabled) summaryMode = enabled == true end
-    function SurvivorStory.SetStage(index) currentStage = index end
+    function SurvivorStory.SetStage(index) run.currentStage = index end
     function SurvivorStory.Remember(speaker, text)
-        local key = currentStage .. ":" .. speaker .. ":" .. text
-        if remembered[key] then return end
-        remembered[key] = true
-        dialogue[currentStage] = dialogue[currentStage] or {}
-        dialogue[currentStage][#dialogue[currentStage] + 1] = {speaker = speaker, text = text}
+        local key = run.currentStage .. ":" .. speaker .. ":" .. text
+        if run.remembered[key] then return end
+        run.remembered[key] = true
+        run.dialogue[run.currentStage] = run.dialogue[run.currentStage] or {}
+        run.dialogue[run.currentStage][#run.dialogue[run.currentStage] + 1] = {speaker = speaker, text = text}
     end
     local function SetBounds(minX, minY, maxX, maxY)
         -- Same native corner order as Blizzard.j's SetCameraBoundsToRect.
         SetCameraBounds(minX, minY, minX, maxY, maxX, maxY, maxX, minY)
     end
     local function StopCameraTransition(errors)
-        if not cameraGuardTimer then return end
-        local timer = cameraGuardTimer
-        cameraGuardTimer = nil
+        if not scene.cameraGuardTimer then return end
+        local timer = scene.cameraGuardTimer
+        scene.cameraGuardTimer = nil
         local ownErrors = errors == nil
         errors = errors or {}
         RunSession.CancelTimer(errors, "story camera timer", timer)
@@ -78,7 +91,7 @@ do
     end
     local function GuardCamera(x, y, duration)
         StopCameraTransition()
-        if SurvivorConfig.IsLocalPlayer() and cameraBounds then
+        if SurvivorConfig.IsLocalPlayer() and scene.cameraBounds then
             -- Read the in-flight target too, so rapid page clicks do not cut an unfinished pan.
             local previous = duration > 0 and {x = GetCameraTargetPositionX(), y = GetCameraTargetPositionY()} or nil
             -- Keep the old and new targets available for the existing smooth pan.
@@ -86,17 +99,17 @@ do
                 math.min(y, previous and previous.y or y) - 64,
                 math.max(x, previous and previous.x or x) + 64,
                 math.max(y, previous and previous.y or y) + 64)
-            cameraFocus = {x = x, y = y}
+            scene.cameraFocus = {x = x, y = y}
         end
         if duration <= 0 then return end
         -- One synchronized timer per transition; it never advances dialogue.
         local timer = CreateTimer()
-        cameraGuardTimer = timer
+        scene.cameraGuardTimer = timer
         TimerStart(timer, duration, false, function()
-            if cameraGuardTimer ~= timer then return end -- A new page/cleanup cancelled this shot.
+            if scene.cameraGuardTimer ~= timer then return end -- A new page/cleanup cancelled this shot.
             local ok, message = pcall(function()
                 StopCameraTransition()
-                if SurvivorConfig.IsLocalPlayer() and cameraBounds then
+                if SurvivorConfig.IsLocalPlayer() and scene.cameraBounds then
                     SetBounds(x - 64, y - 64, x + 64, y + 64)
                 end
             end)
@@ -118,23 +131,23 @@ do
     end
     local function CaptureCamera()
         if not SurvivorConfig.IsLocalPlayer() then return end
-        camera = {}
+        scene.camera = {}
         -- Native bounds already exclude camera margins; do not add those margins again.
-        cameraBounds = {minX = GetCameraBoundMinX(), minY = GetCameraBoundMinY(),
+        scene.cameraBounds = {minX = GetCameraBoundMinX(), minY = GetCameraBoundMinY(),
             maxX = GetCameraBoundMaxX(), maxY = GetCameraBoundMaxY()}
-        cameraFocus = {x = GetCameraTargetPositionX(), y = GetCameraTargetPositionY()}
+        scene.cameraFocus = {x = GetCameraTargetPositionX(), y = GetCameraTargetPositionY()}
         for _, field in ipairs({CAMERA_FIELD_TARGET_DISTANCE, CAMERA_FIELD_ANGLE_OF_ATTACK, CAMERA_FIELD_ROTATION,
             CAMERA_FIELD_ZOFFSET, CAMERA_FIELD_ROLL}) do
-            camera[field] = GetCameraField(field)
+            scene.camera[field] = GetCameraField(field)
             if field == CAMERA_FIELD_ANGLE_OF_ATTACK or field == CAMERA_FIELD_ROTATION or field == CAMERA_FIELD_ROLL then
-                camera[field] = camera[field] * bj_RADTODEG
+                scene.camera[field] = scene.camera[field] * bj_RADTODEG
             end
         end
     end
     function SurvivorStory.Reset()
         -- Reset the run's story record even when scene cleanup fails, as Expedition.Reset does.
         local cleaned, cleanupError = pcall(SurvivorStory.Cleanup)
-        clues, dialogue, remembered, currentStage = {}, {}, {}, 1
+        run = NewRun()
         local cleared, clearError = pcall(SurvivorUI.ClearSpeech)
         local errors = {}
         if not cleaned then errors[#errors + 1] = tostring(cleanupError) end
@@ -143,18 +156,18 @@ do
     end
     function SurvivorStory.Record(index)
         local entry = assert(SurvivorStory.stages[index], "Unknown story stage")
-        clues[index] = {name = SurvivorStage.Get(index).name,
+        run.clues[index] = {name = SurvivorStage.Get(index).name,
             text = entry.clue .. (entry.nextGoal and "\n다음 목표: " .. entry.nextGoal or "")}
     end
     function SurvivorStory.JournalChapters()
         local chapters = {}
         for i = 1, #SurvivorStory.stages do
-            local clue, extra, pages = clues[i], SurvivorExpedition.Journal(i), {}
+            local clue, extra, pages = run.clues[i], SurvivorExpedition.Journal(i), {}
             if clue or extra ~= "" then
                 pages[#pages + 1] = (clue and clue.text or "주요 경로: 아직 확보하지 못함")
                     .. (extra ~= "" and "\n\n" .. extra or "")
             end
-            for _, line in ipairs(dialogue[i] or {}) do
+            for _, line in ipairs(run.dialogue[i] or {}) do
                 pages[#pages + 1] = line.speaker .. "\n" .. line.text
             end
             if #pages > 0 then chapters[#chapters + 1] = {title = SurvivorStage.Get(i).name, pages = pages} end
@@ -169,11 +182,12 @@ do
         StopCameraTransition(errors)
         StopAudio(true)
         if SurvivorStage.SetDialogueAmbience then pcall(SurvivorStage.SetDialogueAmbience, false) end
-        local hero, restoreHero = hiddenHero, hiddenHero or portraitHero
-        local units, effects, states = portraitUnits, sceneEffects, actorStates
-        local restoreCamera, restoreBounds, hadPortrait = camera, cameraBounds, portraitHero ~= nil
-        portraitUnits, sceneEffects, actorStates, sceneX, sceneY = {}, {}, {}, nil, nil
-        hiddenHero, portraitHero, camera, cameraBounds, cameraFocus = nil, nil, nil, nil, nil
+        -- Detach the whole scene before any native call; the released sounds go with it.
+        local old = scene
+        scene = NewScene()
+        local hero, restoreHero = old.hiddenHero, old.hiddenHero or old.portraitHero
+        local units, effects, states = old.portraitUnits, old.sceneEffects, old.actorStates
+        local restoreCamera, restoreBounds, hadPortrait = old.camera, old.cameraBounds, old.portraitHero ~= nil
         if hadPortrait then Attempt(errors, "portrait selection", function()
             if SurvivorConfig.IsLocalPlayer() then ClearSelection() end
         end) end
@@ -228,14 +242,14 @@ do
     local function BeginScene(hero)
         SurvivorStory.Cleanup()
         assert(SurvivorConfig.UnitLive(hero), "Story scene needs the live gameplay hero")
-        hiddenHero = hero
+        scene.hiddenHero = hero
         ShowUnit(hero, false)
         if SurvivorStage.SetDialogueAmbience then pcall(SurvivorStage.SetDialogueAmbience, true) end
         local bounds = bj_mapInitialPlayableArea
         local point = SurvivorStage.ScenePoint and SurvivorStage.ScenePoint()
         local x, y = point and point.x or GetRectCenterX(bounds),
             point and point.y or GetRectCenterY(bounds)
-        sceneX, sceneY = x, y
+        scene.sceneX, scene.sceneY = x, y
         CaptureCamera()
         if SurvivorConfig.IsLocalPlayer() then ResetToGameCamera(0) end
         FrameScene(x, y, 1350, 0)
@@ -244,17 +258,17 @@ do
     local function BeginPortraits(hero, createUnits)
         if not hero then return end -- Compatibility for old text-only briefing callers.
         assert(SurvivorConfig.UnitLive(hero), "Story portraits need the live gameplay hero")
-        portraitHero = hero
-        if not camera then CaptureCamera() end
+        scene.portraitHero = hero
+        if not scene.camera then CaptureCamera() end
         -- Text-only compatibility callers retain their current shot.
-        if not sceneX then
-            GuardCamera(cameraFocus and cameraFocus.x or GetUnitX(hero), cameraFocus and cameraFocus.y or GetUnitY(hero), 0)
+        if not scene.sceneX then
+            GuardCamera(scene.cameraFocus and scene.cameraFocus.x or GetUnitX(hero), scene.cameraFocus and scene.cameraFocus.y or GetUnitY(hero), 0)
         end
         if not createUnits then return end
         -- ALICE hooks CreateUnit itself; exclude these types before its automatic registration.
         if ALICE_ExcludeTypes then ALICE_ExcludeTypes(SurvivorStory.portraitIds.anya, SurvivorStory.portraitIds.putress) end
         local bounds = bj_mapInitialPlayableArea
-        local focusX, focusY = sceneX or GetUnitX(hero), sceneY or GetUnitY(hero)
+        local focusX, focusY = scene.sceneX or GetUnitX(hero), scene.sceneY or GetUnitY(hero)
         local minX, maxX, minY, maxY = GetRectMinX(bounds) + 128, GetRectMaxX(bounds) - 128,
             GetRectMinY(bounds) + 128, GetRectMaxY(bounds) - 128
         local corner, distance = nil, -1
@@ -269,7 +283,7 @@ do
             -- Red player ownership matches the actors; pause and stripped abilities prevent orders.
             local x, y = corner.x + (i - 1) * 64 * corner.inward, corner.y
             local unit = CreateUnit(PortraitRed(), entry.id, x, y, 270)
-            if unit then portraitUnits[entry.speaker] = unit end
+            if unit then scene.portraitUnits[entry.speaker] = unit end
             assert(unit and GetUnitTypeId(unit) == entry.id, "Missing story portrait unit " .. entry.speaker)
             SetUnitColor(unit, PLAYER_COLOR_RED)
             SetUnitInvulnerable(unit, true)
@@ -284,17 +298,17 @@ do
         end
     end
     local function SelectSpeaker(speaker)
-        if not portraitHero or not SurvivorConfig.IsLocalPlayer() then return end
+        if not scene.portraitHero or not SurvivorConfig.IsLocalPlayer() then return end
         ClearSelection()
-        local unit = portraitUnits[speaker]
+        local unit = scene.portraitUnits[speaker]
         if SurvivorConfig.UnitExists(unit) then SelectUnit(unit, true) end
         -- "수색 기록" and summary pages deliberately have a neutral, unselected portrait.
     end
     local function Actor(model, x, y, scale, colorPlayer)
         local effect = AddSpecialEffect(model, x, y)
         assert(effect, "Could not create story actor")
-        sceneEffects[#sceneEffects + 1] = effect
-        actorStates[effect] = {x = x, y = y, height = 0, yaw = 0}
+        scene.sceneEffects[#scene.sceneEffects + 1] = effect
+        scene.actorStates[effect] = {x = x, y = y, height = 0, yaw = 0}
         BlzSetSpecialEffectScale(effect, scale or 1)
         if colorPlayer then BlzSetSpecialEffectColorByPlayer(effect, colorPlayer) end
         return effect
@@ -305,13 +319,13 @@ do
         if SurvivorStage.SceneProp then return SurvivorStage.SceneProp(key, model, x, y, scale, angle, tint) end
     end
     local function Move(effect, x, y, height)
-        local state = assert(actorStates[effect], "Missing story actor state")
+        local state = assert(scene.actorStates[effect], "Missing story actor state")
         BlzSetSpecialEffectPosition(effect, x, y, SurvivorConfig.TerrainZ(x, y) + (height or 0))
         state.x, state.y, state.height = x, y, height or 0
     end
     local function Yaw(effect, angle)
         BlzSetSpecialEffectYaw(effect, angle)
-        assert(actorStates[effect], "Missing story actor state").yaw = angle
+        assert(scene.actorStates[effect], "Missing story actor state").yaw = angle
     end
     local function Animation(effect, animation)
         -- Native call failures fall back to idle; the engine must confirm each model's actual sequences.
@@ -328,13 +342,13 @@ do
     }
     local function Cue(kind)
         if not SurvivorConfig.IsLocalPlayer() or type(CreateSound) ~= "function" then return end
-        local sound = sceneSoundCache[kind]
+        local sound = scene.sceneSoundCache[kind]
         local ok = pcall(function()
             if not sound then
                 sound = CreateSound(cuePaths[kind], false, false, false, 0, 0, "DefaultEAXON")
                 if not sound or sound == 0 then return end
-                sceneSoundCache[kind] = sound
-                sceneSounds[#sceneSounds + 1] = sound
+                scene.sceneSoundCache[kind] = sound
+                scene.sceneSounds[#scene.sceneSounds + 1] = sound
             else
                 StopSound(sound, false, false)
             end
@@ -350,8 +364,8 @@ do
             animated = options.animated ~= false}
     end
     StopMotion = function(snap, errors)
-        local previous = motion
-        motion = nil -- A saved callback cannot reach either the old or the next page.
+        local previous = scene.motion
+        scene.motion = nil -- A saved callback cannot reach either the old or the next page.
         StopAudio()
         if not previous then return end
         local ownErrors = errors == nil
@@ -373,7 +387,7 @@ do
         if instant then Finish(); return end
         local transitions, walking = {}, false
         for _, target in ipairs(targets) do
-            local state = assert(actorStates[target.effect], "Missing story actor state")
+            local state = assert(scene.actorStates[target.effect], "Missing story actor state")
             local moving = (target.x - state.x)^2 + (target.y - state.y)^2 > 1
             transitions[#transitions + 1] = {target = target, x = state.x, y = state.y, height = state.height,
                 yaw = state.yaw, turn = (target.yaw - state.yaw + math.pi) % (2 * math.pi) - math.pi}
@@ -387,10 +401,10 @@ do
             or cue == "inspect" and {{at = duration * 0.25, kind = "inspect"}} or {}
         local timer = CreateTimer()
         local current = {timer = timer, finish = Finish, elapsed = 0}
-        motion = current
+        scene.motion = current
         -- Native visual time runs while the session/ALICE clocks remain paused. It never advances a page.
         TimerStart(timer, 0.03, true, function()
-            if motion ~= current then return end
+            if scene.motion ~= current then return end
             local ok, message = pcall(function()
                 current.elapsed = math.min(duration, current.elapsed + 0.03)
                 local progress = current.elapsed / duration
@@ -408,7 +422,7 @@ do
                     end
                 end
                 if current.elapsed >= duration then
-                    motion = nil
+                    scene.motion = nil
                     local errors = {}
                     RunSession.CancelTimer(errors, "story motion timer", timer)
                     Finish()
@@ -442,7 +456,7 @@ do
             if not ok then error(SceneError(message), 0) end
         end
         local ok, message = pcall(function()
-            BeginPortraits(hero or hiddenHero, not concise)
+            BeginPortraits(hero or scene.hiddenHero, not concise)
             local generation = sceneGeneration
             SurvivorUI.ShowConversation(title .. (concise and " · 요약" or ""), shown, function()
                 seenScenes[key] = true
@@ -535,7 +549,7 @@ do
     -- Replaces a default reply only where it would no longer answer the changed second line.
     local optionalFollowUps = {[1] = "피할 줄 안다고 정신까지 온전하다는 뜻은 아니지만."}
     function SurvivorStory.ShowInterlude(index, hero, onComplete)
-        currentStage = index
+        run.currentStage = index
         local source = assert(scenes[index], "Unknown interlude")
         local pages = {}
         for i, page in ipairs(source) do pages[i] = Page(page.speaker, page.text) end
@@ -649,7 +663,7 @@ do
     }
     function SurvivorStory.ShowArrival(index, hero, onComplete)
         local source = assert(arrivals[index], "Unknown arrival scene")
-        currentStage = index
+        run.currentStage = index
         SurvivorStory.Cleanup()
         local pages = {}
         for i, page in ipairs(source) do pages[i] = Page(page.speaker, page.text) end
@@ -711,7 +725,7 @@ do
         end)
     end
     function SurvivorStory.ShowEnding(hero, onComplete)
-        currentStage = 5
+        run.currentStage = 5
         CreateScene(function()
             local x, y = BeginScene(hero)
             local anya = Actor(SurvivorStory.heroModel, x - 180, y + 80, 1, PortraitRed())

@@ -140,7 +140,7 @@ local text=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(3)
 assert(completed==0 and frames.AnyasLongNightStageText.text==text and black.alpha==255 and LiveTimers(.03)==0)
 SurvivorUI.AdvanceNarrative()
-assert(not hero.visible and #Local(SurvivorStory.Cleanup,'sceneEffects')==2)
+assert(not hero.visible and #StoryScene().sceneEffects==2)
 local sceneryCount=0;for _ in pairs(stageSceneProps)do sceneryCount=sceneryCount+1 end
 assert(sceneryCount>=4,'The introduction retains its grave and tracks as stage-owned landscape')
 assert(frames.NativeWorldFrame.visible and frames.NativeWorldBars.visible and frames.NativePortrait.visible,
@@ -273,11 +273,11 @@ SurvivorUI.AdvanceNarrative()
 for _=1,3 do SurvivorUI.AdvanceNarrative()end
 assert(frames.HSStoryPosition.text:find('4/4')and selectedUnit.id=='hsPA')
 local mirrored=0
-for _,unit in pairs(Local(SurvivorStory.Cleanup,'portraitUnits'))do
+for _,unit in pairs(StoryScene().portraitUnits)do
     assert(unit.maxLife==620 and unit.life==415,'Story portraits mirror the player hero HP');mirrored=mirrored+1
 end
 assert(mirrored==2,'Both story portraits exist')
-local retiring=Local(SurvivorStory.Cleanup,'sceneEffects')
+local retiring=StoryScene().sceneEffects
 for _,effect in ipairs(retiring)do storyEffects[effect]=true end
 closing=true;SurvivorUI.AdvanceNarrative()
 assert(completed==1 and events[1]=='hero visible'and events[2]=='hero selected'
@@ -299,8 +299,8 @@ local function Done()completed=completed+1 end
 SurvivorStory.ShowBriefing(hero,Done)
 local stale=Local(SurvivorUI.SkipConversation,'conversationClose');assert(type(stale)=='function')
 SurvivorStory.ShowInterlude(2,hero,Done)
-local fresh=Local(SurvivorStory.Cleanup,'sceneEffects')
-local unit,sceneTimer=selectedUnit,Local(SurvivorStory.Cleanup,'motion').timer
+local fresh=StoryScene().sceneEffects
+local unit,sceneTimer=selectedUnit,StoryScene().motion.timer
 stale();stale()
 assert(not hero.visible and selectedUnit==unit and not unit.removed and not fresh[1].destroyed
     and sceneTimer.running,'A detached close token cannot clean the next scene, selection or timer')
@@ -331,13 +331,13 @@ assert(not ok and tostring(message):find('injected intro failure'),'The failure 
 assert(not SurvivorUI.IsChoiceVisible() and Local(SurvivorUI.HidePanel,'restVisible')==false,
     'A failed intro stop must not leave the choice reported as visible (hidden HUD, blocked loot controls)')
 SurvivorUI.HidePanel()
-SurvivorStory.Record(1);assert(next(Local(SurvivorStory.Record,'clues'))~=nil)
+SurvivorStory.Record(1);assert(next(StoryRun().clues)~=nil)
 local cleanup=SurvivorStory.Cleanup
 SurvivorStory.Cleanup=function()error('injected scene failure',0)end
 ok,message=pcall(SurvivorStory.Reset)
 SurvivorStory.Cleanup=cleanup
 assert(not ok and tostring(message):find('injected scene failure'))
-assert(next(Local(SurvivorStory.Record,'clues'))==nil,'A failed scene cleanup still resets the run story record')
+assert(next(StoryRun().clues)==nil,'A failed scene cleanup still resets the run story record')
 SurvivorStory.Reset()
 `);
 
@@ -445,7 +445,7 @@ local function LivePortraits()
 end
 SurvivorStory.ShowBriefing(hero,Done)
 assert(LivePortraits()==2 and selectedUnit.id=='hsPP','The first Putress line selects his own native model')
-local proxies=Local(SurvivorStory.Cleanup,'portraitUnits')
+local proxies=StoryScene().portraitUnits
 for _,unit in pairs(proxies)do
     assert(unit.owner==Player(0)and unit.color==PLAYER_COLOR_RED and unit.paused and unit.invulnerable and unit.pathing==false,
         'Both native portraits use the playable red team without enabling orders or pathing')
@@ -459,7 +459,7 @@ SurvivorUI.AdvanceNarrative();assert(selectedUnit.id=='hsPA'and completed==0)
 SurvivorUI.AdvanceNarrative();assert(completed==1 and selectedUnit==hero and LivePortraits()==0)
 assert(hero.abilities.gameplay==1 and not hero.removed,'Presentation never mutates the gameplay hero abilities')
 SurvivorStory.ShowInterlude(1,hero,Done);assert(LivePortraits()==2 and selectedUnit.id=='hsPP')
-local scene=Local(SurvivorStory.Cleanup,'sceneEffects')
+local scene=StoryScene().sceneEffects
 assert(scene[1].model==[[Units\Forsaken\HeroAnya\HeroAnya.mdl]] and scene[2].model==SurvivorStory.putressModel)
 assert(scene[1].colorPlayer==Player(0)and scene[2].colorPlayer==Player(0),'Story actor effects share the native portraits red team')
 SurvivorUI.SkipConversation();SurvivorUI.SkipConversation()
@@ -514,13 +514,13 @@ end
 local function Restored()
     Bounds(saved.minX,saved.minY,saved.maxX,saved.maxY)
     assert(selectedUnit==hero and hero.visible~=false and cameraNative.x==hero.x and cameraNative.y==hero.y)
-    assert(Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil)
+    assert(StoryScene().cameraGuardTimer==nil)
     local n=#cameraEvents
     assert(cameraEvents[n-2].kind=='bounds'and cameraEvents[n-1].kind=='reset'and cameraEvents[n].kind=='position',
         'Restore the saved bounds before resetting and returning the camera to the hero')
 end
 local function GuardTimer()
-    local timer=Local(SurvivorStory.Cleanup,'cameraGuardTimer')
+    local timer=StoryScene().cameraGuardTimer
     assert(timer and timer.running and not timer.destroyed and timer.dt==.48 and timer.repeated==false,
         'Each representative shot owns one synchronized one-shot timer')
     return timer
@@ -538,7 +538,7 @@ local function PanBounds(previousX,previousY)
 end
 SurvivorStory.ShowBriefing(hero,Done)
 local briefing=GuardTimer()
-assert(not hero.visible and #Local(SurvivorStory.Cleanup,'sceneEffects')>=2,
+assert(not hero.visible and #StoryScene().sceneEffects>=2,
     'The first briefing has real world actors and a hidden gameplay hero')
 PanBounds(-7500,7380)
 SurvivorUI.AdvanceNarrative();assert(GuardTimer()==briefing,'Dialogue page two keeps the established shot')
@@ -553,10 +553,10 @@ SurvivorUI.AdvanceNarrative();PanBounds(-7243,7827)
 local second=GuardTimer();assert(second~=first);Cancelled(first)
 local text=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(.6);Bounds(lastPan.x-64,lastPan.y-64,lastPan.x+64,lastPan.y+64)
-assert(second.destroyed and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil)
+assert(second.destroyed and StoryScene().cameraGuardTimer==nil)
 assert(frames.AnyasLongNightStageText.text==text and completed==1,'Settling a pan does not advance the story')
 Cancelled(second)
-SurvivorUI.AdvanceNarrative();assert(Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil,'An inspection uses the current shot')
+SurvivorUI.AdvanceNarrative();assert(StoryScene().cameraGuardTimer==nil,'An inspection uses the current shot')
 SurvivorUI.AdvanceNarrative();local third=GuardTimer()
 SurvivorStory.ShowInterlude(2,hero,Done)
 local replacement=GuardTimer();assert(replacement~=third);Cancelled(third)
@@ -632,7 +632,7 @@ for stage=1,4 do
     finding=stage%2==0
     SurvivorStory.ShowInterlude(stage,hero,function()completed=completed+1 end)
     assert(hero.visible==false and frames.AnyasLongNightStageTitle.text:find("퓨트리스"))
-    local effects=Local(SurvivorStory.Cleanup,"sceneEffects")
+    local effects=StoryScene().sceneEffects
     assert(#effects>=2)
     for _=1,3 do SurvivorUI.AdvanceNarrative()end
     assert(frames.ScriptDialogButton700.text=='보상 선택')
@@ -862,7 +862,7 @@ local hero=CreateUnit(0,'hero',-7600,7400,0)
 SurvivorStage.ScenePoint=function()return {x=-8200,y=7000}end
 finding=nil;SurvivorStory.ShowInterlude(4,hero,Done)
 assert(frames.HSStoryPosition.text:find('1/4') and not frames.HSStoryPosition.text:find('요약'))
-local effects=Local(SurvivorStory.Cleanup,'sceneEffects')
+local effects=StoryScene().sceneEffects
 AdvanceVisualTime(.6)
 local anya=effects[1];local startX,startY=anya.x,anya.y
 SurvivorUI.AdvanceNarrative()
@@ -879,7 +879,7 @@ assert(frames.AnyasLongNightStageText.text:find('명령서'))
 SurvivorUI.SkipConversation();SurvivorStory.Reset();SurvivorStory.SetSummaryMode(false)
 SurvivorStory.ShowBriefing(Done);assert(frames.HSStoryPosition.text:find('1/4'))
 SurvivorUI.SkipConversation()
-assert(hero.visible and #Local(SurvivorStory.Cleanup,'sceneEffects')==0)
+assert(hero.visible and #StoryScene().sceneEffects==0)
 `);
 
 suite('stage arrivals stage both companions in the new place, wait for clicks and lead to preparation', presentationMocks,
@@ -890,7 +890,7 @@ local hero=CreateUnit(0,'hero',-7600,7400,0)
 for index=2,5 do
     SurvivorStory.SetSummaryMode(false)
     SurvivorUI.ShowStageIntro(index,function()completed=completed+1 end,hero)
-    local effects=Local(SurvivorStory.Cleanup,'sceneEffects');local anya,putress=effects[1],effects[2]
+    local effects=StoryScene().sceneEffects;local anya,putress=effects[1],effects[2]
     assert(not hero.visible and frames.HSStoryPosition.text:find('1/3')and frames.ScriptDialogButton700.text=='다음 대사')
     local putressX=putress.x
     for i=1,100 do TickTimers()end
@@ -921,7 +921,7 @@ SurvivorUI.Init(function()end,function()end,function()end,function()end,function
 state='STAGE_CLEAR';local completed=0
 local hero=CreateUnit(0,'hero',-7600,7400,0)
 SurvivorStory.ShowEnding(hero,function()completed=completed+1 end)
-local effects=Local(SurvivorStory.Cleanup,'sceneEffects')
+local effects=StoryScene().sceneEffects
 local anya,putress,figure,cart=effects[1],effects[2],effects[3],effects[4]
 assert(#effects<=96 and cart.model==SurvivorStory.transportModel and cart.alpha==0 and not hero.visible)
 assert(anya.model==[[Units\Forsaken\HeroAnya\HeroAnya.mdl]] and anya.colorPlayer==Player(0)and putress.colorPlayer==Player(0),
@@ -944,7 +944,7 @@ for _,effect in ipairs(effects)do assert(effect.destroyed,'An ending scene effec
 -- Page three is Anya's line, so Anya (not Putress) moves; the sewer seal search changes page four.
 for _,found in ipairs({false,true})do
     finding=found;SurvivorStory.ShowEnding(hero,function()completed=completed+1 end)
-    effects=Local(SurvivorStory.Cleanup,'sceneEffects');anya,putress=effects[1],effects[2]
+    effects=StoryScene().sceneEffects;anya,putress=effects[1],effects[2]
     SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
     local putressX,putressY,anyaX=putress.x,putress.y,anya.x
     SurvivorUI.AdvanceNarrative();AdvanceVisualTime(.7)
@@ -965,7 +965,7 @@ state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);local completed
 local function Done()completed=completed+1 end
 local function Near(a,b)assert(math.abs(a-b)<1e-6,'Unexpected interpolated position '..a..' vs '..b)end
 SurvivorStory.ShowBriefing(hero,Done)
-local effects=Local(SurvivorStory.Cleanup,'sceneEffects');local anya,putress=effects[1],effects[2]
+local effects=StoryScene().sceneEffects;local anya,putress=effects[1],effects[2]
 assert(anya.x==-160 and anya.y==95 and putress.x==125 and putress.y==165 and not hero.visible)
 AdvanceVisualTime(.18)
 assert(putress.yaw>1 and putress.yaw<math.pi and putress.x==125 and putress.y==165,
@@ -973,7 +973,7 @@ assert(putress.yaw>1 and putress.yaw<math.pi and putress.x==125 and putress.y==1
 AdvanceVisualTime(.18)
 assert(#soundHandles==0,'Turning in place does not emit footsteps')
 SurvivorUI.AdvanceNarrative()
-local motion=Local(SurvivorStory.Cleanup,'motion');local timer=motion.timer
+local motion=StoryScene().motion;local timer=motion.timer
 assert(timer.dt==.03 and timer.repeated and anya.animation==ANIM_TYPE_WALK and anya.x==-160 and anya.y==95)
 local page=frames.AnyasLongNightStageText.text
 AdvanceVisualTime(.09)
@@ -982,7 +982,7 @@ Near(anya.x,-160+90*eased);Near(anya.y,95+70*eased)
 assert(anya.x>-160 and anya.x<-70 and #soundHandles==0,'The actor visibly traverses the route before its first step cue')
 AdvanceVisualTime(.45)
 assert(anya.x==-70 and anya.y==165 and anya.animation==ANIM_TYPE_STAND and timer.destroyed)
-assert(Local(SurvivorStory.Cleanup,'motion')==nil and #soundHandles==2)
+assert(StoryScene().motion==nil and #soundHandles==2)
 for _,sound in ipairs(soundHandles)do
     assert(sound.path:find('HeroStep')and sound.volume==18 and not sound.loop and not sound.threeD and sound.starts==1)
 end
@@ -999,9 +999,9 @@ assert(LiveTimers(.03)==0 and LiveTimers()==1,'Settled scenes retain only the ma
 SurvivorUI.SkipConversation();assert(completed==1 and hero.visible)
 for _,sound in ipairs(soundHandles)do assert(sound.killed,'Cleanup releases every optional scene cue')end
 SurvivorStory.SetSummaryMode(true);SurvivorStory.ShowBriefing(hero,Done)
-local summaryEffects=Local(SurvivorStory.Cleanup,'sceneEffects')
+local summaryEffects=StoryScene().sceneEffects
 assert(summaryEffects[1].x==80 and summaryEffects[1].y==220 and #soundHandles==3
-    and Local(SurvivorStory.Cleanup,'motion')==nil,'Seen summaries apply the final pose immediately with no choreography or sound')
+    and StoryScene().motion==nil,'Seen summaries apply the final pose immediately with no choreography or sound')
 AdvanceVisualTime(3);assert(#soundHandles==3 and completed==1)
 SurvivorUI.SkipConversation();assert(completed==2)
 `);
@@ -1012,21 +1012,21 @@ SurvivorStage.ScenePoint=function()return {x=0,y=0}end
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);local completed=0
 SurvivorStory.ShowEnding(hero,function()completed=completed+1 end)
-local effects=Local(SurvivorStory.Cleanup,'sceneEffects');local anya,putress,figure,cart=effects[1],effects[2],effects[3],effects[4]
-local first=Local(SurvivorStory.Cleanup,'motion').timer
+local effects=StoryScene().sceneEffects;local anya,putress,figure,cart=effects[1],effects[2],effects[3],effects[4]
+local first=StoryScene().motion.timer
 AdvanceVisualTime(.09);assert(anya.x>-180 and anya.x<-70)
 SurvivorUI.AdvanceNarrative()
 assert(first.destroyed and anya.x==-70 and anya.y==170,'An interrupted action settles its old target before the next page')
-local second=Local(SurvivorStory.Cleanup,'motion').timer
+local second=StoryScene().motion.timer
 local x,y=putress.x,putress.y;first.callback()
-assert(putress.x==x and putress.y==y and Local(SurvivorStory.Cleanup,'motion').timer==second)
+assert(putress.x==x and putress.y==y and StoryScene().motion.timer==second)
 SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative()
-local loading=Local(SurvivorStory.Cleanup,'motion').timer
+local loading=StoryScene().motion.timer
 assert(cart.alpha==255 and cart.x==-230 and figure.z~=75,'Loading is a visible action rather than an instant relocation')
 AdvanceVisualTime(.33)
 assert(cart.x>-230 and cart.x<20 and figure.z>0 and figure.z<75)
 AdvanceVisualTime(.33);assert(cart.x==20 and cart.y==290 and figure.z==75 and loading.destroyed)
-SurvivorUI.AdvanceNarrative();local departing=Local(SurvivorStory.Cleanup,'motion').timer
+SurvivorUI.AdvanceNarrative();local departing=StoryScene().motion.timer
 AdvanceVisualTime(.33)
 assert(math.abs(cart.x-210)<1e-6 and math.abs(cart.y-397.5)<1e-6 and completed==0)
 AdvanceVisualTime(.33)
@@ -1036,10 +1036,10 @@ assert(cart.x==400 and frames.AnyasLongNightStageText.text==text and completed==
 SurvivorUI.SkipConversation();assert(completed==1 and hero.visible)
 for i=1,12 do
     SurvivorStory.ShowInterlude(i%4+1,hero,function()completed=completed+1 end)
-    local old=Local(SurvivorStory.Cleanup,'motion').timer
+    local old=StoryScene().motion.timer
     assert(LiveTimers(.03)==2 and LiveTimers()==4,'Only one actor, one reveal and one camera transition can be live')
     SurvivorStory.Reset();SurvivorUI.HidePanel()
-    old.callback();assert(hero.visible and LiveTimers()==1 and #Local(SurvivorStory.Cleanup,'sceneEffects')==0)
+    old.callback();assert(hero.visible and LiveTimers()==1 and #StoryScene().sceneEffects==0)
 end
 `);
 
@@ -1049,8 +1049,8 @@ SurvivorStage.ScenePoint=function()return {x=0,y=0}end
 SurvivorUI.Init(function()end,function()end,function()end,function()end,function()end)
 state='STAGE_CLEAR';local hero=CreateUnit(0,'Uany',-7680,7424,0);selectedUnit=hero
 SurvivorStory.ShowInterlude(1,hero,function()end)
-local scene=Local(SurvivorStory.Cleanup,'sceneEffects')
-local old=Local(SurvivorStory.Cleanup,'motion').timer;local camera=Local(SurvivorStory.Cleanup,'cameraGuardTimer')
+local scene=StoryScene().sceneEffects
+local old=StoryScene().motion.timer;local camera=StoryScene().cameraGuardTimer
 local timerDestroy,effectDestroy=DestroyTimer,DestroyEffect
 function DestroyTimer(timer)if timer==old then error('motion destroy failure')end;timerDestroy(timer)end
 function DestroyEffect(effect)if effect==scene[1]then error('actor destroy failure')end;effectDestroy(effect)end
@@ -1058,14 +1058,14 @@ local ok,message=pcall(SurvivorStory.Cleanup)
 assert(not ok and message:find('motion destroy failure')and message:find('actor destroy failure'))
 assert(not old.running and camera.destroyed and hero.visible and selectedUnit==hero)
 for index=2,#scene do assert(scene[index].destroyed,'A failed native must not abandon later actors')end
-assert(Local(SurvivorStory.Cleanup,'motion')==nil and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil)
+assert(StoryScene().motion==nil and StoryScene().cameraGuardTimer==nil)
 DestroyTimer,DestroyEffect=timerDestroy,effectDestroy;effectDestroy(scene[1]);timerDestroy(old)
 SurvivorUI.HidePanel();SurvivorStory.ShowBriefing(hero,function()end)
-local fresh=Local(SurvivorStory.Cleanup,'sceneEffects');local x,y=fresh[1].x,fresh[1].y
+local fresh=StoryScene().sceneEffects;local x,y=fresh[1].x,fresh[1].y
 old.callback();assert(fresh[1].x==x and fresh[1].y==y,'An old failed-destroy callback cannot touch a new scene')
 SurvivorUI.SkipConversation()
 SurvivorStory.ShowInterlude(2,hero,function()end)
-local failed=Local(SurvivorStory.Cleanup,'motion').timer;local position=BlzSetSpecialEffectPosition
+local failed=StoryScene().motion.timer;local position=BlzSetSpecialEffectPosition
 function BlzSetSpecialEffectPosition()error('visual position failure')end
 RunSession.Fail=function(errorMessage)SurvivorUI.HidePanel();error(errorMessage)end
 ok,message=pcall(function()AdvanceVisualTime(.03)end)
@@ -1077,13 +1077,13 @@ function BlzPlaySpecialEffect(effect,animation)
     if animation==ANIM_TYPE_SPELL then error('missing model gesture')end;play(effect,animation)
 end
 SurvivorStory.ShowBriefing(hero,function()end);SurvivorUI.AdvanceNarrative();SurvivorUI.AdvanceNarrative()
-assert(Local(SurvivorStory.Cleanup,'sceneEffects')[2].animation==ANIM_TYPE_STAND,'A failed optional gesture falls back to idle')
+assert(StoryScene().sceneEffects[2].animation==ANIM_TYPE_STAND,'A failed optional gesture falls back to idle')
 SurvivorUI.SkipConversation()
 local effectAlpha,unitVisibility,effectPosition=BlzSetSpecialEffectAlpha,ShowUnit,BlzSetSpecialEffectPosition
 for _,fault in ipairs({'effect hide','effect sink','portrait hide'})do
     SurvivorStory.ShowBriefing(hero,function()end)
-    local retiring=Local(SurvivorStory.Cleanup,'sceneEffects')
-    local proxies=Local(SurvivorStory.Cleanup,'portraitUnits')
+    local retiring=StoryScene().sceneEffects
+    local proxies=StoryScene().portraitUnits
     local firstProxy=proxies['안야']
     local hiddenEffects,hiddenUnits,sunkEffects={},{},{}
     function BlzSetSpecialEffectAlpha(effect,value)
@@ -1131,8 +1131,8 @@ for _,fault in ipairs({'effect hide','effect sink','portrait hide'})do
         assert(unit.removed,'A failed hide must not prevent removing that proxy or later units')
         if fault~='portrait hide'or unit~=firstProxy then assert(unit.visible==false)end
     end
-    assert(Local(SurvivorStory.Cleanup,'motion')==nil and Local(SurvivorStory.Cleanup,'cameraGuardTimer')==nil
-        and Local(SurvivorStory.Cleanup,'sceneX')==nil)
+    assert(StoryScene().motion==nil and StoryScene().cameraGuardTimer==nil
+        and StoryScene().sceneX==nil)
     BlzSetSpecialEffectAlpha,ShowUnit,BlzSetSpecialEffectPosition,DestroyEffect,RemoveUnit=
         effectAlpha,unitVisibility,effectPosition,effectDestroy,nativeRemove
     SurvivorUI.HidePanel();SurvivorStory.Cleanup();assert(LiveTimers(.03)==0)

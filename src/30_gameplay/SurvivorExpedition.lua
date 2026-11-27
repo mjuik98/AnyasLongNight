@@ -68,9 +68,18 @@ do
     local heroLines = {anya = {riskDone = "챙겼어. 이제 빠지자."}, putress = {riskDone = "회수했다. 이제 물러나지."}}
     -- combat is the run owner's port {grantRecovery, spawnCourier, releaseCourier};
     -- this module never reaches into SurvivorCombat, which already queries it.
-    local hero, stage, started, rewardCallback, combat
-    local objective, risk, records = nil, nil, {}
-    local pulse = 0
+    -- Everything one run owns: the journal records per stage, then the current stage's
+    -- hero, clock, ports and markers. Reset swaps in a fresh NewRun(); EndStage swaps in
+    -- one that carries only the journal and stage index forward (RecordReward and the
+    -- journal still read them), so a new field needs no second reset list.
+    local function NewRun(records, stage)
+        return {
+            records = records or {}, stage = stage,
+            hero = nil, started = nil, rewardCallback = nil, combat = nil,
+            objective = nil, risk = nil, pulse = 0,
+        }
+    end
+    local run = NewRun()
     local function Near(unit, point, radius)
         return (GetUnitX(unit) - point.x)^2 + (GetUnitY(unit) - point.y)^2 <= radius^2
     end
@@ -91,7 +100,7 @@ do
         SetTextTagPermanent(point.tag, true)
     end
     local function Place(angle)
-        return SurvivorStage.FindPoint(angle, 1000, objective and objective.points or {})
+        return SurvivorStage.FindPoint(angle, 1000, run.objective and run.objective.points or {})
     end
     local function Say(text)
         -- Presentation: also reached from kill callbacks inside weapon hit loops.
@@ -100,7 +109,7 @@ do
     -- The playing hero speaks its own line; chapter[heroId] overrides the Anya text.
     -- records[stage].reply keeps the Anya text because story scenes reuse it.
     local function Speak(chapter, key, index)
-        local id, profile = SurvivorConfig.HeroOf(hero)
+        local id, profile = SurvivorConfig.HeroOf(run.hero)
         local lines = chapter and chapter[id] or heroLines[id]
         local text = lines and lines[key]
         if index then text = text and text[index] end
@@ -111,201 +120,202 @@ do
         SurvivorConfig.Present("expedition line", SurvivorUI.Say, profile.name, text)
     end
     local function Locate(point)
-        local dx, dy = point.x - GetUnitX(hero), point.y - GetUnitY(hero)
+        local dx, dy = point.x - GetUnitX(run.hero), point.y - GetUnitY(run.hero)
         local direction = math.abs(dx) > math.abs(dy) and (dx > 0 and "동쪽" or "서쪽") or (dy > 0 and "북쪽" or "남쪽")
         return direction .. " " .. math.floor(math.sqrt(dx * dx + dy * dy))
     end
-    function SurvivorExpedition.RiskActive() return risk ~= nil and risk.state == "active" end
-    function SurvivorExpedition.HasRiskNotice() return risk ~= nil and (risk.state == "offered" or risk.state == "active") end
+    function SurvivorExpedition.RiskActive() return run.risk ~= nil and run.risk.state == "active" end
+    function SurvivorExpedition.HasRiskNotice() return run.risk ~= nil and (run.risk.state == "offered" or run.risk.state == "active") end
     local function RiskWindow()
         -- Keep a full 30-second challenge before the boss, with time to accept it.
-        local closes = math.min(180, SurvivorConfig.StageTiming(stage).bossStart - 30)
+        local closes = math.min(180, SurvivorConfig.StageTiming(run.stage).bossStart - 30)
         return math.min(95, closes - 60), closes
     end
     function SurvivorExpedition.RiskOffer()
-        if not SurvivorConfig.UnitLive(hero) or not RunSession.IsRunning()
-            or not risk or risk.state ~= "offered" then return nil end
-        local age = RunSession.GetElapsed() - started
+        if not SurvivorConfig.UnitLive(run.hero) or not RunSession.IsRunning()
+            or not run.risk or run.risk.state ~= "offered" then return nil end
+        local age = RunSession.GetElapsed() - run.started
         local opens, closes = RiskWindow()
-        if age < opens or age >= closes or not Near(hero, risk, 140) then return nil end
-        local chapter = chapters[stage]
-        local reward = SurvivorConfig.encounters[stage].riskReward.label
+        if age < opens or age >= closes or not Near(run.hero, run.risk, 140) then return nil end
+        local chapter = chapters[run.stage]
+        local reward = SurvivorConfig.encounters[run.stage].riskReward.label
         return {name = chapter.relic, remaining = math.ceil(closes - age), seconds = 30,
             text = chapter.relic .. "\n30초 생존: " .. reward .. " 장비 택 1\n" .. RiskPenalty(" · ") .. "\n장소를 벗어나도 도전은 유지됩니다."}
     end
     function SurvivorExpedition.AcceptRisk()
         if not SurvivorExpedition.RiskOffer() then return false end
         -- Recheck live offer, position and run state when the explicit action arrives.
-        risk.state, risk.untilTime = "active", RunSession.GetElapsed() + 30
-        records[stage].risk = "도전 중"
-        RemoveMarker(risk)
-        Speak(chapters[stage], "riskLine")
+        run.risk.state, run.risk.untilTime = "active", RunSession.GetElapsed() + 30
+        run.records[run.stage].risk = "도전 중"
+        RemoveMarker(run.risk)
+        Speak(chapters[run.stage], "riskLine")
         return true
     end
     function SurvivorExpedition.SearchRemaining()
-        if not hero or not objective or objective.state ~= "search" then return nil end
-        return math.max(0, SurvivorConfig.StageTiming(stage).bossStart - (RunSession.GetElapsed() - started))
+        if not run.hero or not run.objective or run.objective.state ~= "search" then return nil end
+        return math.max(0, SurvivorConfig.StageTiming(run.stage).bossStart - (RunSession.GetElapsed() - run.started))
     end
-    function SurvivorExpedition.GetFinding(index) return records[index] and records[index].finding end
-    function SurvivorExpedition.GetReply(index) return records[index] and records[index].reply end
+    function SurvivorExpedition.GetFinding(index) return run.records[index] and run.records[index].finding end
+    function SurvivorExpedition.GetReply(index) return run.records[index] and run.records[index].reply end
     -- The interlude answers the finding again; it must not repeat the combat subtitle word for word.
     function SurvivorExpedition.GetSceneReply(index)
-        return records[index] and records[index].reply and chapters[index].sceneReply or nil
+        return run.records[index] and run.records[index].reply and chapters[index].sceneReply or nil
     end
-    function SurvivorExpedition.HasAdvantage(index) return records[index] ~= nil and records[index].finding ~= nil end
+    function SurvivorExpedition.HasAdvantage(index) return run.records[index] ~= nil and run.records[index].finding ~= nil end
     function SurvivorExpedition.UseAdvantage(index)
-        if not SurvivorExpedition.HasAdvantage(index) or records[index].used then return false end
-        records[index].used = true
+        if not SurvivorExpedition.HasAdvantage(index) or run.records[index].used then return false end
+        run.records[index].used = true
         Speak(chapters[index], "insight")
         return true
     end
     function SurvivorExpedition.RecordReward(id)
-        if records[stage] then records[stage].risk = "성공 · " .. SurvivorEquipment.Name(id) end
+        if run.records[run.stage] then run.records[run.stage].risk = "성공 · " .. SurvivorEquipment.Name(id) end
     end
     function SurvivorExpedition.Journal(index)
-        local record = records[index]
+        local record = run.records[index]
         if not record then return "" end
         return (record.finding and "추가 단서: " .. record.finding or "추가 수색: 미확인")
             .. (record.finding and ("\n공략 정보: " .. chapters[index].advantage .. (record.used and " · 활용" or " · 확보")) or "")
             .. "\n봉인 조사: " .. (record.risk or "미참여")
     end
     function SurvivorExpedition.BeginStage(unit, index, elapsed, callback, combatPort)
+        -- EndStage leaves a run with only the journal, so every stage field starts fresh.
         SurvivorExpedition.EndStage()
         assert(type(combatPort) == "table", "Expedition needs the combat port")
-        hero, stage, started, rewardCallback, combat = unit, index, elapsed, callback, combatPort
-        pulse = 0
-        records[stage] = {risk = "미참여"}
-        local chapter = chapters[stage]
-        local points = SurvivorStage.SearchPoints(stage)
-        objective = #points == chapter.count and {points = points, index = 1, x = points[1].x, y = points[1].y} or nil
-        risk = Place(math.pi * 1.25 + (stage - 1) * math.pi / 2)
-        if objective then objective.progress, objective.state = 0, "waiting" end
-        if risk then risk.state = "waiting" end
+        run.hero, run.stage, run.started, run.rewardCallback, run.combat = unit, index, elapsed, callback, combatPort
+        run.records[run.stage] = {risk = "미참여"}
+        local chapter = chapters[run.stage]
+        local points = SurvivorStage.SearchPoints(run.stage)
+        run.objective = #points == chapter.count and {points = points, index = 1, x = points[1].x, y = points[1].y} or nil
+        run.risk = Place(math.pi * 1.25 + (run.stage - 1) * math.pi / 2)
+        if run.objective then run.objective.progress, run.objective.state = 0, "waiting" end
+        if run.risk then run.risk.state = "waiting" end
     end
     local function CompleteSearch()
-        objective.state = "complete"
-        RemoveMarker(objective)
-        local chapter = chapters[stage]
-        records[stage].finding, records[stage].reply = chapter.finding, chapter.reply
-        local healthReward = combat.grantRecovery()
-        rewardCallback("search")
+        run.objective.state = "complete"
+        RemoveMarker(run.objective)
+        local chapter = chapters[run.stage]
+        run.records[run.stage].finding, run.records[run.stage].reply = chapter.finding, chapter.reply
+        local healthReward = run.combat.grantRecovery()
+        run.rewardCallback("search")
         SurvivorConfig.Present("clue cue", SurvivorUI.Cue, "clue")
         Say("|cff70e6cc수색 완료 · 리롤 보충|r\n" .. healthReward)
         Speak(chapter, "reply")
     end
     local function AdvanceSearch()
-        local chapter = chapters[stage]
-        Speak(chapter, "beats", objective.index)
-        RemoveMarker(objective)
-        if objective.index == #objective.points then CompleteSearch(); return end
-        objective.index, objective.progress = objective.index + 1, 0
-        local point = objective.points[objective.index]
-        objective.x, objective.y = point.x, point.y
-        Marker(objective, "수색 · " .. chapter.name .. " " .. objective.index .. "/" .. #objective.points, 90, 230, 200)
+        local chapter = chapters[run.stage]
+        Speak(chapter, "beats", run.objective.index)
+        RemoveMarker(run.objective)
+        if run.objective.index == #run.objective.points then CompleteSearch(); return end
+        run.objective.index, run.objective.progress = run.objective.index + 1, 0
+        local point = run.objective.points[run.objective.index]
+        run.objective.x, run.objective.y = point.x, point.y
+        Marker(run.objective, "수색 · " .. chapter.name .. " " .. run.objective.index .. "/" .. #run.objective.points, 90, 230, 200)
         PingMinimapEx(point.x, point.y, 4, 90, 230, 200, false)
     end
     function SurvivorExpedition.OnKill(dead, isBoss)
-        if isBoss or not hero or not objective or objective.state ~= "search" then return end
-        local chapter = chapters[stage]
-        if chapter.mode == "courier" and dead == objective.courier then
-            objective.courier = nil
+        if isBoss or not run.hero or not run.objective or run.objective.state ~= "search" then return end
+        local chapter = chapters[run.stage]
+        if chapter.mode == "courier" and dead == run.objective.courier then
+            run.objective.courier = nil
             Speak(chapter, "beats", 1)
             CompleteSearch()
-        elseif chapter.mode == "study" and Near(hero, objective, 320) and Near(dead, objective, 450) then
-            objective.progress = objective.progress + 0.6
-            if objective.progress >= chapter.seconds then AdvanceSearch() end
+        elseif chapter.mode == "study" and Near(run.hero, run.objective, 320) and Near(dead, run.objective, 450) then
+            run.objective.progress = run.objective.progress + 0.6
+            if run.objective.progress >= chapter.seconds then AdvanceSearch() end
         end
     end
     function SurvivorExpedition.Step(dt, elapsed)
-        if not hero or not RunSession.IsRunning() then return end
-        local age, chapter = elapsed - started, chapters[stage]
-        if age >= SurvivorConfig.StageTiming(stage).bossStart then
-            if objective and objective.state ~= "complete" then
-                objective.state = "closed"; RemoveMarker(objective)
-                if objective.courier then combat.releaseCourier(objective.courier); objective.courier = nil end
+        if not run.hero or not RunSession.IsRunning() then return end
+        local age, chapter = elapsed - run.started, chapters[run.stage]
+        if age >= SurvivorConfig.StageTiming(run.stage).bossStart then
+            if run.objective and run.objective.state ~= "complete" then
+                run.objective.state = "closed"; RemoveMarker(run.objective)
+                if run.objective.courier then run.combat.releaseCourier(run.objective.courier); run.objective.courier = nil end
             end
-            if risk and risk.state ~= "complete" then risk.state = "closed"; RemoveMarker(risk) end
+            if run.risk and run.risk.state ~= "complete" then run.risk.state = "closed"; RemoveMarker(run.risk) end
             return
         end
-        pulse = pulse + dt
-        if objective and objective.state == "waiting" and age >= 20 and elapsed >= (objective.retry or 0) then
+        run.pulse = run.pulse + dt
+        if run.objective and run.objective.state == "waiting" and age >= 20 and elapsed >= (run.objective.retry or 0) then
             if chapter.mode == "courier" then
-                objective.courier = combat.spawnCourier(objective.points)
-                objective.retry = elapsed + 0.5
+                run.objective.courier = run.combat.spawnCourier(run.objective.points)
+                run.objective.retry = elapsed + 0.5
             end
-            if chapter.mode ~= "courier" or objective.courier then
-                objective.state = "search"
-                Marker(objective, "수색 · " .. chapter.name, 90, 230, 200)
-                PingMinimapEx(objective.x, objective.y, 4, 90, 230, 200, false)
+            if chapter.mode ~= "courier" or run.objective.courier then
+                run.objective.state = "search"
+                Marker(run.objective, "수색 · " .. chapter.name, 90, 230, 200)
+                PingMinimapEx(run.objective.x, run.objective.y, 4, 90, 230, 200, false)
             end
         end
-        if objective and objective.state == "search" then
+        if run.objective and run.objective.state == "search" then
             local remaining = SurvivorExpedition.SearchRemaining()
-            if remaining <= 30 and not objective.deadlineWarned then
-                objective.deadlineWarned = true
+            if remaining <= 30 and not run.objective.deadlineWarned then
+                run.objective.deadlineWarned = true
                 Say(string.format("|cff70e6cc수색 종료까지 %d초|r", math.ceil(remaining)))
             end
-            if chapter.mode == "courier" and objective.courier then
-                objective.x, objective.y = GetUnitX(objective.courier), GetUnitY(objective.courier)
-                SetTextTagPos(objective.tag, objective.x, objective.y, 90)
+            if chapter.mode == "courier" and run.objective.courier then
+                run.objective.x, run.objective.y = GetUnitX(run.objective.courier), GetUnitY(run.objective.courier)
+                SetTextTagPos(run.objective.tag, run.objective.x, run.objective.y, 90)
             elseif chapter.seconds then
-                if Near(hero, objective, chapter.mode == "study" and 260 or 180) then objective.progress = objective.progress + dt end
-                if objective.progress >= chapter.seconds then AdvanceSearch() end
-            elseif Near(hero, objective, 180) then AdvanceSearch() end
+                if Near(run.hero, run.objective, chapter.mode == "study" and 260 or 180) then run.objective.progress = run.objective.progress + dt end
+                if run.objective.progress >= chapter.seconds then AdvanceSearch() end
+            elseif Near(run.hero, run.objective, 180) then AdvanceSearch() end
         end
         local riskOpens, riskCloses = RiskWindow()
-        if risk and risk.state == "waiting" and age >= riskOpens then
-            risk.state = "offered"
-            Marker(risk, "위험 · " .. chapter.relic .. " (접근 후 수락)", 235, 130, 245)
-            PingMinimapEx(risk.x, risk.y, 4, 235, 130, 245, false)
+        if run.risk and run.risk.state == "waiting" and age >= riskOpens then
+            run.risk.state = "offered"
+            Marker(run.risk, "위험 · " .. chapter.relic .. " (접근 후 수락)", 235, 130, 245)
+            PingMinimapEx(run.risk.x, run.risk.y, 4, 235, 130, 245, false)
             SurvivorConfig.Present("risk line", SurvivorUI.Say, "수색 기록", chapter.temptation)
         end
-        if risk and risk.state == "offered" then
-            if age >= riskCloses then risk.state = "closed"; RemoveMarker(risk) end
-        elseif risk and risk.state == "active" and elapsed >= risk.untilTime then
-            risk.state = "complete" -- Consume before a modal callback; no duplicate rewards.
-            records[stage].risk = "생존 성공 · 장비 회수"
+        if run.risk and run.risk.state == "offered" then
+            if age >= riskCloses then run.risk.state = "closed"; RemoveMarker(run.risk) end
+        elseif run.risk and run.risk.state == "active" and elapsed >= run.risk.untilTime then
+            run.risk.state = "complete" -- Consume before a modal callback; no duplicate rewards.
+            run.records[run.stage].risk = "생존 성공 · 장비 회수"
             Speak(nil, "riskDone")
-            rewardCallback("risk")
+            run.rewardCallback("risk")
         end
-        if pulse >= 15 then
-            pulse = 0
-            local point = objective and objective.state == "search" and objective or risk and risk.state == "offered" and risk
-            if point then PingMinimapEx(point.x, point.y, 2, point == objective and 90 or 235, 180, 220, false) end
+        if run.pulse >= 15 then
+            run.pulse = 0
+            local point = run.objective and run.objective.state == "search" and run.objective or run.risk and run.risk.state == "offered" and run.risk
+            if point then PingMinimapEx(point.x, point.y, 2, point == run.objective and 90 or 235, 180, 220, false) end
         end
     end
     function SurvivorExpedition.Status(riskOnly)
-        if not hero then return "" end
-        local chapter, lines = chapters[stage], {}
-        if not riskOnly and objective and objective.state == "search" then
-            lines[#lines + 1] = "|cff70e6cc선택 수색: " .. chapter.name .. "|r · " .. Locate(objective)
+        if not run.hero then return "" end
+        local chapter, lines = chapters[run.stage], {}
+        if not riskOnly and run.objective and run.objective.state == "search" then
+            lines[#lines + 1] = "|cff70e6cc선택 수색: " .. chapter.name .. "|r · " .. Locate(run.objective)
             lines[#lines + 1] = string.format("보스 등장 시 수색 종료 · |cffffcc00남은 %d초|r", math.ceil(SurvivorExpedition.SearchRemaining()))
-            lines[#lines + 1] = chapter.action .. (chapter.seconds and string.format(" (%.1f/%.0f초)", math.min(objective.progress, chapter.seconds), chapter.seconds)
-                or chapter.mode ~= "courier" and (" (" .. (objective.index - 1) .. "/" .. #objective.points .. ")") or "")
+            lines[#lines + 1] = chapter.action .. (chapter.seconds and string.format(" (%.1f/%.0f초)", math.min(run.objective.progress, chapter.seconds), chapter.seconds)
+                or chapter.mode ~= "courier" and (" (" .. (run.objective.index - 1) .. "/" .. #run.objective.points .. ")") or "")
         end
-        if risk and risk.state == "offered" then
+        if run.risk and run.risk.state == "offered" then
             local _, closes = RiskWindow()
-            lines[#lines + 1] = "|cffeb82f5위험: " .. chapter.relic .. "|r · " .. Locate(risk)
-            lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, closes - (RunSession.GetElapsed() - started))), SurvivorConfig.encounters[stage].riskReward.label)
+            lines[#lines + 1] = "|cffeb82f5위험: " .. chapter.relic .. "|r · " .. Locate(run.risk)
+            lines[#lines + 1] = string.format("접근 후 ‘조사 수락’ · 종료 %d초 · %s 장비", math.ceil(math.max(0, closes - (RunSession.GetElapsed() - run.started))), SurvivorConfig.encounters[run.stage].riskReward.label)
             lines[#lines + 1] = "수락 후 30초: " .. RiskPenalty(" · ")
             lines[#lines + 1] = "장소를 벗어나도 도전은 유지됩니다."
         elseif SurvivorExpedition.RiskActive() then
-            lines[#lines + 1] = string.format("|cffeb82f5봉인 경보 %d초|r · %s", math.ceil(math.max(0, risk.untilTime - RunSession.GetElapsed())),
+            lines[#lines + 1] = string.format("|cffeb82f5봉인 경보 %d초|r · %s", math.ceil(math.max(0, run.risk.untilTime - RunSession.GetElapsed())),
                 RiskPenalty(" / "))
         end
         return table.concat(lines, "\n")
     end
     function SurvivorExpedition.SetPaused(paused)
-        for _, point in ipairs({objective or false, risk or false}) do
+        for _, point in ipairs({run.objective or false, run.risk or false}) do
             if point and point.effect then BlzSetSpecialEffectTimeScale(point.effect, paused and 0 or 1) end
         end
     end
     function SurvivorExpedition.EndStage()
-        if risk and risk.state == "active" and records[stage] then records[stage].risk = "중단 · 보상 없음" end
+        if run.risk and run.risk.state == "active" and run.records[run.stage] then run.records[run.stage].risk = "중단 · 보상 없음" end
         -- Detach ownership before native calls; a failed removal must not keep
         -- the old markers or block the next BeginStage/Reset.
-        local oldObjective, oldRisk, oldCombat = objective, risk, combat
-        objective, risk, hero, rewardCallback, combat = nil, nil, nil, nil, nil
+        local old = run
+        run = NewRun(old.records, old.stage)
+        local oldObjective, oldRisk, oldCombat = old.objective, old.risk, old.combat
         local errors = {}
         local function Release(label, point)
             if not point then return end
@@ -325,7 +335,7 @@ do
     end
     function SurvivorExpedition.Reset()
         local ok, message = pcall(SurvivorExpedition.EndStage)
-        records = {}
+        run = NewRun()
         if not ok then error(message, 0) end
     end
 end

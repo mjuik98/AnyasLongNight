@@ -272,7 +272,7 @@ release/development 빌드의 기본 입력은 정식 테스트 맵입니다. �
 7. 장면 종료 시 선택 영웅 표시/선택 → 초상화 유닛 제거 → 카메라 복원 → 기본 UI 복원 순서를 유지합니다. 중복·지연 close 콜백이 새 장면을 정리하지 않도록 세대 번호를 확인합니다. Lua `pcall`은 엔진 메모리 오류를 복구하지 못합니다.
 8. 정적 검사·네이티브 모의 실행과 실제 Warcraft III/World Editor 검증을 구분합니다.
 9. 새 Lua 모듈은 `build/source-order.json`에 의존 순서대로 추가하고, 그 모듈을 읽는 회귀 스위트의 소스 목록(`build/check/harness.mjs`의 `combat`·`uiModules` 등)에도 넣습니다.
-10. 한 판에 속한 상태는 모듈 지역 변수로 흩지 않고 실행 상태 테이블에 둡니다. 전투는 `SurvivorCombat`의 `NewRun()`, 생명주기는 `AnyasLongNight`의 `NewRun()`·`ResetStageClocks`가 기본값의 유일한 출처이며, 분리된 전투 모듈은 같은 테이블을 `Attach`로 받습니다. 회귀 스위트는 개별 지역 변수 대신 `CombatRun()`·`LifecycleRun()`으로 이 테이블을 읽고 씁니다.
+10. 한 판에 속한 상태는 모듈 지역 변수로 흩지 않고 실행 상태 테이블에 둡니다. 기본값의 유일한 출처는 전투 `SurvivorCombat`의 `NewRun()`, 생명주기 `AnyasLongNight`의 `NewRun()`·`ResetStageClocks`, 장비 `SurvivorEquipment`의 `NewRun()`, 원정 `SurvivorExpedition`의 `NewRun()`(스테이지 종료 시 기록과 스테이지 번호만 이어받음), 스토리 `SurvivorStory`의 `NewRun()`(단서·대사 기록)·`NewScene()`(열린 장면), 스테이지 `SurvivorStage`의 `NewRun()`(경기장)·`NewPresentation()`(적용된 구역의 장식·지형·통행)입니다. 정리는 네이티브 호출 전에 새 테이블로 바꿔 소유권을 먼저 떼어 냅니다. 판을 넘어 유지하는 값(장비 UI 수정 번호, 장면 세대 번호, 요약 모드·본 장면 기록)만 따로 지역 변수로 둡니다. 분리된 전투 모듈은 같은 테이블을 `Attach`로 받습니다. 회귀 스위트는 개별 지역 변수 대신 `CombatRun()`·`LifecycleRun()`·`EquipmentRun()`·`StoryRun()`·`StoryScene()`·`StageRun()`·`StageView()`·`ExpeditionRun()`으로 이 테이블을 읽고 씁니다.
 11. 스테이지별 규칙(수색 지점 배치·보스 약화 단서·위험 보상 등급·용암 주기·광폭화·지원군·근접 크기)은 `SurvivorConfig.encounters[stage]`에 두고 코드에서 스테이지 번호로 분기하지 않습니다.
 12. 타격·사망·줍기 루프(Step의 장비 줍기 순회 포함) 안의 상태 오류는 `RunSession.RequestFail`로 미루고, 같은 루프의 알림·대사·효과음·화면 효과·피해 보드 갱신은 `SurvivorConfig.Present`로 감싸 실패를 출력만 합니다. 정지 상태의 플레이어 조작과 인벤토리 감시 타이머·동기화 이벤트의 장비 처리는 `RunSession.IsPending()`도 확인합니다. `GetLocalPlayer` 블록에서는 공유 상태를 바꾸는 함수(장비 관찰, 대사 진행)를 부르지 않습니다.
 
